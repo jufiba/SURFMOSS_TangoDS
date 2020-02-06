@@ -1,7 +1,11 @@
 #!/usr/bin/python
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
-# v1.8 12/9/2019
+
+# v1.9 06/02/2020
+#
+# 06/02/2020 Changed number range in saving sequences from 3 digits to 4 digits. Removed LEEMIV_ROI_and_save, and added "saveImage" option in LEEMIV_ROI.
+# 
 # Juan de la Figuera juan.delafiguera@gmail.com
 
 from datetime import date
@@ -147,14 +151,14 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
         if (n==-1):
             a=0
             while (1):
-                savename=expname+"_%03d"%a
+                savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                     print "Saved %s"%savename
                 a+=1
                 time.sleep(delay)
         else:
             for a in range(n):
-                savename=expname+"_%03d"%a
+                savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                     print "Saved %s"%savename
                 time.sleep(delay)
@@ -195,7 +199,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
                 uview.AcquireSingleImage()
                 while (uview.AcquisitionInProgress):
                     pass
-                savename=expname+"_%03d"%a
+                savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                     print "Saved %s"%savename
                 a+=1
@@ -244,7 +248,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,saveImage=False)
                     pass
                 rois[k]=float(uview.IntensityROI1)
                 if (saveImage==True):
-                    savename=expname+"_%03d"%a
+                    savename=expname+"_%05d"%a
                     if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                         print "Saved %s"%savename
                 print "Image %d Energy %f ROI1 %f"%(a,i,rois[k])
@@ -295,67 +299,10 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
         while (uview.AcquisitionInProgress):
             pass
         #uview.SaveImageAsPNG(expname)
-        savename=expname+"_%03d"%a
+        savename=expname+"_%05d"%a
         if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
             print "Saved %s"%savename
         a+=1
-    f.close()
-    uview.ContinousAcquisition=True
-    uview.Exposure=oldExposure
-    uview.Average=oldAverage
-
-def leemIV_ROI_and_image(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False):
-    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False), plot (default=False)
-    
-    Save intensity of ROI changing energy, and optionally, plot it.
-    For repeated loops (repeat=True), press CTRL-C to finish.
-    
-    BEWARE: 1 average means sliding average
-    """
-    (full,name)=leem_makenextfolder_and_inc()
-    expname="LEEMIV"+name
-    oldExposure=uview.Exposure
-    oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
-    uview.Exposure=exp
-    uview.Average=avg
-    uview.ContinousAcquisition=True
-    leem_savesettings(full+"/"+expname+".txt")
-    f=open(full+"/LOG.txt","w")
-    f.write("# Image number  Energy (eV) ROI1 (arb.u.)\n")
-    a=0
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    try:
-        while (True):
-            #e=frange(E0,Ef,dE)
-            e=numpy.arange(E0,Ef+dE,dE,dtype="float")
-            rois=numpy.zeros(len(e))
-            k=0
-            for i in e:
-                leem2k.StartVoltage=i
-                uview.AcquireSingleImage()
-                while (uview.AcquisitionInProgress):
-                    pass
-                savename=expname+"_%03d"%a
-                if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
-                    print "Saved %s"%savename
-                
-                rois[k]=float(uview.IntensityROI1)
-                print "Image %d Energy %f ROI1 %f"%(a,i,rois[k])
-                f.write("%d %f %f\n"%(a,i,rois[k]))
-                a+=1
-                k+=1
-            if (plot==True):
-                ax.plot(e,rois)
-                fig.show()
-                fig.canvas.draw()
-            f.flush()
-            if (repeat==False):
-               break
-    
-    except KeyboardInterrupt:
-        print "Ok, ok, you want me to stop. Cleaning up."
     f.close()
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
