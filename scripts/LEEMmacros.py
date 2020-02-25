@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
-
+#
+# v2.0 25/02/2020 Autoselect day. Now leemSetDailyFolder is called at every experiment, and if the day is the same an an already existing folder, it does nothing. Otherwise, it creates the folder and resets the experiment number. Added time stamp in LEEMIV_ROI, LEEMIV
 # v1.9 06/02/2020
 #
 # 06/02/2020 Changed number range in saving sequences from 3 digits to 4 digits. Removed LEEMIV_ROI_and_save, and added "saveImage" option in LEEMIV_ROI.
@@ -56,12 +57,12 @@ def leemSetDailyFolder():
     if not os.path.exists(dayname):
         os.mkdir(dayname)
         print("Directory "+dayname+" Created ")
+        f=open(counter_filename,"w")
+        f.write(prefix+","+dayfolder+",0")
+        f.close()
     else:
-        print("Directory "+dayname+" already exists")
-    f=open(counter_filename,"w")
-    f.write(prefix+","+dayfolder+",0")
-    f.close()
-
+        print("Dayfolder "+dayname+" exists. Doing nothing.")
+    
 def leem_getfolder():
     if not os.path.exists(counter_filename):
         print "Error, no saved filename"
@@ -74,6 +75,17 @@ def leem_getfolder():
 
 def leem_makenextfolder_and_inc():
     (prefix,dayfolder,exp)=leem_getfolder()
+    #Check that day folder exists
+    today=date.today()
+    dayfolder="%04d%02d%02d"%(today.year,today.month,today.day)
+    dayname=prefix+"/"+dayfolder
+    if not os.path.exists(dayname):
+        os.mkdir(dayname)
+        print("Directory "+dayname+" Created ")
+        f=open(counter_filename,"w")
+        f.write(prefix+","+dayfolder+",0")
+        f.close()
+        exp=0
     full=prefix+"/"+dayfolder+"/"+dayfolder+"_%03d"%exp
     name="%03d"%exp
     if not os.path.exists(full):
@@ -186,7 +198,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
-    f.write("# Image number  Energy (eV) Objective (mA)\n")
+    f.write("# Image number  Energy (eV) time\n")
     a=0
     try:
         while (True):
@@ -194,8 +206,10 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
             e=numpy.arange(E0,Ef+dE,dE)
             for i in e:
                 leem2k.StartVoltage=float(i)
-                print "Image %d Energy %f"%(a,float(i))
-                f.write("%d %f\n"%(a,float(i)))
+                t=time.localtime()
+                timenow=time.strftime("%c", t)
+                print "Image %d Energy %f Time %s"%(a,float(i),timenow)
+                f.write("%d %f %s\n"%(a,float(i),timenow))
                 uview.AcquireSingleImage()
                 while (uview.AcquisitionInProgress):
                     pass
@@ -231,7 +245,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,saveImage=False)
     uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
-    f.write("# Image number  Energy (eV) ROI1 (arb.u.)\n")
+    f.write("# Image number  Energy (eV) ROI1 (arb.u.) time\n")
     a=0
     fig=plt.figure()
     ax=fig.add_subplot(111)
@@ -247,12 +261,14 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,saveImage=False)
                 while (uview.AcquisitionInProgress):
                     pass
                 rois[k]=float(uview.IntensityROI1)
+                t=time.localtime()
+                timenow=time.strftime("%c", t)
                 if (saveImage==True):
                     savename=expname+"_%05d"%a
                     if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                         print "Saved %s"%savename
-                print "Image %d Energy %f ROI1 %f"%(a,i,rois[k])
-                f.write("%d %f %f\n"%(a,i,rois[k]))
+                print "Image %d Energy %f ROI1 %f time %s"%(a,i,rois[k],timenow)
+                f.write("%d %f %f %s\n"%(a,i,rois[k],timenow))
                 a+=1
                 k+=1
             if (plot==True):
