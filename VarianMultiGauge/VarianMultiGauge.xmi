@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="ASCII"?>
+<pogoDsl:PogoSystem xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pogoDsl="http://www.esrf.fr/tango/pogo/PogoDsl">
+  <classes name="VarianMultiGauge" pogoRevision="9.4">
+    <description description="Simple devicer server for the Varian Multigauge controller. Asumes it has a hot cathode gauge." title="VarianMultiGauge" sourcePath="/home/juan/miNube/soft/tangoDrivers/VarianMultiGauge" language="PythonHL" filestogenerate="XMI   file,Code files,Python Package,Protected Regions" license="GPL" copyright="" hasMandatoryProperty="false" hasConcreteProperty="true" hasAbstractCommand="false" hasAbstractAttribute="false">
+      <inheritances classname="Device_Impl" sourcePath=""/>
+      <identification contact="at gmail.com - juan.delafiguera" author="juan.delafiguera" emailDomain="gmail.com" classFamily="Vacuum" siteSpecific="" platform="All Platforms" bus="USB" manufacturer="Varian" reference="Multigauge"/>
+    </description>
+    <deviceProperties name="SerialPort" description="">
+      <type xsi:type="pogoDsl:StringType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </deviceProperties>
+    <deviceProperties name="Speed" description="">
+      <type xsi:type="pogoDsl:UShortType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </deviceProperties>
+    <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device state">
+        <type xsi:type="pogoDsl:StateType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="Status" description="This command gets the device status (stored in its device_status data member) and returns it to the caller." execMethod="dev_status" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device status">
+        <type xsi:type="pogoDsl:ConstStringType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="SendCommand" description="No need to add \r at the end. &#xA;&#xA;Example: #0005 returns ROM version." execMethod="send_command" displayLevel="EXPERT" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:StringType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:StringType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <attributes name="Pressure_IG1" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="" unit="mbar" standardUnit="" displayUnit="" format="%.1e" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="Pressure_IG2" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="6000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="" unit="mbar" standardUnit="" displayUnit="" format="%.1e" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <states name="ON" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="OFF" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="FAULT" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <preferences docHome="./doc_html" makefileHome="/usr/share/pogo/preferences"/>
+  </classes>
+</pogoDsl:PogoSystem>

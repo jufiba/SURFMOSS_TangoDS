@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="ASCII"?>
+<pogoDsl:PogoSystem xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pogoDsl="http://www.esrf.fr/tango/pogo/PogoDsl">
+  <classes name="VarianTV301nav" pogoRevision="9.4">
+    <description description="Driver for interfacing with the Varian/Agilent TV301 Navigator pump with integrated controller." title="Varian TV301NAV" sourcePath="/home/juan/miNube/soft/tangoStuff/tangoDrivers/VarianTV301nav" language="PythonHL" filestogenerate="XMI   file,Code files,Python Package,Protected Regions" license="GPL" copyright="" hasMandatoryProperty="true" hasConcreteProperty="true" hasAbstractCommand="false" hasAbstractAttribute="false">
+      <inheritances classname="Device_Impl" sourcePath=""/>
+      <identification contact="at gmail.com - juan.delafiguera" author="juan.delafiguera" emailDomain="gmail.com" classFamily="Vacuum" siteSpecific="" platform="All Platforms" bus="Serial Line" manufacturer="Varian/Agilent" reference="TV301NAV">
+        <keyWords>turbomolecular pump</keyWords>
+      </identification>
+    </description>
+    <deviceProperties name="serialPort" mandatory="true" description="">
+      <type xsi:type="pogoDsl:StringType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </deviceProperties>
+    <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device state">
+        <type xsi:type="pogoDsl:StateType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="Status" description="This command gets the device status (stored in its device_status data member) and returns it to the caller." execMethod="dev_status" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device status">
+        <type xsi:type="pogoDsl:ConstStringType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="Start" description="" execMethod="start" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <commands name="Stop" description="" execMethod="stop" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <commands name="SetSpeed" description="Set the rotational speed. It might fail if the value is too close, or the turbo is speeding or braking." execMethod="set_speed" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:UShortType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:BooleanType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <attributes name="setSpeed" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Set Speed" unit="Hz" standardUnit="Hz" displayUnit="Hz" format="" maxValue="950" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="temperature" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="5000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="temperature" unit="&#xba;C" standardUnit="&#xba;C" displayUnit="&#xba;C" format="" maxValue="50" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="power" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="5000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="power" unit="W" standardUnit="W" displayUnit="W" format="" maxValue="150" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="turboStatus" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="10000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:StringType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="status" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="running" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="10000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:BooleanType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Running" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="valveOperation" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:BooleanType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="valveOperation" unit="(false=automatic)" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ventValve" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:BooleanType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="ventValve" unit="(1=closed)" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="errorCode" attType="Scalar" rwType="READ" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="errorCode" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="current" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="current" unit="mA" standardUnit="mA" displayUnit="mA" format="%d" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="voltage" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="voltage" unit="V" standardUnit="V" displayUnit="V" format="%d" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="frecuency" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="frequency" unit="Hz" standardUnit="Hz" displayUnit="Hz" format="" maxValue="963" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <states name="ON" description="Turbo running">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="OFF" description="Turbo off.">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="MOVING" description="Turbo either accelerating or braking.">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="FAULT" description="Problem with the turbo.">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <preferences docHome="./doc_html" makefileHome="/usr/share/pogo/preferences"/>
+  </classes>
+</pogoDsl:PogoSystem>

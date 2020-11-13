@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="ASCII"?>
+<pogoDsl:PogoSystem xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pogoDsl="http://www.esrf.fr/tango/pogo/PogoDsl">
+  <classes name="MCC1208LS" pogoRevision="9.4">
+    <description description="Simple interface to the MCC 1208LS usb DAC/ADC box." title="MCC1208LS" sourcePath="/home/vsm/tangoDrivers/MCC1208LS" language="PythonHL" filestogenerate="XMI   file,Code files,Python Package,Protected Regions" license="GPL" copyright="" hasMandatoryProperty="false" hasConcreteProperty="true" hasAbstractCommand="false" hasAbstractAttribute="false">
+      <inheritances classname="Device_Impl" sourcePath=""/>
+      <identification contact="at gmail.com - juan.delafiguera" author="juan.delafiguera" emailDomain="gmail.com" classFamily="MeasureInstruments" siteSpecific="" platform="All Platforms" bus="USB" manufacturer="MCC" reference="USB-1208LS"/>
+    </description>
+    <deviceProperties name="DAC0Scale" description="Scaling factor for the DAC0 output.&#xA;With DAC0Scale=1, full scale is 1023.">
+      <type xsi:type="pogoDsl:DoubleType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <DefaultPropValue>35.85</DefaultPropValue>
+    </deviceProperties>
+    <deviceProperties name="ADC0Scale" description="Scale factor for ADC0 input.">
+      <type xsi:type="pogoDsl:DoubleType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <DefaultPropValue>1.0</DefaultPropValue>
+    </deviceProperties>
+    <deviceProperties name="ADC1Scale" description="Scale for ADC1">
+      <type xsi:type="pogoDsl:DoubleType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <DefaultPropValue>100.0</DefaultPropValue>
+    </deviceProperties>
+    <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device state">
+        <type xsi:type="pogoDsl:StateType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="Status" description="This command gets the device status (stored in its device_status data member) and returns it to the caller." execMethod="dev_status" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device status">
+        <type xsi:type="pogoDsl:ConstStringType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="Blink" description="" execMethod="blink" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <attributes name="DAC0" attType="Scalar" rwType="WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="false" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ADC0" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="" unit="" standardUnit="" displayUnit="" format="%.2e" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ADC0Gain" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UCharType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="gain: 1/ 20V, 2/10V, 3/5V, 4/4V, 5/2.5V, 6/2.0V 7 /1.25V, 8/1.0V" label="" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ADC1Gain" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UCharType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ADC1" attType="Scalar" rwType="READ" displayLevel="EXPERT" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="" unit="" standardUnit="" displayUnit="" format="%.2e" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <states name="ON" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="FAULT" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <preferences docHome="./doc_html" makefileHome="/usr/share/pogo/preferences"/>
+  </classes>
+</pogoDsl:PogoSystem>

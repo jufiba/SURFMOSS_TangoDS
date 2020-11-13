@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="ASCII"?>
+<pogoDsl:PogoSystem xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pogoDsl="http://www.esrf.fr/tango/pogo/PogoDsl">
+  <classes name="HuttingerPFGDC" pogoRevision="9.4">
+    <description description="Driver for the Huttinger DC generators, such as the PFG-DC1500, a 1500W 1KV power supply for magnetron sputtering growth." title="HuttingerPFGDC" sourcePath="/home/juan/miNube/soft/tangoStuff/tangoDrivers/HuttingerPFG-DC" language="PythonHL" filestogenerate="XMI   file,Code files,Python Package,Protected Regions" license="GPL" copyright="" hasMandatoryProperty="true" hasConcreteProperty="true" hasAbstractCommand="false" hasAbstractAttribute="false">
+      <inheritances classname="Device_Impl" sourcePath=""/>
+      <identification contact="at gmail.com - juan.delafiguera" author="juan.delafiguera" emailDomain="gmail.com" classFamily="PowerSupply" siteSpecific="" platform="All Platforms" bus="Serial Line" manufacturer="Huttinger" reference="PFG-DC"/>
+    </description>
+    <deviceProperties name="SerialPort" mandatory="true" description="">
+      <type xsi:type="pogoDsl:StringType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </deviceProperties>
+    <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device state">
+        <type xsi:type="pogoDsl:StateType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="Status" description="This command gets the device status (stored in its device_status data member) and returns it to the caller." execMethod="dev_status" displayLevel="OPERATOR" polledPeriod="0">
+      <argin description="none">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="Device status">
+        <type xsi:type="pogoDsl:ConstStringType"/>
+      </argout>
+      <status abstract="true" inherited="true" concrete="true"/>
+    </commands>
+    <commands name="On" description="" execMethod="on" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <commands name="Off" description="" execMethod="off" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <commands name="SendCmd" description="Input a command code in hex (see manual), and a 16 bit number. Will return response from the power supply." execMethod="send_cmd" displayLevel="EXPERT" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:StringArrayType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:StringArrayType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <commands name="reset_arc_counter" description="" execMethod="reset_arc_counter" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <commands name="On_with_ramp" description="" execMethod="on_with_ramp" displayLevel="EXPERT" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <attributes name="NominalPower" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Nominal Power" unit="W" standardUnit="W" displayUnit="W" format="" maxValue="150" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="NominalVoltage" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Nominal Voltage" unit="V" standardUnit="V" displayUnit="V" format="%d" maxValue="1000" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="NominalCurrent" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Nominal Current" unit="A" standardUnit="A" displayUnit="A" format="%4.2f" maxValue="3.5" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="InitialPower" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Initial Power" unit="W" standardUnit="W" displayUnit="W" format="" maxValue="1500" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="InitialVoltage" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Initial Voltage" unit="V" standardUnit="V" displayUnit="V" format="" maxValue="1000" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="InitialCurrent" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Initial Current" unit="A" standardUnit="A" displayUnit="A" format="%4.2f" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="VoltageRange" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="(1=375V, 2=500V, 3=750V, 4=1000V)" label="Voltage Range" unit="" standardUnit="" displayUnit="" format="" maxValue="4" minValue="1" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ArcDetection" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="false" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UCharType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="ArcDetection" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="RampTime" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="(1=power, 2=voltage, 3=current)" label="RampTime" unit="s" standardUnit="s" displayUnit="s" format="%4.1f" maxValue="3200.0" minValue="0.0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ArcDetectionLevel" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UCharType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Level" unit="" standardUnit="" displayUnit="" format="" maxValue="3" minValue="1" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="ArcDetectionPause" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UCharType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="ArcDetectionPause" unit="" standardUnit="" displayUnit="" format="" maxValue="3" minValue="1" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="RampType" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UCharType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="(1=power, 2=voltage, 3=current)" label="RampType" unit="" standardUnit="" displayUnit="" format="" maxValue="3" minValue="1" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="Power" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Power" unit="W" standardUnit="W" displayUnit="W" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="Voltage" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Voltage" unit="V" standardUnit="V" displayUnit="V" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="Current" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Current" unit="A" standardUnit="A" displayUnit="A" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="Arcs" attType="Scalar" rwType="READ" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="" label="Arcs" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="OperationMode" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="(0=OFF;1=On;&#xA;2=On+Ramp)" label="OperationMode" unit="" standardUnit="" displayUnit="" format="" maxValue="2" minValue="0" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="Control" attType="Scalar" rwType="READ_WRITE" displayLevel="EXPERT" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="(1=LOCAL, 2=REALTIME,&#xA;3=REMOTE, 4=RS232,&#xA;5=RS485)" label="" unit="" standardUnit="" displayUnit="" format="" maxValue="5" minValue="1" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <states name="OFF" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="ON" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="MOVING" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="FAULT" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <preferences docHome="./doc_html" makefileHome="/usr/share/pogo/preferences"/>
+  </classes>
+</pogoDsl:PogoSystem>
