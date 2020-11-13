@@ -1,0 +1,11 @@
+*.pyc
+build
+test
+dist
+__*
+setup.py
+release.py
+LICENSE.txt
+MANIFEST.in
+README.rst
+*egg-info
