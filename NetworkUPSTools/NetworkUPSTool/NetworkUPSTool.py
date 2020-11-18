@@ -65,6 +65,10 @@ class NetworkUPSTool(Device):
         unit="%",
     )
 
+    Charge = attribute(
+        dtype='double',
+    )
+
     # ---------------
     # General methods
     # ---------------
@@ -120,6 +124,11 @@ class NetworkUPSTool(Device):
         # PROTECTED REGION ID(NetworkUPSTool.Load_read) ENABLED START #
         return (float(self.varsUPS["ups.load"]))
         # PROTECTED REGION END #    //  NetworkUPSTool.Load_read
+
+    def read_Charge(self):
+        # PROTECTED REGION ID(NetworkUPSTool.Charge_read) ENABLED START #
+        return (float(self.varsUPS["battery.charge"]))
+        # PROTECTED REGION END #    //  NetworkUPSTool.Charge_read
 
 
     # --------
