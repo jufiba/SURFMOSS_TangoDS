@@ -1,14 +1,20 @@
 #!/usr/bin/python
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
-# v1.7 12/9/2019
+#
+# v2.0 25/02/2020 Autoselect day. Now leemSetDailyFolder is called at every experiment, and if the day is the same an an already existing folder, it does nothing. Otherwise, it creates the folder and resets the experiment number. Added time stamp in LEEMIV_ROI, LEEMIV
+# v1.9 06/02/2020
+#
+# 06/02/2020 Changed number range in saving sequences from 3 digits to 4 digits. Removed LEEMIV_ROI_and_save, and added "saveImage" option in LEEMIV_ROI.
+# 
 # Juan de la Figuera juan.delafiguera@gmail.com
 
 from datetime import date
 import tango
 import os
-#import numpy
+import numpy
 import time
+import matplotlib.pyplot as plt
 
 def frange(start, stop=None, step=None):
     #Use float number in range() function
@@ -20,9 +26,9 @@ def frange(start, stop=None, step=None):
     if step == None:
         step = 1.0
     while True:
-        if step > 0 and start > stop+ step:
+        if step > 0 and start >= stop+ step:
             break
-        elif step < 0 and start < stop+ step:
+        elif step < 0 and start <= stop+ step:
             break
         yield ("%g" % start) # return float number
         start = start + step
@@ -51,12 +57,12 @@ def leemSetDailyFolder():
     if not os.path.exists(dayname):
         os.mkdir(dayname)
         print("Directory "+dayname+" Created ")
+        f=open(counter_filename,"w")
+        f.write(prefix+","+dayfolder+",0")
+        f.close()
     else:
-        print("Directory "+dayname+" already exists")
-    f=open(counter_filename,"w")
-    f.write(prefix+","+dayfolder+",0")
-    f.close()
-
+        print("Dayfolder "+dayname+" exists. Doing nothing.")
+    
 def leem_getfolder():
     if not os.path.exists(counter_filename):
         print "Error, no saved filename"
@@ -69,6 +75,17 @@ def leem_getfolder():
 
 def leem_makenextfolder_and_inc():
     (prefix,dayfolder,exp)=leem_getfolder()
+    #Check that day folder exists
+    today=date.today()
+    dayfolder="%04d%02d%02d"%(today.year,today.month,today.day)
+    dayname=prefix+"/"+dayfolder
+    if not os.path.exists(dayname):
+        os.mkdir(dayname)
+        print("Directory "+dayname+" Created ")
+        f=open(counter_filename,"w")
+        f.write(prefix+","+dayfolder+",0")
+        f.close()
+        exp=0
     full=prefix+"/"+dayfolder+"/"+dayfolder+"_%03d"%exp
     name="%03d"%exp
     if not os.path.exists(full):
@@ -104,6 +121,8 @@ def leem_savesettings(name):
 
 def leemSaveSingleImage(exp=500,avg=0):
     """ leemSaveSingleImage( exposure (ms), average )
+    
+    BEWARE: 1 average means sliding average
     """
     (full,name)=leem_makenextfolder_and_inc()
     expname="IMG"+name
@@ -126,6 +145,10 @@ def leemSaveSingleImage(exp=500,avg=0):
 
 def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
     """ leemSequenceImage (exposure (ms), average, number_of_images (-1=infinite), delay (s)
+    
+    Save sequence of images. For infinite, press CTRL-C to stop.
+     
+    BEWARE: 1 average means sliding average
     """
     (full,name)=leem_makenextfolder_and_inc()
     expname="SEQ"+name
@@ -140,14 +163,14 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
         if (n==-1):
             a=0
             while (1):
-                savename=expname+"_%03d"%a
+                savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                     print "Saved %s"%savename
                 a+=1
                 time.sleep(delay)
         else:
             for a in range(n):
-                savename=expname+"_%03d"%a
+                savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                     print "Saved %s"%savename
                 time.sleep(delay)
@@ -158,7 +181,12 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
     uview.Average=oldAverage
 
 def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
-    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average,
+    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False)
+    
+    Save sequence of images changing energy and objective.
+    For repeated loops (repeat=True), press CTRL-C to finish.
+    
+    BEWARE: 1 average means sliding average
     """
     (full,name)=leem_makenextfolder_and_inc()
     expname="LEEMIV"+name
@@ -170,25 +198,28 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
-    f.write("# Image number  Energy (eV) Objective (mA)\n")
-    e=frange(E0,Ef,dE)
+    f.write("# Image number  Energy (eV) time\n")
+    a=0
     try:
         while (True):
-            a=0
+            #e=frange(E0,Ef,dE)
+            e=numpy.arange(E0,Ef+dE,dE)
             for i in e:
                 leem2k.StartVoltage=float(i)
-                print "Image %d Energy %f"%(a,float(i))
-                f.write("%d %f\n"%(a,float(i)))
+                t=time.localtime()
+                timenow=time.strftime("%c", t)
+                print "Image %d Energy %f Time %s"%(a,float(i),timenow)
+                f.write("%d %f %s\n"%(a,float(i),timenow))
                 uview.AcquireSingleImage()
                 while (uview.AcquisitionInProgress):
                     pass
-                savename=expname+"_%03d"%a
+                savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
                     print "Saved %s"%savename
                 a+=1
             if (repeat==False):
                 break
-    except KeboardInterrupt:
+    except KeyboardInterrupt:
         print "Ok, ok, stopping adquisition. Let me clean up"
     f.close()
     uview.ContinousAcquisition=True
@@ -196,8 +227,13 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     uview.Average=oldAverage
 
 
-def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
-    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average,
+def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,saveImage=False):
+    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False), plot (default=False)
+    
+    Save intensity of ROI changing energy, and optionally, plot it.
+    For repeated loops (repeat=True), press CTRL-C to finish.
+    
+    BEWARE: 1 average means sliding average
     """
     (full,name)=leem_makenextfolder_and_inc()
     expname="LEEMIV"+name
@@ -209,24 +245,41 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
-    f.write("# Image number  Energy (eV) ROI1 (arb.u.)\n")
-    e=frange(E0,Ef,dE)
+    f.write("# Image number  Energy (eV) ROI1 (arb.u.) time\n")
+    a=0
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
     try:
         while (True):
-            a=0
+            #e=frange(E0,Ef,dE)
+            e=numpy.arange(E0,Ef+dE,dE,dtype="float")
+            rois=numpy.zeros(len(e))
+            k=0
             for i in e:
-                leem2k.StartVoltage=float(i)
+                leem2k.StartVoltage=i
                 uview.AcquireSingleImage()
                 while (uview.AcquisitionInProgress):
                     pass
-                print "Image %d Energy %f ROI1 %f"%(a,float(i),float(uview.IntensityROI1))
-                f.write("%d %f %f\n"%(a,float(i),float(uview.IntensityROI1)))
+                rois[k]=float(uview.IntensityROI1)
+                t=time.localtime()
+                timenow=time.strftime("%c", t)
+                if (saveImage==True):
+                    savename=expname+"_%05d"%a
+                    if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
+                        print "Saved %s"%savename
+                print "Image %d Energy %f ROI1 %f time %s"%(a,i,rois[k],timenow)
+                f.write("%d %f %f %s\n"%(a,i,rois[k],timenow))
                 a+=1
+                k+=1
+            if (plot==True):
+                ax.plot(e,rois)
+                fig.show()
+                fig.canvas.draw()
+            f.flush()
             if (repeat==False):
-                break
-    except KeboardInterrupt:
-        print "Ok, ok, you want me to stop. Cleaning up"
-
+               break
+    except KeyboardInterrupt:
+        print "Ok, ok, you want me to stop. Cleaning up."
     f.close()
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
@@ -234,7 +287,11 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
 
 
 def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
-    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), Start Objective (mA), End Objective (mA), exposure (ms), average,
+    """ leemIVandObj (Initial Energy (V), Final Energy (V), increment E (V), Start Objective (mA), End Objective (mA), exposure (ms), average
+    
+    Save sequence of images changing energy and objective.
+    
+    BEWARE: 1 average means sliding average
     """
     (full,name)=leem_makenextfolder_and_inc()
     expname="LEEMIV"+name
@@ -258,7 +315,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
         while (uview.AcquisitionInProgress):
             pass
         #uview.SaveImageAsPNG(expname)
-        savename=expname+"_%03d"%a
+        savename=expname+"_%05d"%a
         if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
             print "Saved %s"%savename
         a+=1
