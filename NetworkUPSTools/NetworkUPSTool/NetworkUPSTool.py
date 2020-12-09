@@ -103,6 +103,7 @@ class NetworkUPSTool(Device):
 
     def read_UpsStatus(self):
         # PROTECTED REGION ID(NetworkUPSTool.UpsStatus_read) ENABLED START #
+        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
         if (self.varsUPS["ups.status"]=="OL"):
             self.set_state(PyTango.DevState.ON)
             status="OnLine"
@@ -117,16 +118,19 @@ class NetworkUPSTool(Device):
 
     def read_Temperature(self):
         # PROTECTED REGION ID(NetworkUPSTool.Temperature_read) ENABLED START #
+        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
         return (float(self.varsUPS["ups.temperature"]))
         # PROTECTED REGION END #    //  NetworkUPSTool.Temperature_read
 
     def read_Load(self):
         # PROTECTED REGION ID(NetworkUPSTool.Load_read) ENABLED START #
+        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
         return (float(self.varsUPS["ups.load"]))
         # PROTECTED REGION END #    //  NetworkUPSTool.Load_read
 
     def read_Charge(self):
         # PROTECTED REGION ID(NetworkUPSTool.Charge_read) ENABLED START #
+        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
         return (float(self.varsUPS["battery.charge"]))
         # PROTECTED REGION END #    //  NetworkUPSTool.Charge_read
 
