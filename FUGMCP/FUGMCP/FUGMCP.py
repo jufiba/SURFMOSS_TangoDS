@@ -126,7 +126,7 @@ class FUGMCP(Device):
             self.set_status("Can't connect to FUG MCP")
             self.debug_stream("Can't connect to FUG MCP")
             return
-        if  (self.identification[0:16]!=bytes("FUG HCP 140-1250","ascii")):
+        if  (self.identification[0:16]!=bytes("FUG HCP 140-1250","ascii") and self.identification[0:15]!=bytes("FUG MCP140-1250","ascii")):
             self.set_state(PyTango.DevState.FAULT)
             self.set_status("I do not find a FUG MCP on the serial port")
             self.debug_stream("I do not find a FUG MCP on the serial port")
@@ -227,9 +227,9 @@ class FUGMCP(Device):
 
     def read_CC(self):
         # PROTECTED REGION ID(FUGMCP.CC_read) ENABLED START #
-        self.ser.write(bytes(">DCR ?\n","ascii"))
+        self.ser.write(bytes(">DIR ?\n","ascii"))
         resp=self.ser.readline()
-        if (resp[:-1]==bytes("DCR:1","ascii")):
+        if (resp[:-1]==bytes("DIR:1","ascii")):
             return(True)
         else:
             return(False)
@@ -256,6 +256,9 @@ class FUGMCP(Device):
     def OutputOn(self):
         # PROTECTED REGION ID(FUGMCP.OutputOn) ENABLED START #
         self.ser.write(bytes(">BON 1\n","ascii"))
+        resp=self.ser.readline()
+        if (resp[:-1]!=bytes("E0","ascii")):
+                self.set_state(PyTango.DevState.FAULT)
         self.set_state(PyTango.DevState.ON)
         # PROTECTED REGION END #    //  FUGMCP.OutputOn
 
@@ -265,6 +268,9 @@ class FUGMCP(Device):
     def OutputOff(self):
         # PROTECTED REGION ID(FUGMCP.OutputOff) ENABLED START #
         self.ser.write(bytes(">BON 0\n","ascii"))
+        resp=self.ser.readline()
+        if (resp[:-1]!=bytes("E0","ascii")):
+            self.set_state(PyTango.DevState.FAULT)
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  FUGMCP.OutputOff
 
