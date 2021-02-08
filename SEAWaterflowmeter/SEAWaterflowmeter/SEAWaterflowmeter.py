@@ -149,7 +149,7 @@ class SEAWaterflowmeter(Device):
         for i in count:
             GPIO.add_event_detect(i, GPIO.RISING, callback=my_callback)  
         self.set_state(PyTango.DevState.ON)
-        self.set_status("Control loop is running")
+        self.set_status("Measurement thread is running")
         self.stop_ctrloop = 0
         ctrlloop = ControlThread(self)
         ctrlloop.start()
@@ -201,6 +201,7 @@ class SEAWaterflowmeter(Device):
         # PROTECTED REGION ID(SEAWaterflowmeter.turnON) ENABLED START #
         self.stop_ctrloop = 0
         self.set_state(PyTango.DevState.ON)
+        self.set_status("Measurement thread is running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.turnON
 
     @command(
@@ -210,6 +211,7 @@ class SEAWaterflowmeter(Device):
         # PROTECTED REGION ID(SEAWaterflowmeter.turnOFF) ENABLED START #
         self.stop_ctrloop = 1
         self.set_state(PyTango.DevState.OFF)
+        self.set_status("Measurement thread is NOT running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.turnOFF
 
 # ----------
