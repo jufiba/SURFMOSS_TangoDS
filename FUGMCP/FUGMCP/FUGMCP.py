@@ -148,7 +148,7 @@ class FUGMCP(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(FUGMCP.delete_device) ENABLED START #
-        pass
+        self.ser.close()
         # PROTECTED REGION END #    //  FUGMCP.delete_device
 
     # ------------------
