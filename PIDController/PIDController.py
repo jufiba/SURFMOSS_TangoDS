@@ -251,13 +251,16 @@ class PIDController (PyTango.Device_4Impl):
         """
         self.debug_stream("In StartCtrlLoop()")
         #----- PROTECTED REGION ID(PIDController.StartCtrlLoop) ENABLED START -----#
-
-        self.set_state(PyTango.DevState.ON)
-        self.set_status("Control loop is running")
-        self.stop_ctrloop = 0
-        ctrlloop = ControlThread(self)
-        ctrlloop.start()
-        
+        state=self.get_state()
+        if (state==PyTango.DevState.ON):
+            return
+        elif (state==PyTango.DevState.OFF):
+            self.set_state(PyTango.DevState.ON)
+            self.set_status("Control loop is running")
+            self.stop_ctrloop = 0
+            ctrlloop = ControlThread(self)
+            ctrlloop.start()
+            return
         #----- PROTECTED REGION END -----#	//	PIDController.StartCtrlLoop
         
     def StopCtrlLoop(self):
@@ -265,10 +268,13 @@ class PIDController (PyTango.Device_4Impl):
         """
         self.debug_stream("In StopCtrlLoop()")
         #----- PROTECTED REGION ID(PIDController.StopCtrlLoop) ENABLED START -----#
-
-        self.stop_ctrlloop = 1
-        self.set_status("Control loop is stopped")
-        
+        state=self.get_state()
+        if (state==PyTango.DevState.OFF):
+            return
+        elif if (state==PyTango.DevState.ON):
+            self.stop_ctrlloop = 1
+            self.set_status("Control loop is stopped")
+            self.set_state(PyTango.DevState.OFF)
         #----- PROTECTED REGION END -----#	//	PIDController.StopCtrlLoop
         
 

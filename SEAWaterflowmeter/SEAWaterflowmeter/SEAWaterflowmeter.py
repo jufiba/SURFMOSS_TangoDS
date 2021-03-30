@@ -48,9 +48,12 @@ class ControlThread(Thread):
             time.sleep(self.ds.time)
             fixed=count.copy()
             self.ds.channel0data=float(list(fixed.values())[0])/(self.ds.time*self.ds.calibration)
-            self.ds.channel1data=float(list(fixed.values())[1])/(self.ds.time*self.ds.calibration)
-            self.ds.channel2data=float(list(fixed.values())[2])/(self.ds.time*self.ds.calibration)
-            self.ds.channel3data=float(list(fixed.values())[3])/(self.ds.time*self.ds.calibration)
+            if (len(fixed)>1):
+                self.ds.channel1data=float(list(fixed.values())[1])/(self.ds.time*self.ds.calibration)
+            if (len(fixed)>2):
+                self.ds.channel2data=float(list(fixed.values())[2])/(self.ds.time*self.ds.calibration)
+            if (len(fixed)>3):
+                self.ds.channel3data=float(list(fixed.values())[3])/(self.ds.time*self.ds.calibration)
 
  
         self.ds.set_state(PyTango.DevState.OFF)
@@ -62,11 +65,10 @@ class ControlThread(Thread):
 __all__ = ["SEAWaterflowmeter", "main"]
 
 
-class SEAWaterflowmeter(Device):
+class SEAWaterflowmeter(Device,metaclass=DeviceMeta):
     """
     Device server to interface a Raspberry PI using the GPIO to the SEA YF-S201 water flow sensor.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(SEAWaterflowmeter.class_variable) ENABLED START #
    
  
@@ -162,6 +164,7 @@ class SEAWaterflowmeter(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(SEAWaterflowmeter.delete_device) ENABLED START #
+        self.ds.stop_ctrloop = 0
         GPIO.cleanup()
         # PROTECTED REGION END #    //  SEAWaterflowmeter.delete_device
 
@@ -199,9 +202,15 @@ class SEAWaterflowmeter(Device):
     @DebugIt()
     def turnON(self):
         # PROTECTED REGION ID(SEAWaterflowmeter.turnON) ENABLED START #
-        self.stop_ctrloop = 0
-        self.set_state(PyTango.DevState.ON)
-        self.set_status("Measurement thread is running")
+        state=self.get_state()
+        if (state==PyTango.DevState.ON):
+            return
+        elif (state==PyTango.DevState.OFF):
+            self.stop_ctrloop = 0
+            ctrlloop = ControlThread(self)
+            ctrlloop.start()
+            self.set_state(PyTango.DevState.ON)
+            self.set_status("Measurement thread is running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.turnON
 
     @command(
@@ -209,9 +218,13 @@ class SEAWaterflowmeter(Device):
     @DebugIt()
     def turnOFF(self):
         # PROTECTED REGION ID(SEAWaterflowmeter.turnOFF) ENABLED START #
-        self.stop_ctrloop = 1
-        self.set_state(PyTango.DevState.OFF)
-        self.set_status("Measurement thread is NOT running")
+        state=self.get_state()
+        if (state==PyTango.DevState.OFF):
+            return
+        elif (state==PyTango.DevState.ON):
+            self.stop_ctrloop = 1
+            self.set_state(PyTango.DevState.OFF)
+            self.set_status("Measurement thread is NOT running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.turnOFF
 
 # ----------

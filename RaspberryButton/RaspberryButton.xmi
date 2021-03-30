@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="ASCII"?>
 <pogoDsl:PogoSystem xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pogoDsl="http://www.esrf.fr/tango/pogo/PogoDsl">
   <classes name="RaspberryButton" pogoRevision="9.4">
-    <description description="A device to turn on for a second one of the lines of the GPIO, used to drive a relay for turning on an off equipment." title="RaspberryButton" sourcePath="/home/juan/miNube/soft/tangoStuff/tangoDrivers/RaspberryButton" language="PythonHL" filestogenerate="XMI   file,Code files,Python Package,Protected Regions" license="GPL" copyright="" hasMandatoryProperty="false" hasConcreteProperty="false" hasAbstractCommand="false" hasAbstractAttribute="false">
+    <description description="Simple interface to turn on and off a GPIO pin in a Raspberry PI." title="RaspberryButton" sourcePath="/home/juan/miNube/soft/SURFMOSS_TangoDS/RaspberryButton" language="PythonHL" filestogenerate="XMI   file,Code files,Python Package,Protected Regions" license="GPL" copyright="" hasMandatoryProperty="false" hasConcreteProperty="true" hasAbstractCommand="false" hasAbstractAttribute="false">
       <inheritances classname="Device_Impl" sourcePath=""/>
-      <identification contact="at iqfr.csic.es - juan.delafiguera" author="juan.delafiguera" emailDomain="iqfr.csic.es" classFamily="InputOutput" siteSpecific="" platform="All Platforms" bus="GPIO" manufacturer="RaspberryPI" reference=""/>
+      <identification contact="at gmail.com - juan.delafiguera" author="juan.delafiguera" emailDomain="gmail.com" classFamily="InputOutput" siteSpecific="" platform="All Platforms" bus="GPIO" manufacturer="Raspberry PI" reference=""/>
     </description>
+    <deviceProperties name="Pin" description="Pin, using BDM naming.">
+      <type xsi:type="pogoDsl:UShortType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </deviceProperties>
+    <deviceProperties name="TrueHigh" description="If True, High is ON, Low is OFF.&#xA;If False, Low is ON, High is OFF.">
+      <type xsi:type="pogoDsl:BooleanType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </deviceProperties>
     <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
       <argin description="none">
         <type xsi:type="pogoDsl:VoidType"/>
@@ -23,7 +31,7 @@
       </argout>
       <status abstract="true" inherited="true" concrete="true"/>
     </commands>
-    <commands name="DiffusionPump" description="" execMethod="diffusion_pump" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+    <commands name="On" description="" execMethod="on" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
       <argin description="">
         <type xsi:type="pogoDsl:VoidType"/>
       </argin>
@@ -32,7 +40,7 @@
       </argout>
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
     </commands>
-    <commands name="Compressor" description="" execMethod="compressor" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
+    <commands name="Off" description="" execMethod="off" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
       <argin description="">
         <type xsi:type="pogoDsl:VoidType"/>
       </argin>
@@ -42,6 +50,9 @@
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
     </commands>
     <states name="ON" description="">
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </states>
+    <states name="OFF" description="">
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
     </states>
     <preferences docHome="./doc_html" makefileHome="/usr/share/pogo/preferences"/>
