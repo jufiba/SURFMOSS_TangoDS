@@ -1,0 +1,649 @@
+JDFile v11 {
+  Global {
+  }
+  JDRectangle {
+    summit:49,197,158,309
+    origin:91,218
+    name:"Rectangle"
+  }
+  JDRectangle {
+    summit:48,60,159,176
+    origin:90,81
+    name:"Rectangle"
+  }
+  JDSwingObject {
+    summit:56,91,148,110
+    origin:90,99
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/mfc_Ar/Measure"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:61,222,153,241
+    origin:95,230
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/mfc_O2/Measure"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDLabel {
+    summit:77,66,125,87
+    origin:101,77
+    lineWidth:0
+    name:"Label"
+    text:"Argon"
+  }
+  JDLabel {
+    summit:77,198,137,219
+    origin:107,209
+    lineWidth:0
+    name:"Label"
+    text:"Oxygen"
+  }
+  JDSwingObject {
+    summit:602,412,772,434
+    origin:738,427
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/gauge/Pressure"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,18
+  }
+  JDSwingObject {
+    summit:295,52,387,71
+    origin:329,60
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/IncidentPower"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:276,319,368,338
+    origin:310,327
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/Power"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDLabel {
+    summit:632,29,692,50
+    origin:662,40
+    lineWidth:0
+    name:"Label"
+    text:"RF mag"
+  }
+  JDLabel {
+    summit:659,291,686,312
+    origin:673,302
+    lineWidth:0
+    name:"Label"
+    text:"DC"
+  }
+  JDLabel {
+    summit:585,112,609,133
+    origin:597,123
+    lineWidth:0
+    name:"Label"
+    text:"RF"
+  }
+  JDLine {
+    summit:815,81,815,328
+    origin:815,205
+    lineWidth:5
+    name:"Line"
+  }
+  JDRectangle {
+    summit:731,155,781,191
+    origin:756,173
+    name:"Rectangle"
+  }
+  JDSwingObject {
+    summit:708,129,800,148
+    origin:742,137
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/measurement/temperature/Temperature"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:64,416,156,435
+    origin:98,424
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/turbo/frecuency"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDPolyline {
+    summit:735,218,742,201,752,216,759,199,769,216,775,198,783,215,783,215,783,215,784,219
+    origin:760,209
+    foreground:255,0,0
+    background:255,0,51
+    fillStyle:1
+    name:"Polyline"
+  }
+  JDLine {
+    summit:161,119,246,119
+    origin:203,119
+    lineWidth:6
+    name:"Line"
+  }
+  JDLine {
+    summit:160,244,245,244
+    origin:203,244
+    lineWidth:6
+    name:"Line"
+  }
+  JDRoundRectangle {
+    summit:249,23,836,448
+    origin:441,188
+    lineWidth:5
+    name:"RoundRectangle"
+  }
+  JDSwingObject {
+    summit:51,116,150,160
+    origin:101,138
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    uservalue:true
+    name:"sputtering/vacuum/mfc_Ar/SetPoint"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDSwingObject {
+    summit:54,247,153,291
+    origin:104,269
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    uservalue:true
+    name:"sputtering/vacuum/mfc_O2/SetPoint"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDSwingObject {
+    summit:705,230,804,275
+    origin:755,253
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/heating/Output"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDLine {
+    summit:357,23,357,23
+    origin:357,23
+    name:"Line"
+  }
+  JDLine {
+    summit:818,205,886,205
+    origin:852,205
+    lineWidth:6
+    name:"Line"
+  }
+  JDEllipse {
+    summit:181,443,270,534
+    origin:226,489
+    name:"Ellipse"
+  }
+  JDLine {
+    summit:188,465,211,532
+    origin:200,499
+    name:"Line"
+  }
+  JDLine {
+    summit:260,461,242,530
+    origin:251,496
+    name:"Line"
+  }
+  JDEllipse {
+    summit:210,470,241,505
+    origin:226,488
+    name:"Ellipse"
+  }
+  JDSwingObject {
+    summit:59,448,158,492
+    origin:109,470
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    minvalue:150
+    maxvalue:900
+    initvalue:150
+    uservalue:true
+    name:"sputtering/vacuum/turbo/SetSpeed"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDSwingObject {
+    summit:60,332,152,351
+    origin:98,340
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/turbo/turboStatus"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDRectangle {
+    summit:42,319,172,506
+    origin:106,425
+    name:"Rectangle"
+  }
+  JDLine {
+    summit:226,331,226,442
+    origin:226,336
+    lineWidth:5
+    name:"Line"
+  }
+  JDSwingObject {
+    summit:387,319,479,338
+    origin:421,327
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/Current"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:501,319,593,338
+    origin:535,327
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/Voltage"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDLine {
+    summit:249,329,249,329
+    origin:249,329
+    name:"Line"
+  }
+  JDLine {
+    summit:226,331,249,331
+    origin:238,331
+    lineWidth:5
+    name:"Line"
+  }
+  JDSwingObject {
+    summit:499,345,598,390
+    origin:549,368
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/NominalVoltage"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDSwingObject {
+    summit:385,345,484,390
+    origin:435,368
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/NominalCurrent"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDSwingObject {
+    summit:270,345,369,390
+    origin:320,368
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/NominalPower"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDRectangle {
+    summit:262,310,683,402
+    origin:447,356
+    name:"Rectangle"
+  }
+  JDSwingObject {
+    summit:614,321,656,339
+    origin:671,330
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/On"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDSwingObject {
+    summit:614,347,655,365
+    origin:671,356
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magDC/Off"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDSwingObject {
+    summit:49,392,102,410
+    origin:106,401
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/turbo/Start"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDRectangle {
+    summit:262,180,685,272
+    origin:447,226
+    name:"Rectangle"
+  }
+  JDSwingObject {
+    summit:110,392,165,410
+    origin:108,401
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/turbo/Stop"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDSwingObject {
+    summit:60,362,152,381
+    origin:94,370
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/turbo/temperature"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:297,74,389,93
+    origin:331,82
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/IncidentPower"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:274,93,389,138
+    origin:324,116
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"SwingObject"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDLabel {
+    summit:265,72,295,93
+    origin:302,83
+    lineWidth:0
+    name:"Label"
+    text:"Ref"
+  }
+  JDSwingObject {
+    summit:621,59,678,77
+    origin:693,68
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/On"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDSwingObject {
+    summit:622,85,677,103
+    origin:693,94
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/Off"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDLabel {
+    summit:265,54,292,75
+    origin:279,65
+    lineWidth:0
+    name:"Label"
+    text:"Inc"
+  }
+  JDSwingObject {
+    summit:400,68,492,87
+    origin:434,76
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/CL"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:514,66,606,85
+    origin:548,74
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/CT"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:512,93,611,138
+    origin:562,116
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/NominalCT"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDSwingObject {
+    summit:398,93,497,138
+    origin:448,116
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/power/magRFmag/NominalCL"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDRectangle {
+    summit:263,46,688,150
+    origin:476,98
+    name:"Rectangle"
+  }
+  JDLabel {
+    summit:603,160,689,181
+    origin:633,171
+    lineWidth:0
+    name:"Label"
+    text:"RF nonmag"
+  }
+  JDLabel {
+    summit:429,51,453,72
+    origin:441,62
+    lineWidth:0
+    name:"Label"
+    text:"CL"
+  }
+  JDLabel {
+    summit:544,50,569,71
+    origin:556,61
+    lineWidth:0
+    name:"Label"
+    text:"CT"
+  }
+}

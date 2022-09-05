@@ -1,0 +1,161 @@
+JDFile v11 {
+  Global {
+  }
+  JDSwingObject {
+    summit:25,178,139,196
+    origin:82,187
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"leem/control/sample_leem_pid/StartCtrlLoop"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDSwingObject {
+    summit:25,204,139,222
+    origin:82,213
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"leem/control/sample_leem_pid/StopCtrlLoop"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
+  }
+  JDLabel {
+    summit:23,152,112,173
+    origin:74,163
+    lineWidth:0
+    name:"Label"
+    text:"Heating PID"
+  }
+  JDSwingObject {
+    summit:195,183,294,228
+    origin:245,206
+    background:200,200,200
+    fillStyle:1
+    lineWidth:0
+    name:"leem/control/sample_leem_pid/SetPoint"
+    extensions:{
+      arrowColor:"200,200,200"
+      arrowSelColor:"156,154,206"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
+    font:"Lucida Bright",0,16
+  }
+  JDLabel {
+    summit:78,6,238,36
+    origin:109,17
+    lineWidth:0
+    name:"Label"
+    font:"Dialog",0,22
+    text:"LEEM sample"
+  }
+  JDRoundRectangle {
+    summit:8,140,312,239
+    origin:171,199
+    name:"RoundRectangle"
+  }
+  JDSwingObject {
+    summit:120,152,297,167
+    origin:154,160
+    fillStyle:1
+    lineWidth:0
+    name:"leem/control/sample_leem_pid/Status"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,12
+  }
+  JDSwingObject {
+    summit:83,36,299,56
+    origin:117,49
+    fillStyle:1
+    lineWidth:0
+    name:"leem/measurement/PositionXY/Position"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,12
+  }
+  JDSwingObject {
+    summit:141,103,256,126
+    origin:175,116
+    fillStyle:1
+    lineWidth:0
+    name:"leem/measurement/LEEM2k/SampleTemperature"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,20
+  }
+  JDLabel {
+    summit:29,107,127,128
+    origin:80,118
+    lineWidth:0
+    name:"Temperature"
+    text:"Temperature"
+  }
+  JDLabel {
+    summit:259,104,289,132
+    origin:310,115
+    lineWidth:0
+    name:"Temperature"
+    font:"Dialog",0,20
+    text:"C"
+  }
+  JDSwingObject {
+    summit:139,69,287,92
+    origin:173,82
+    fillStyle:1
+    lineWidth:0
+    name:"leem/vacuum/gaugeMCH/Pressure_IG1"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,20
+  }
+  JDLabel {
+    summit:26,73,130,94
+    origin:77,84
+    lineWidth:0
+    name:"Temperature"
+    text:"Pressure MCH"
+  }
+  JDLabel {
+    summit:22,38,78,59
+    origin:73,49
+    lineWidth:0
+    name:"Temperature"
+    text:"Position"
+  }
+}
