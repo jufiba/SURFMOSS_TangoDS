@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v2.2 13/7/2022 Added doser1,2RampPowerTo, leemARRES
+#
 # v2.1 28/5/2021 Added leemRampTemperatureTo. This requires the PID controller to be on, and the gauge of the main chamber working.
 #
 # v2.0 25/02/2020 Autoselect day. Now leemSetDailyFolder is called at every experiment, and if the day is the same an an already existing folder, it does nothing. Otherwise, it creates the folder and resets the experiment number. Added time stamp in LEEMIV_ROI, LEEMIV
@@ -17,6 +19,7 @@ import os
 import numpy
 import time
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 
 def frange(start, stop=None, step=None):
     #Use float number in range() function
@@ -41,7 +44,9 @@ counter_filename="//hematite.labo/superficies/LEEM_Madrid/macros.dat"
 name="000"
 
 gaugeMCH=tango.DeviceProxy("leem/vacuum/gaugeMCH")
-pid=tango.DeviceProxy("leem/control/sample_leem_pid")
+leem_pid=tango.DeviceProxy("leem/control/sample_leem_pid")
+doser1_pid=tango.DeviceProxy("leem/control/doser_pid")
+doser2_pid=tango.DeviceProxy("leem/control/doser2_pid")
 leem2k=tango.DeviceProxy("leem/measurement/LEEM2k")
 uview=tango.DeviceProxy("leem/measurement/Uview")
 position=tango.DeviceProxy("leem/measurement/positionXY")
@@ -328,6 +333,25 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     uview.Exposure=oldExposure
     uview.Average=oldAverage
 
+def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
+    """ pidRampTo (desired_setpoint, step, time_step, pressure_limit)
+    Ramp PID setpoint (PID must be activated before!!)
+    Parameters:
+        desired: final desired setpoint
+        step: setpoint change per step (default 1)
+        time_step: waiting time per step (deault is 1s)"""
+    start=pid.SetPoint
+    if (start>final):
+        r=numpy.arange(start,final,-step)
+    else:
+        r=numpy.arange(start,final,step)
+    for a in r:
+        pid.SetPoint=a
+        print("Going to %f"%a)
+        while (gaugeMCH.Pressure_IG1 > pressure_limit):
+             time.sleep(10)
+        time.sleep(time_step)
+    
 def leemRampTemperatureTo(temp,temp_step=1.0,time_step=1.0,pressure_limit=1):
     """ leemRampTemperatureTo (temp, temp_step, time_step, pressure_limit)
     Ramp temperature using PID (must be on before!)
@@ -336,15 +360,192 @@ def leemRampTemperatureTo(temp,temp_step=1.0,time_step=1.0,pressure_limit=1):
         temp_step: temperature change per step (default 1C)
         time_step: waiting time per step (default 1s)
         pressure_limit: if pressure above the limit, will wait (default 1, no limit) """ 
+    pidRampTo(leem_pid,temp,temp_step,time_step,pressure_limit)
+    
+def doser1RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
+    """ leemRampTemperatureTo (temp, temp_step, time_step, pressure_limit)
+    Ramp temperature using PID (must be on before!)
+    Parameters: 
+        power: final power (in W)
+        power_step: temperature change per step (default 1C)
+        time_step: waiting time per step (default 1s)
+        pressure_limit: if pressure above the limit, will wait (default 1, no limit) """ 
+    #pid=tango.DeviceProxy("leem/power/doser1_pid")
+    pidRampTo(doser1_pid,power,power_step,time_step,pressure_limit)
 
-    start=pid.SetPoint
-    if (start>temp):
-        r=numpy.arange(start,temp,-temp_step)
-    else:
-        r=numpy.arange(start,temp,temp_step)
-    for a in r:
-        pid.SetPoint=a
-        print("Going to %f"%a)
-        while (gaugeMCH.Pressure_IG1 > pressure_limit):
-             time.sleep(10)
-        time.sleep(time_step)
+def doser1RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
+    """ leemRampTemperatureTo (temp, temp_step, time_step, pressure_limit)
+    Ramp temperature using PID (must be on before!)
+    Parameters: 
+        power: final power (in W)
+        power_step: temperature change per step (default 1C)
+        time_step: waiting time per step (default 1s)
+        pressure_limit: if pressure above the limit, will wait (default 1, no limit) """ 
+    #pid=tango.DeviceProxy("leem/power/doser1_pid")
+    pidRampTo(doser2_pid,power,power_step,time_step,pressure_limit)
+
+
+
+def leemARRESset():
+    """ leemARRESset()
+    Reads normal incidence IDX,IDY,IEX,IEY and ask to change the incidence for two endpoints.
+    Used as reciprocal space positions in leemARRESrun()
+    """
+    b = zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0º position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
+    b[0]=leemReadDeflection()
+    print("Normal Incidence condition IDX,IDY,IEX,IEY = ",b[0])
+    raw_input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
+    b[1]=leemReadDeflection()
+    print("Endpoint 1 condition IDX,IDY,IEX,IEY = ",b[1])
+    leemSetDeflection(b[0])
+    raw_input("Move to endpoint 2 in reciprocal space and press enter") # Change to input() in Python3
+    b[2]=leemReadDeflection()
+    leemSetDeflection(b[0])
+    print("Endpoint 2 condition IDX,IDY,IEX,IEY = ",b[1])
+    for i in range(0,1):
+        for j in range(0,3):
+            if (b[i,j]>200):
+                b[i,j]=0
+    
+    return(b)
+    
+def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
+    """ leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0)
+    Runs a Angle-Resolved Reflection Electron Spectroscopy scan. Needs energy limits (E0,Ef, nE), and number of k points (nk).
+    The incidence settings are read by leemARRESset().
+    """
+    (full,name)=leem_makenextfolder_and_inc()
+    expname="ARRES"+name
+    oldExposure=uview.Exposure
+    oldAverage=uview.Average
+    oldAcq=uview.ContinousAcquisition
+    uview.Exposure=exp
+    uview.Average=avg
+    uview.ContinousAcquisition=True
+    leem_savesettings(full+"/"+expname+".txt")
+    
+    f=open(full+"/"+expname+"_deflection.txt","w")
+    f.write("Normal Incidence condition IDX %f IDY %f IEX %f IEY %f \n"%(b[0,0],b[0,1],b[0,2],b[0,3]))
+    f.write("Endpoint 1 condition IDX %f IDY %f IEX %f IEY %f \n"%(b[1,0],b[1,1],b[1,2],b[1,3]))
+    if (len(b>2)):
+        f.write("Endpoint 2 condition IDX %f IDY %f IEX %f IEY %f \n"%(b[2,0],b[2,1],b[2,2],b[2,3]))    
+    f.close()
+    
+    
+    f=open(full+"/LOG0.txt","w")
+    f.write("# Imagenumber k Energy(eV) roi time\n")
+    a=0
+    a_k=0
+    a_e=0
+    e=numpy.linspace(E0,Ef,nE)
+    k=numpy.linspace(0.0,1.0,nk)
+    arres0=numpy.zeros((nk,nE))
+    interpIllDefX = interp1d([0,1],[b[0,0],b[1,0]])
+    interpIllDefY = interp1d([0,1],[b[0,1],b[1,1]])
+    interpImEqX = interp1d([0,1],[b[0,2],b[1,2]])
+    interpImEqY = interp1d([0,1],[b[0,3],b[1,3]])
+    
+    for j in k:
+        a_e=0
+        leem2k.IllDefX=interpIllDefX(j)
+        leem2k.IllDefY=interpIllDefY(j)
+        leem2k.ImEqX=interpImEqX(j)
+        leem2k.ImEqY=interpImEqY(j)
+        print("%5.1f"%interpIllDefX(j),"%5.1f"%interpIllDefY(j),"%5.1f"%interpImEqX(j),"%5.1f"%interpImEqY(j))
+        for i in e:
+            leem2k.StartVoltage=float(i)
+            t=time.localtime()
+            timenow=time.strftime("%c", t)
+            uview.AcquireSingleImage()
+            while (uview.AcquisitionInProgress):
+                pass
+            savename=expname+"_0_%05d"%a
+            if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
+                print "%s %f %f "%(savename,j,i)
+            roi=float(uview.IntensityROI1)
+            arres0[a_k,a_e]=roi
+            f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
+            a+=1
+            a_e+=1
+        print
+        a_k+=1
+        
+    plt.subplot(121)
+    plt.imshow(flip(arres0.swapaxes(0,1),1),aspect="auto",origin="lower")
+    plt.yticks( arange(nE), arange(E0,Ef,1+(Ef-E0)/(nE)))
+    plt.show()
+    f.close()
+    leemSetDeflection(b[0])
+    numpy.save(full+"/arres0.npy",arres0)
+    savefig(full+"/arres0.pdf")
+    
+    # Check if we have 2 directions to measure. If only one, finish up.
+    if (len(b)==2):
+        uview.ContinousAcquisition=True
+        uview.Exposure=oldExposure
+        uview.Average=oldAverage
+        return(arres0)
+    
+    f=open(full+"/LOG1.txt","w")
+    f.write("# Imagenumber k Energy(eV) roi time\n")
+    a=0
+    a_k=0
+    a_e=0
+    e=numpy.linspace(E0,Ef,nE)
+    k=numpy.linspace(0.0,1.0,nk)
+    arres1=numpy.zeros((nk,nE))
+    interpIllDefX = interp1d([0,1],[b[0,0],b[2,0]])
+    interpIllDefY = interp1d([0,1],[b[0,1],b[2,1]])
+    interpImEqX = interp1d([0,1],[b[0,2],b[2,2]])
+    interpImEqY = interp1d([0,1],[b[0,3],b[2,3]])
+    
+    for j in k:
+        a_e=0
+        leem2k.IllDefX=interpIllDefX(j)
+        leem2k.IllDefY=interpIllDefY(j)
+        leem2k.ImEqX=interpImEqX(j)
+        leem2k.ImEqY=interpImEqY(j)
+        print("%5.1f"%interpIllDefX(j),"%5.1f"%interpIllDefY(j),"%5.1f"%interpImEqX(j),"%5.1f"%interpImEqY(j))
+        for i in e:
+            leem2k.StartVoltage=float(i)
+            t=time.localtime()
+            timenow=time.strftime("%c", t)
+            uview.AcquireSingleImage()
+            while (uview.AcquisitionInProgress):
+                pass
+            savename=expname+"_1_%05d"%a
+            if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
+                print "%s %f %f "%(savename,j,i)
+            roi=float(uview.IntensityROI1)
+            arres1[a_k,a_e]=roi
+            f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
+            a+=1
+            a_e+=1
+        print
+        a_k+=1 
+        
+    plt.subplot(122)
+    plt.imshow(arres1.swapaxes(0,1),aspect="auto",origin="lower")
+    plt.yticks(array([]),array([]))
+    plt.show()
+    f.close()
+    leemSetDeflection(b[0])
+    numpy.save(full+"/arres1.npy",arres1)
+    savefig(full+"/arres1.pdf")
+    uview.ContinousAcquisition=True
+    uview.Exposure=oldExposure
+    uview.Average=oldAverage
+    return(arres0,arres1)
+    
+def leemSetDeflection(beam):
+    leem2k.IllDefX = beam[0]
+    leem2k.IllDefY = beam[1]
+    leem2k.ImEqX = beam[2]
+    leem2k.ImEqY = beam[3]
+        
+def leemReadDeflection():
+    idx=leem2k.IllDefX
+    idy=leem2k.IllDefY
+    iex=leem2k.ImEqX
+    iey=leem2k.ImEqY
+    return(array([idx,idy,iex,iey]))
