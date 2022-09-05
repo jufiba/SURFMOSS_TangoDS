@@ -166,6 +166,48 @@ class ElmitecLEEM2k(Device):
         display_level=DispLevel.EXPERT,
     )
 
+    IllDefX = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
+        unit="mA",
+    )
+
+    IllDefY = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
+        unit="mA",
+    )
+
+    IllEqX = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
+        unit="mA",
+    )
+
+    IllEqY = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
+        unit="mA",
+    )
+
+    ImEqX = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
+        unit="mA",
+    )
+
+    ImEqY = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
+        unit="mA",
+    )
+
     # ---------------
     # General methods
     # ---------------
@@ -202,7 +244,6 @@ class ElmitecLEEM2k(Device):
         # PROTECTED REGION ID(ElmitecLEEM2k.Objective_write) ENABLED START #
         self.s.send("val 11 "+str(value))
         data = self.TCPBlockingReceive()
-        return float(data)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.Objective_write
 
     def read_Preset(self):
@@ -306,6 +347,84 @@ class ElmitecLEEM2k(Device):
         self.s.send("val 41 "+str(value))
         data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecLEEM2k.BombVoltage_write
+
+    def read_IllDefX(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllDefX_read) ENABLED START #
+        self.s.send("val 2")
+        data = self.TCPBlockingReceive()
+        return float(data)   
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefX_read
+
+    def write_IllDefX(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllDefX_write) ENABLED START #
+        self.s.send("val 2 "+str(value))
+        data = self.TCPBlockingReceive()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefX_write
+
+    def read_IllDefY(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllDefY_read) ENABLED START #
+        self.s.send("val 3")
+        data = self.TCPBlockingReceive()
+        return float(data)        
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefY_read
+
+    def write_IllDefY(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllDefY_write) ENABLED START #
+        self.s.send("val 3 "+str(value))
+        data = self.TCPBlockingReceive()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefY_write
+
+    def read_IllEqX(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllEqX_read) ENABLED START #
+        self.s.send("val 30")
+        data = self.TCPBlockingReceive()
+        return float(data)        
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqX_read
+
+    def write_IllEqX(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllEqX_write) ENABLED START #
+        self.s.send("val 30 "+str(value))
+        data = self.TCPBlockingReceive()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqX_write
+
+    def read_IllEqY(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllEqY_read) ENABLED START #
+        self.s.send("val 31")
+        data = self.TCPBlockingReceive()
+        return float(data)        
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqY_read
+
+    def write_IllEqY(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.IllEqY_write) ENABLED START #
+        self.s.send("val 31 "+str(value))
+        data = self.TCPBlockingReceive()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqY_write
+
+    def read_ImEqX(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.ImEqX_read) ENABLED START #
+        self.s.send("val 33")
+        data = self.TCPBlockingReceive()
+        return float(data)        
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqX_read
+
+    def write_ImEqX(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.ImEqX_write) ENABLED START #
+        self.s.send("val 33 "+str(value))
+        data = self.TCPBlockingReceive()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqX_write
+
+    def read_ImEqY(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.ImEqY_read) ENABLED START #
+        self.s.send("val 34")
+        data = self.TCPBlockingReceive()
+        return float(data)        
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqY_read
+
+    def write_ImEqY(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.ImEqY_write) ENABLED START #
+        self.s.send("val 34 "+str(value))
+        data = self.TCPBlockingReceive()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqY_write
 
 
     # --------
