@@ -156,7 +156,14 @@ class ElmitecLEEM2k(Device):
     ChannelPlateVoltage = attribute(
         dtype='double',
         access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
         standard_unit="kV",
+    )
+
+    BombVoltage = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        display_level=DispLevel.EXPERT,
     )
 
     # ---------------
@@ -283,10 +290,22 @@ class ElmitecLEEM2k(Device):
 
     def write_ChannelPlateVoltage(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.ChannelPlateVoltage_write) ENABLED START #
-        #self.s.send("val 105 "+str(value))
-        #data = self.TCPBlockingReceive()
-        pass
+        self.s.send("val 105 "+str(value))
+        data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecLEEM2k.ChannelPlateVoltage_write
+
+    def read_BombVoltage(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.BombVoltage_read) ENABLED START #
+        self.s.send("val 41")
+        data = self.TCPBlockingReceive()
+        return float(data)
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.BombVoltage_read
+
+    def write_BombVoltage(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.BombVoltage_write) ENABLED START #
+        self.s.send("val 41 "+str(value))
+        data = self.TCPBlockingReceive()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.BombVoltage_write
 
 
     # --------

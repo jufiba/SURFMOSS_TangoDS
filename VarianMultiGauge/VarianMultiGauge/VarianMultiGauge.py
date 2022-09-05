@@ -24,6 +24,37 @@ from PyTango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(VarianMultiGauge.additionnal_import) ENABLED START #
 import serial
+from threading import Thread
+import time
+
+class ControlThread(Thread):
+    
+    def __init__ (self, ds):
+        Thread.__init__(self)
+        self.ds = ds
+ 
+    def run(self):        
+        while(self.ds.running):
+            self.ds.ser.write("#0032I1\r") # Check emission on IC1
+            self.ds.ser.inWaiting()
+            resp=self.ds.ser.readline()
+            if (resp==">01\r"): # Only check first gauge to set device status
+                self.ds.set_state(PyTango.DevState.ON)
+                self.ds.ser.write("#0002I1\r")
+                self.ds.ser.inWaiting()
+                a=self.ds.ser.readline()
+                self.ds.ig1=float(a[1:])
+                self.ds.ser.write("#0002I2\r")
+                self.ds.ser.inWaiting()
+                a=self.ds.ser.readline()
+                self.ds.ig2=float(a[1:])
+            else:
+                self.ds.set_state(PyTango.DevState.OFF)
+                self.ds.set_status("Either filament is off or gauge does not answer")
+                self.ds.debug_stream("Either filament is off or gauge does not answer")
+            time.sleep(1)
+            
+        
 # PROTECTED REGION END #    //  VarianMultiGauge.additionnal_import
 
 __all__ = ["VarianMultiGauge", "main"]
@@ -35,6 +66,9 @@ class VarianMultiGauge(Device):
     """
     __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(VarianMultiGauge.class_variable) ENABLED START #
+    ig1=0.0
+    ig2=0.0
+    running=True
     # PROTECTED REGION END #    //  VarianMultiGauge.class_variable
 
     # -----------------
@@ -92,6 +126,9 @@ class VarianMultiGauge(Device):
             self.set_state(PyTango.DevState.ON)
         else:
             self.set_state(PyTango.DevState.OFF)
+        self.running=True
+        ctrlloop = ControlThread(self)
+        ctrlloop.start()
         # PROTECTED REGION END #    //  VarianMultiGauge.init_device
 
     def always_executed_hook(self):
@@ -102,6 +139,7 @@ class VarianMultiGauge(Device):
     def delete_device(self):
         # PROTECTED REGION ID(VarianMultiGauge.delete_device) ENABLED START #
         self.ser.close()
+        self.running=False
         # PROTECTED REGION END #    //  VarianMultiGauge.delete_device
 
     # ------------------
@@ -110,18 +148,12 @@ class VarianMultiGauge(Device):
 
     def read_Pressure_IG1(self):
         # PROTECTED REGION ID(VarianMultiGauge.Pressure_IG1_read) ENABLED START #
-        self.ser.write("#0002I1\r")
-        self.ser.inWaiting()
-        a=self.ser.readline()
-        return(float(a[1:]))
+        return(self.ig1)
         # PROTECTED REGION END #    //  VarianMultiGauge.Pressure_IG1_read
 
     def read_Pressure_IG2(self):
         # PROTECTED REGION ID(VarianMultiGauge.Pressure_IG2_read) ENABLED START #
-        self.ser.write("#0002I2\r")
-        self.ser.inWaiting()
-        a=self.ser.readline()
-        return(float(a[1:]))
+        return(self.ig2)
         # PROTECTED REGION END #    //  VarianMultiGauge.Pressure_IG2_read
 
 

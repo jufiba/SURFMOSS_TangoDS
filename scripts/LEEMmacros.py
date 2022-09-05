@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v2.1 28/5/2021 Added leemRampTemperatureTo. This requires the PID controller to be on, and the gauge of the main chamber working.
+#
 # v2.0 25/02/2020 Autoselect day. Now leemSetDailyFolder is called at every experiment, and if the day is the same an an already existing folder, it does nothing. Otherwise, it creates the folder and resets the experiment number. Added time stamp in LEEMIV_ROI, LEEMIV
 # v1.9 06/02/2020
 #
@@ -36,11 +38,13 @@ def frange(start, stop=None, step=None):
 
 
 counter_filename="//hematite.labo/superficies/LEEM_Madrid/macros.dat"
+name="000"
 
+gaugeMCH=tango.DeviceProxy("leem/vacuum/gaugeMCH")
+pid=tango.DeviceProxy("leem/control/sample_leem_pid")
 leem2k=tango.DeviceProxy("leem/measurement/LEEM2k")
 uview=tango.DeviceProxy("leem/measurement/Uview")
 position=tango.DeviceProxy("leem/measurement/positionXY")
-name="000"
 
 def leemSetPrefix(prefix):
     f=open(counter_filename,"w")
@@ -323,3 +327,24 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+
+def leemRampTemperatureTo(temp,temp_step=1.0,time_step=1.0,pressure_limit=1):
+    """ leemRampTemperatureTo (temp, temp_step, time_step, pressure_limit)
+    Ramp temperature using PID (must be on before!)
+    Parameters: 
+        temp: final temperature (in C)
+        temp_step: temperature change per step (default 1C)
+        time_step: waiting time per step (default 1s)
+        pressure_limit: if pressure above the limit, will wait (default 1, no limit) """ 
+
+    start=pid.SetPoint
+    if (start>temp):
+        r=numpy.arange(start,temp,-temp_step)
+    else:
+        r=numpy.arange(start,temp,temp_step)
+    for a in r:
+        pid.SetPoint=a
+        print("Going to %f"%a)
+        while (gaugeMCH.Pressure_IG1 > pressure_limit):
+             time.sleep(10)
+        time.sleep(time_step)

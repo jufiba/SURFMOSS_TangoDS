@@ -23,6 +23,27 @@ from PyTango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(MitutoyoPostable.additionnal_import) ENABLED START #
 import serial
+from threading import Thread
+import time
+
+class ControlThread(Thread):
+    
+    def __init__ (self, ds):
+        Thread.__init__(self)
+        self.ds = ds
+ 
+    def run(self):        
+        while(self.ds.running):
+            self.ds.ser.write("*POS?\n")
+            self.ds.ser.inWaiting()
+            pos=self.ds.ser.readline()
+            while ("ERR" in pos):
+                self.ds.ser.write("*RST\n")
+                self.ds.ser.write("*POS?\n")
+                pos=self.ds.ser.readline()
+            self.ds.pos=pos
+            time.sleep(2)
+        
 # PROTECTED REGION END #    //  MitutoyoPostable.additionnal_import
 
 __all__ = ["MitutoyoPostable", "main"]
@@ -33,6 +54,7 @@ class MitutoyoPostable(Device):
     """
     __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(MitutoyoPostable.class_variable) ENABLED START #
+    pos="( 0.0 , 0.0)"
     # PROTECTED REGION END #    //  MitutoyoPostable.class_variable
 
     # -----------------
@@ -71,6 +93,9 @@ class MitutoyoPostable(Device):
         self.set_status("Connected to Mitutoyo")
         self.debug_stream("Connected to Mitutoyo")
         self.set_state(PyTango.DevState.ON)
+        self.running=True
+        ctrlloop = ControlThread(self)
+        ctrlloop.start()
         # PROTECTED REGION END #    //  MitutoyoPostable.init_device
 
     def always_executed_hook(self):
@@ -80,7 +105,8 @@ class MitutoyoPostable(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(MitutoyoPostable.delete_device) ENABLED START #
-        self.close()
+        self.ser.close()
+        self.running=False
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  MitutoyoPostable.delete_device
 
@@ -90,9 +116,7 @@ class MitutoyoPostable(Device):
 
     def read_Position(self):
         # PROTECTED REGION ID(MitutoyoPostable.Position_read) ENABLED START #
-        self.ser.write("*POS?\n")
-        reading=self.ser.readline()
-        return reading
+        return (self.pos)
         # PROTECTED REGION END #    //  MitutoyoPostable.Position_read
 
 
@@ -106,6 +130,7 @@ class MitutoyoPostable(Device):
     def Reset(self):
         # PROTECTED REGION ID(MitutoyoPostable.Reset) ENABLED START #
         self.ser.write("*RST\n");
+        # Dangerous!! Now there is a thread running at the same time, this will collide with it. 
         # PROTECTED REGION END #    //  MitutoyoPostable.Reset
 
     @command(
@@ -118,6 +143,7 @@ class MitutoyoPostable(Device):
         # PROTECTED REGION ID(MitutoyoPostable.SendCommand) ENABLED START #
         self.ser.write(argin)
         reading=self.ser.readline()
+         # Dangerous!! Now there is a thread running at the same time, this will collide with it. 
         return reading
         # PROTECTED REGION END #    //  MitutoyoPostable.SendCommand
 
