@@ -29,10 +29,11 @@ import serial
 __all__ = ["SRIlockin830", "main"]
 
 
-class SRIlockin830(Device, metaclass=DeviceMeta):
+class SRIlockin830(Device):
     """
     Interface to the SRI 830 Lock in.
     """
+    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(SRIlockin830.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  SRIlockin830.class_variable
 
@@ -63,14 +64,17 @@ class SRIlockin830(Device, metaclass=DeviceMeta):
 
     X = attribute(
         dtype='double',
+        format="%5.2e",
     )
 
     Y = attribute(
         dtype='double',
+        format="%5.2e",
     )
 
     Mod = attribute(
         dtype='double',
+        format="%5.2e",
     )
 
     TimeConstant = attribute(
