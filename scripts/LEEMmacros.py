@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v2.3 Minor cleaning
+#
 # v2.2 13/7/2022 Added doser1,2RampPowerTo, leemARRES
 #
 # v2.1 28/5/2021 Added leemRampTemperatureTo. This requires the PID controller to be on, and the gauge of the main chamber working.
@@ -11,6 +13,8 @@
 #
 # 06/02/2020 Changed number range in saving sequences from 3 digits to 4 digits. Removed LEEMIV_ROI_and_save, and added "saveImage" option in LEEMIV_ROI.
 # 
+# 20/02/2023 Adapted to Python3.
+#
 # Juan de la Figuera juan.delafiguera@gmail.com
 
 from datetime import date
@@ -40,7 +44,7 @@ def frange(start, stop=None, step=None):
 #end of function frange()
 
 
-counter_filename="//hematite.labo/superficies/LEEM_Madrid/macros.dat"
+counter_filename="/Superficies/LEEM_Madrid/macros.dat"
 name="000"
 
 gaugeMCH=tango.DeviceProxy("leem/vacuum/gaugeMCH")
@@ -51,15 +55,8 @@ leem2k=tango.DeviceProxy("leem/measurement/LEEM2k")
 uview=tango.DeviceProxy("leem/measurement/Uview")
 position=tango.DeviceProxy("leem/measurement/positionXY")
 
-def leemSetPrefix(prefix):
-    f=open(counter_filename,"w")
-    today=date.today()
-    dirname="%04d%02d%02d"%(today.year,today.month,today.day)
-    f.write(prefix+","+dirname+","+"0")
-    f.close()
-
 def leemSetDailyFolder():
-    (prefix,dayfolder,exp)=leem_getfolder()
+    (wprefix,prefix,dayfolder,exp)=leem_getfolder()
     today=date.today()
     dayfolder="%04d%02d%02d"%(today.year,today.month,today.day)
     dayname=prefix+"/"+dayfolder
@@ -79,11 +76,11 @@ def leem_getfolder():
     f=open(counter_filename,"r")
     count=f.readline()
     f.close()
-    (prefix,dayfolder,exp)=count.split(",")
-    return(prefix,dayfolder,int(exp))
+    (wprefix,prefix,dayfolder,exp)=count.split(",")
+    return(wprefix,prefix,dayfolder,int(exp))
 
 def leem_makenextfolder_and_inc():
-    (prefix,dayfolder,exp)=leem_getfolder()
+    (wprefix,prefix,dayfolder,exp)=leem_getfolder()
     #Check that day folder exists
     today=date.today()
     dayfolder="%04d%02d%02d"%(today.year,today.month,today.day)
@@ -96,6 +93,7 @@ def leem_makenextfolder_and_inc():
         f.close()
         exp=0
     full=prefix+"/"+dayfolder+"/"+dayfolder+"_%03d"%exp
+    wfull=wprefix+"/"+dayfolder+"/"+dayfolder+"_%03d"%exp
     name="%03d"%exp
     if not os.path.exists(full):
         os.mkdir(full)
@@ -104,9 +102,9 @@ def leem_makenextfolder_and_inc():
         print("Directory "+full+" already exists")
     exp+=1
     f=open(counter_filename,"w")
-    f.write(prefix+","+dayfolder+","+str(exp))
+    f.write(wprefix+","+prefix+","+dayfolder+","+str(exp))
     f.close()
-    return(full,name)
+    return(wfull,full,name)
 
 def leem_savesettings(name):
     f=open(name,"w")
@@ -133,7 +131,7 @@ def leemSaveSingleImage(exp=500,avg=0):
     
     BEWARE: 1 average means sliding average
     """
-    (full,name)=leem_makenextfolder_and_inc()
+    (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="IMG"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -145,9 +143,9 @@ def leemSaveSingleImage(exp=500,avg=0):
     leem_savesettings(full+"/"+expname+".txt")
     while (uview.AcquisitionInProgress):
         pass
-    res=uview.SaveImageAsDAT(full+"/"+expname)
+    res=uview.SaveImageAsDAT(wfull+"/"+expname)
     if (res=="0"):
-        print "Succesfull saving %s"%expname
+        print("Succesfull saving %s"%expname)
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
     uview.Average=oldAverage
@@ -159,7 +157,7 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
      
     BEWARE: 1 average means sliding average
     """
-    (full,name)=leem_makenextfolder_and_inc()
+    (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="SEQ"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -173,15 +171,15 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
             a=0
             while (1):
                 savename=expname+"_%05d"%a
-                if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
+                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
                     print "Saved %s"%savename
                 a+=1
                 time.sleep(delay)
         else:
             for a in range(n):
                 savename=expname+"_%05d"%a
-                if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
-                    print "Saved %s"%savename
+                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                    print("Saved %s"%savename)
                 time.sleep(delay)
     except KeyboardInterrupt:
         print "Ok, so you want to finish. Let me clean up."
@@ -197,7 +195,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     
     BEWARE: 1 average means sliding average
     """
-    (full,name)=leem_makenextfolder_and_inc()
+    (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -223,28 +221,28 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
                 while (uview.AcquisitionInProgress):
                     pass
                 savename=expname+"_%05d"%a
-                if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
-                    print "Saved %s"%savename
+                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                    print("Saved %s"%savename)
                 a+=1
             if (repeat==False):
                 break
     except KeyboardInterrupt:
-        print "Ok, ok, stopping adquisition. Let me clean up"
+        print("Ok, ok, stopping adquisition. Let me clean up")
     f.close()
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
     uview.Average=oldAverage
 
 
-def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,saveImage=False):
-    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False), plot (default=False)
+def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=False):
+    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False), plot (default=False), roi (default=1, or use 2 for two boxes), saveImage (default=False)
     
     Save intensity of ROI changing energy, and optionally, plot it.
     For repeated loops (repeat=True), press CTRL-C to finish.
     
     BEWARE: 1 average means sliding average
     """
-    (full,name)=leem_makenextfolder_and_inc()
+    (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -257,12 +255,18 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,saveImage=False)
     f.write("# Image number  Energy (eV) ROI1 (arb.u.) time\n")
     a=0
     fig=plt.figure()
-    ax=fig.add_subplot(111)
+    if (roi==1):
+        ax=fig.add_subplot(111)
+    else:
+        ax=fig.add_subplot(211)
+        ax2=fig.add_subplot(212)
     try:
         while (True):
             #e=frange(E0,Ef,dE)
             e=numpy.arange(E0,Ef+dE,dE,dtype="float")
             rois=numpy.zeros(len(e))
+            if (roi!=1):
+                rois2=numpy.zeros(len(e))
             k=0
             for i in e:
                 leem2k.StartVoltage=i
@@ -270,25 +274,35 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,saveImage=False)
                 while (uview.AcquisitionInProgress):
                     pass
                 rois[k]=float(uview.IntensityROI1)
+                if (roi==2):
+                    rois2[k]=float(uview.IntensityROI2)
                 t=time.localtime()
                 timenow=time.strftime("%c", t)
                 if (saveImage==True):
                     savename=expname+"_%05d"%a
-                    if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
-                        print "Saved %s"%savename
-                print "Image %d Energy %f ROI1 %f time %s"%(a,i,rois[k],timenow)
-                f.write("%d %f %f %s\n"%(a,i,rois[k],timenow))
+                    if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                        print("Saved %s"%savename)
+                if (roi==1):
+                    print("Image %d Energy %f ROI1 %f time %s"%(a,i,rois[k],timenow))
+                    f.write("%d %f %f %s\n"%(a,i,rois[k],timenow))
+                else:
+                    print("Image %d Energy %f ROI1 %f ROI2 %f time %s"%(a,i,rois[k],rois2[k],timenow))
+                    f.write("%d %f %f %f %s\n"%(a,i,rois[k],rois2[k],timenow))
                 a+=1
                 k+=1
             if (plot==True):
-                ax.plot(e,rois)
+                if (roi==1):
+                    ax.plot(e,rois)
+                else:
+                    ax.plot(e,rois)
+                    ax2.plot(e,rois2)
                 fig.show()
                 fig.canvas.draw()
             f.flush()
             if (repeat==False):
                break
     except KeyboardInterrupt:
-        print "Ok, ok, you want me to stop. Cleaning up."
+        print("Ok, ok, you want me to stop. Cleaning up.")
     f.close()
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
@@ -302,7 +316,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     
     BEWARE: 1 average means sliding average
     """
-    (full,name)=leem_makenextfolder_and_inc()
+    (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -318,15 +332,15 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     for i in e:
         leem2k.StartVoltage=float(i)
         leem2k.Objective=float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)
-        print "Image %d Energy %f Objective %f"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj))
+        print("Image %d Energy %f Objective %f"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
         f.write("%d %f %f\n"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
         uview.AcquireSingleImage()
         while (uview.AcquisitionInProgress):
             pass
         #uview.SaveImageAsPNG(expname)
         savename=expname+"_%05d"%a
-        if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
-            print "Saved %s"%savename
+        if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+            print("Saved %s"%savename)
         a+=1
     f.close()
     uview.ContinousAcquisition=True
@@ -373,7 +387,7 @@ def doser1RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
     #pid=tango.DeviceProxy("leem/power/doser1_pid")
     pidRampTo(doser1_pid,power,power_step,time_step,pressure_limit)
 
-def doser1RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
+def doser2RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
     """ leemRampTemperatureTo (temp, temp_step, time_step, pressure_limit)
     Ramp temperature using PID (must be on before!)
     Parameters: 
@@ -384,29 +398,26 @@ def doser1RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
     #pid=tango.DeviceProxy("leem/power/doser1_pid")
     pidRampTo(doser2_pid,power,power_step,time_step,pressure_limit)
 
-
-
 def leemARRESset():
     """ leemARRESset()
     Reads normal incidence IDX,IDY,IEX,IEY and ask to change the incidence for two endpoints.
     Used as reciprocal space positions in leemARRESrun()
     """
-    b = zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0º position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
+    b = zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0 position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
     b[0]=leemReadDeflection()
     print("Normal Incidence condition IDX,IDY,IEX,IEY = ",b[0])
-    raw_input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
+    input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
     b[1]=leemReadDeflection()
     print("Endpoint 1 condition IDX,IDY,IEX,IEY = ",b[1])
     leemSetDeflection(b[0])
-    raw_input("Move to endpoint 2 in reciprocal space and press enter") # Change to input() in Python3
+    input("Move to endpoint 2 in reciprocal space and press enter") # Change to input() in Python3
     b[2]=leemReadDeflection()
     leemSetDeflection(b[0])
     print("Endpoint 2 condition IDX,IDY,IEX,IEY = ",b[1])
     for i in range(0,1):
         for j in range(0,3):
             if (b[i,j]>200):
-                b[i,j]=0
-    
+                b[i,j]=0    
     return(b)
     
 def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
@@ -414,7 +425,7 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     Runs a Angle-Resolved Reflection Electron Spectroscopy scan. Needs energy limits (E0,Ef, nE), and number of k points (nk).
     The incidence settings are read by leemARRESset().
     """
-    (full,name)=leem_makenextfolder_and_inc()
+    (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="ARRES"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -460,8 +471,8 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
             while (uview.AcquisitionInProgress):
                 pass
             savename=expname+"_0_%05d"%a
-            if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
-                print "%s %f %f "%(savename,j,i)
+            if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                print("%s %f %f "%(savename,j,i))
             roi=float(uview.IntensityROI1)
             arres0[a_k,a_e]=roi
             f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
@@ -514,14 +525,14 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
             while (uview.AcquisitionInProgress):
                 pass
             savename=expname+"_1_%05d"%a
-            if (uview.SaveImageAsDAT(full+"/"+savename)=="0"):
-                print "%s %f %f "%(savename,j,i)
+            if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                print("%s %f %f "%(savename,j,i))
             roi=float(uview.IntensityROI1)
             arres1[a_k,a_e]=roi
             f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
             a+=1
             a_e+=1
-        print
+        print()
         a_k+=1 
         
     plt.subplot(122)
