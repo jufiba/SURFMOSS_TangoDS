@@ -2,6 +2,10 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v2.5 23/4/2024 Added CONTROL-C check in leemRampTemperaureROI
+#
+# v2.4 21/2/2024 rampLEEMROI
+#
 # v2.3 Minor cleaning
 #
 # v2.2 13/7/2022 Added doser1,2RampPowerTo, leemARRES
@@ -304,6 +308,9 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
     except KeyboardInterrupt:
         print("Ok, ok, you want me to stop. Cleaning up.")
     f.close()
+    if (plot==True):
+        savefig(full+"/plot.pdf")
+        savefig(full+"/plot.png")
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
     uview.Average=oldAverage
@@ -365,7 +372,53 @@ def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
         while (gaugeMCH.Pressure_IG1 > pressure_limit):
              time.sleep(10)
         time.sleep(time_step)
-    
+
+def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveImage=False):
+    """ leemRampTemperatureROI( temp, temp_step=1.0, time_step=1.0, exposure=100, average=0, saveimage=False)"""
+    (wfull,full,name)=leem_makenextfolder_and_inc()
+    expname="TEMPRAMP"+name
+    start=leem_pid.SetPoint
+    oldExposure=uview.Exposure
+    oldAverage=uview.Average
+    oldAcq=uview.ContinousAcquisition
+    uview.Exposure=exp
+    uview.Average=avg
+    uview.ContinousAcquisition=True
+    leem_savesettings(full+"/"+expname+".txt")
+    f=open(full+"/LOG.txt","w")
+    f.write("# Image number Temp SetTemp ROI time\n")
+    if (start>temp):
+        r=numpy.arange(start,temp,-step)
+    else:
+        r=numpy.arange(start,temp,step)
+    c=0
+    try:
+        for a in r:
+            leem_pid.SetPoint=a
+            print("Going to %f"%a)
+            time.sleep(time_step)
+            temp=leem2k.SampleTemperature
+            uview.AcquireSingleImage()
+            while (uview.AcquisitionInProgress):
+                pass
+            roi=float(uview.IntensityROI1)
+            t=time.localtime()
+            timenow=time.strftime("%c", t)
+            if (saveImage==True):
+                savename=expname+"_%05d"%c
+                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                   print("Saved %s"%savename)
+            print("Image %d Temp %f SetTemp %f ROI1 %f time %s"%(c,temp,a,roi,timenow))
+            f.write("%d %f %f %f %s\n"%(c,temp,a,roi,timenow))
+            c+=1
+    except KeyboardInterrupt:
+       print("Ok, ok, you want me to stop. Cleaning up.")
+    f.flush()
+    f.close()
+    uview.ContinousAcquisition=True
+    uview.Exposure=oldExposure
+    uview.Average=oldAverage
+
 def leemRampTemperatureTo(temp,temp_step=1.0,time_step=1.0,pressure_limit=1):
     """ leemRampTemperatureTo (temp, temp_step, time_step, pressure_limit)
     Ramp temperature using PID (must be on before!)
@@ -406,11 +459,11 @@ def leemARRESset():
     b = zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0 position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
     b[0]=leemReadDeflection()
     print("Normal Incidence condition IDX,IDY,IEX,IEY = ",b[0])
-    input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
+    raw_input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
     b[1]=leemReadDeflection()
     print("Endpoint 1 condition IDX,IDY,IEX,IEY = ",b[1])
     leemSetDeflection(b[0])
-    input("Move to endpoint 2 in reciprocal space and press enter") # Change to input() in Python3
+    raw_input("Move to endpoint 2 in reciprocal space and press enter") # Change to input() in Python3
     b[2]=leemReadDeflection()
     leemSetDeflection(b[0])
     print("Endpoint 2 condition IDX,IDY,IEX,IEY = ",b[1])
