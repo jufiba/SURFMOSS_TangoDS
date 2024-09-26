@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v2.6 26/9/2024 Modified for python3 again...
+#
 # v2.5 23/4/2024 Added CONTROL-C check in leemRampTemperaureROI
 #
 # v2.4 21/2/2024 rampLEEMROI
@@ -75,7 +77,7 @@ def leemSetDailyFolder():
     
 def leem_getfolder():
     if not os.path.exists(counter_filename):
-        print "Error, no saved filename"
+        print("Error, no saved filename")
         exit()
     f=open(counter_filename,"r")
     count=f.readline()
@@ -176,7 +178,7 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
             while (1):
                 savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
-                    print "Saved %s"%savename
+                    print("Saved %s"%savename)
                 a+=1
                 time.sleep(delay)
         else:
@@ -186,7 +188,7 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
                     print("Saved %s"%savename)
                 time.sleep(delay)
     except KeyboardInterrupt:
-        print "Ok, so you want to finish. Let me clean up."
+        print("Ok, so you want to finish. Let me clean up.")
     uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
     uview.Average=oldAverage
@@ -219,7 +221,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
                 leem2k.StartVoltage=float(i)
                 t=time.localtime()
                 timenow=time.strftime("%c", t)
-                print "Image %d Energy %f Time %s"%(a,float(i),timenow)
+                print("Image %d Energy %f Time %s"%(a,float(i),timenow))
                 f.write("%d %f %s\n"%(a,float(i),timenow))
                 uview.AcquireSingleImage()
                 while (uview.AcquisitionInProgress):
@@ -258,7 +260,9 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
     f=open(full+"/LOG.txt","w")
     f.write("# Image number  Energy (eV) ROI1 (arb.u.) time\n")
     a=0
-    fig=plt.figure()
+    if (plot==True):
+        fig=plt.figure()
+        show()
     if (roi==1):
         ax=fig.add_subplot(111)
     else:
@@ -300,8 +304,9 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
                 else:
                     ax.plot(e,rois)
                     ax2.plot(e,rois2)
-                fig.show()
-                fig.canvas.draw()
+                show()
+                #fig.canvas.draw()
+                savefig(full+"/plot.png")
             f.flush()
             if (repeat==False):
                break
@@ -459,11 +464,11 @@ def leemARRESset():
     b = zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0 position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
     b[0]=leemReadDeflection()
     print("Normal Incidence condition IDX,IDY,IEX,IEY = ",b[0])
-    raw_input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
+    input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
     b[1]=leemReadDeflection()
     print("Endpoint 1 condition IDX,IDY,IEX,IEY = ",b[1])
     leemSetDeflection(b[0])
-    raw_input("Move to endpoint 2 in reciprocal space and press enter") # Change to input() in Python3
+    input("Move to endpoint 2 in reciprocal space and press enter") # Change to raw_input() in Python2
     b[2]=leemReadDeflection()
     leemSetDeflection(b[0])
     print("Endpoint 2 condition IDX,IDY,IEX,IEY = ",b[1])
