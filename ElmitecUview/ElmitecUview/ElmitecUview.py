@@ -65,7 +65,7 @@ class ElmitecUview(Device):
         else:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                #self.s.connect((self.ElmitecUviewIP, self.ElmitecUviewPort))
+                #self.s.connect((self.UviewIP, self.UviewPort))
                 self.s.connect(("leem.labo",5570))
             except:
                 self.ElmitecUviewConnected = False
@@ -118,7 +118,7 @@ class ElmitecUview(Device):
     # -----------------
 
     UviewIP = device_property(
-        dtype='str', default_value="10.10.99.29"
+        dtype='str', default_value="leemPC.labo"
     )
 
     UviewPort = device_property(
@@ -167,6 +167,10 @@ class ElmitecUview(Device):
         hw_memorized=True,
     )
 
+    IntensityROI2 = attribute(
+        dtype='double',
+    )
+
     ImageData = attribute(
         dtype=(('uint16',),),
         max_dim_x=1024, max_dim_y=1024,
@@ -179,6 +183,7 @@ class ElmitecUview(Device):
     def init_device(self):
         Device.init_device(self)
         self.set_change_event("IntensityROI1", True, False)
+        self.set_change_event("IntensityROI2", True, False)
         # PROTECTED REGION ID(ElmitecUview.init_device) ENABLED START #
         self.connect()
         # PROTECTED REGION END #    //  ElmitecUview.init_device
@@ -262,6 +267,11 @@ class ElmitecUview(Device):
         self.s.send("aip "+str(int(value)))
         data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecUview.ContinousAcquisition_write
+
+    def read_IntensityROI2(self):
+        # PROTECTED REGION ID(ElmitecUview.IntensityROI2_read) ENABLED START #
+        return self.getROIdata(2)
+        # PROTECTED REGION END #    //  ElmitecUview.IntensityROI2_read
 
     def read_ImageData(self):
         # PROTECTED REGION ID(ElmitecUview.ImageData_read) ENABLED START #

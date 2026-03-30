@@ -57,6 +57,18 @@ class ArduinoDAC(Device):
         dtype='float', default_value=30.0
     )
 
+    Unit = device_property(
+        dtype='str', default_value="V"
+    )
+
+    Format = device_property(
+        dtype='str', default_value="%4.2f"
+    )
+
+    Parameter = device_property(
+        dtype='str', default_value="Voltage"
+    )
+
     # ----------
     # Attributes
     # ----------
