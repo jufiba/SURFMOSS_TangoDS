@@ -29,11 +29,10 @@ import serial
 __all__ = ["AMLPGC1", "main"]
 
 
-class AMLPGC1(Device):
+class AMLPGC1(Device, metaclass=DeviceMeta):
     """
     Device server for AML PGC1.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(AMLPGC1.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  AMLPGC1.class_variable
 
@@ -68,7 +67,7 @@ class AMLPGC1(Device):
         # PROTECTED REGION ID(AMLPGC1.init_device) ENABLED START #
         try:
             self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
-            self.ser.write("*S0\r\n")
+            self.ser.write(b"*S0\r\n")
             resp=self.ser.readline()
         except:
             self.set_state(PyTango.DevState.FAULT)
@@ -77,7 +76,7 @@ class AMLPGC1(Device):
             return
         self.set_status("Connected to AMLPGC1")
         self.debug_stream("Connected to AMLPGC1")
-        if (ord(resp[7])&0b0001==0b00001):
+        if (resp[7]&0b0001==0b00001):
             self.set_state(PyTango.DevState.ON)
         else:
             self.set_state(PyTango.DevState.OFF)
@@ -90,10 +89,10 @@ class AMLPGC1(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(AMLPGC1.delete_device) ENABLED START #
-        self.ser.write("*P0\r\n")
+        self.ser.write(b"*P0\r\n")
         a=self.ser.readline()
-        if (ord(a[0])&0b10000==0b10000):
-            self.ser.write("*R0\r\n")
+        if (a[0]&0b10000==0b10000):
+            self.ser.write(b"*R0\r\n")
             resp=self.ser.readline()
         self.ser.close()
         # PROTECTED REGION END #    //  AMLPGC1.delete_device
@@ -104,18 +103,18 @@ class AMLPGC1(Device):
 
     def read_Pressure(self):
         # PROTECTED REGION ID(AMLPGC1.Pressure_read) ENABLED START #
-        self.ser.write("*S0\r\n")
+        self.ser.write(b"*S0\r\n")
         self.ser.inWaiting()
         a=self.ser.readline()
-        pressure=(a[9:].split(",")[0])
+        pressure=(a[9:].split(b",")[0])
         return float(pressure)
         # PROTECTED REGION END #    //  AMLPGC1.Pressure_read
 
     def read_Remote(self):
         # PROTECTED REGION ID(AMLPGC1.Remote_read) ENABLED START #
-        self.ser.write("*P0\r\n")
+        self.ser.write(b"*P0\r\n")
         a=self.ser.readline()
-        if (ord(a[0])&0b10000==0b10000):
+        if (a[0]&0b10000==0b10000):
             return True
         else:
             return False
@@ -131,7 +130,7 @@ class AMLPGC1(Device):
     @DebugIt()
     def Start(self):
         # PROTECTED REGION ID(AMLPGC1.Start) ENABLED START #
-        self.ser.write("*i03\r\n")
+        self.ser.write(b"*i03\r\n")
         self.set_state(PyTango.DevState.ON)
         # PROTECTED REGION END #    //  AMLPGC1.Start
 
@@ -140,7 +139,7 @@ class AMLPGC1(Device):
     @DebugIt()
     def Stop(self):
         # PROTECTED REGION ID(AMLPGC1.Stop) ENABLED START #
-        self.ser.write("*o0\r\n")
+        self.ser.write(b"*o0\r\n")
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  AMLPGC1.Stop
 
@@ -152,8 +151,8 @@ class AMLPGC1(Device):
     @DebugIt()
     def setCommand(self, argin):
         # PROTECTED REGION ID(AMLPGC1.setCommand) ENABLED START #
-        self.ser.write("*"+argin+"\r\n")
-        return self.ser.readline()
+        self.ser.write(("*"+argin+"\r\n").encode("ascii"))
+        return self.ser.readline().decode("ascii")
         # PROTECTED REGION END #    //  AMLPGC1.setCommand
 
     @command(
@@ -161,7 +160,7 @@ class AMLPGC1(Device):
     @DebugIt()
     def SetLocal(self):
         # PROTECTED REGION ID(AMLPGC1.SetLocal) ENABLED START #
-        self.ser.write("*R0\r\n")
+        self.ser.write(b"*R0\r\n")
         resp=self.ser.readline()
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  AMLPGC1.SetLocal
@@ -171,7 +170,7 @@ class AMLPGC1(Device):
     @DebugIt()
     def SetRemote(self):
         # PROTECTED REGION ID(AMLPGC1.SetRemote) ENABLED START #
-        self.ser.write("*C0\r\n") # Set remote mode
+        self.ser.write(b"*C0\r\n") # Set remote mode
         resp=self.ser.readline()
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  AMLPGC1.SetRemote

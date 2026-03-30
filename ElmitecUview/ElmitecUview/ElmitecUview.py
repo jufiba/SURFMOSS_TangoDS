@@ -38,25 +38,23 @@ def is_number(s):
 __all__ = ["ElmitecUview", "main"]
 
 
-class ElmitecUview(Device):
+class ElmitecUview(Device, metaclass=DeviceMeta):
     """
     Device server reads data from PEEM end station. UView must be running.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(ElmitecUview.class_variable) ENABLED START #
     ElmitecUviewConnected = False
 
     def TCPBlockingReceive(self):
-        Bytereceived = '0'
+        Bytereceived = b'0'
         szData = ''
-        while ord(Bytereceived) != 0:
+        while Bytereceived != b'\x00':
             ReceivedLength = 0
             while ReceivedLength == 0:
                 Bytereceived = self.s.recv(1)
-                #print 'Bytereceived=',Bytereceived,'ord(Bytereceived)=',ord(Bytereceived)
                 ReceivedLength = len(Bytereceived)
-            if ord(Bytereceived) != 0:
-                szData = szData + Bytereceived
+            if Bytereceived != b'\x00':
+                szData = szData + Bytereceived.decode("ascii")
         return szData
 
     def connect(self):
@@ -74,7 +72,7 @@ class ElmitecUview(Device):
                 self.debug_stream("Can't connect to ElmitecUview")
                 return
             #Start string communication
-            TCPString = 'asc'
+            TCPString = b'asc'
             self.s.send(TCPString)
             data = self.TCPBlockingReceive()
             self.ElmitecUviewConnected = True
@@ -84,7 +82,7 @@ class ElmitecUview(Device):
 
     def disconnect(self):
         if self.ElmitecUviewConnected:
-            self.s.send('clo')
+            self.s.send(b'clo')
             self.s.close()
             self.ElmitecUviewConnected = False
             self.debug_stream("Disconnected!")
@@ -92,7 +90,7 @@ class ElmitecUview(Device):
     def getROIdata(self, ROIid):
         self.connect()
         if self.ElmitecUviewConnected:
-            TCPString = 'roi ' + str(ROIid)
+            TCPString = ('roi ' + str(ROIid)).encode("ascii")
             try:
                 self.s.send(TCPString)
                 data = self.TCPBlockingReceive()
@@ -210,61 +208,61 @@ class ElmitecUview(Device):
 
     def read_Exposure(self):
         # PROTECTED REGION ID(ElmitecUview.Exposure_read) ENABLED START #
-        self.s.send("ext")
+        self.s.send(b"ext")
         data = self.TCPBlockingReceive()
         return float(data)
         # PROTECTED REGION END #    //  ElmitecUview.Exposure_read
 
     def write_Exposure(self, value):
         # PROTECTED REGION ID(ElmitecUview.Exposure_write) ENABLED START #
-        self.s.send("ext "+str(value))
+        self.s.send(("ext "+str(value)).encode("ascii"))
         data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecUview.Exposure_write
 
     def read_Average(self):
         # PROTECTED REGION ID(ElmitecUview.Average_read) ENABLED START #
-        self.s.send("avr")
+        self.s.send(b"avr")
         data = self.TCPBlockingReceive()
         return int(data)
         # PROTECTED REGION END #    //  ElmitecUview.Average_read
 
     def write_Average(self, value):
         # PROTECTED REGION ID(ElmitecUview.Average_write) ENABLED START #
-        self.s.send("avr "+str(value))
+        self.s.send(("avr "+str(value)).encode("ascii"))
         data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecUview.Average_write
 
     def read_AcquisitionInProgress(self):
         # PROTECTED REGION ID(ElmitecUview.AcquisitionInProgress_read) ENABLED START #
-        self.s.send("aip")
+        self.s.send(b"aip")
         data = self.TCPBlockingReceive()
         return int(data)
         # PROTECTED REGION END #    //  ElmitecUview.AcquisitionInProgress_read
 
     def read_ImageWidth(self):
         # PROTECTED REGION ID(ElmitecUview.ImageWidth_read) ENABLED START #
-        self.s.send("giw")
+        self.s.send(b"giw")
         data = self.TCPBlockingReceive()
         return int(data)
         # PROTECTED REGION END #    //  ElmitecUview.ImageWidth_read
 
     def read_ImageHeight(self):
         # PROTECTED REGION ID(ElmitecUview.ImageHeight_read) ENABLED START #
-        self.s.send("gih")
+        self.s.send(b"gih")
         data = self.TCPBlockingReceive()
         return int(data)
         # PROTECTED REGION END #    //  ElmitecUview.ImageHeight_read
 
     def read_Binning(self):
         # PROTECTED REGION ID(ElmitecUview.Binning_read) ENABLED START #
-        self.s.send("bin")
+        self.s.send(b"bin")
         data = self.TCPBlockingReceive()
         return int(data.split()[0])
         # PROTECTED REGION END #    //  ElmitecUview.Binning_read
 
     def write_ContinousAcquisition(self, value):
         # PROTECTED REGION ID(ElmitecUview.ContinousAcquisition_write) ENABLED START #
-        self.s.send("aip "+str(int(value)))
+        self.s.send(("aip "+str(int(value))).encode("ascii"))
         data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecUview.ContinousAcquisition_write
 
@@ -303,7 +301,7 @@ class ElmitecUview(Device):
     @DebugIt()
     def AcquireSingleImage(self):
         # PROTECTED REGION ID(ElmitecUview.AcquireSingleImage) ENABLED START #
-        self.s.send("asi -1")
+        self.s.send(b"asi -1")
         data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecUview.AcquireSingleImage
 
@@ -314,7 +312,7 @@ class ElmitecUview(Device):
     @DebugIt()
     def SaveImageAsDAT(self, argin):
         # PROTECTED REGION ID(ElmitecUview.SaveImageAsDAT) ENABLED START #
-        self.s.send("exp 0,0,"+argin)
+        self.s.send(("exp 0,0,"+argin).encode("ascii"))
         data = self.TCPBlockingReceive()
         return(data)
         # PROTECTED REGION END #    //  ElmitecUview.SaveImageAsDAT
@@ -326,7 +324,7 @@ class ElmitecUview(Device):
     @DebugIt()
     def SaveImageAsPNG(self, argin):
         # PROTECTED REGION ID(ElmitecUview.SaveImageAsPNG) ENABLED START #
-        self.s.send("exp 1,2,"+argin)
+        self.s.send(("exp 1,2,"+argin).encode("ascii"))
         data = self.TCPBlockingReceive()
         return(data)
         # PROTECTED REGION END #    //  ElmitecUview.SaveImageAsPNG
@@ -339,7 +337,7 @@ class ElmitecUview(Device):
     @DebugIt()
     def sendCommand(self, argin):
         # PROTECTED REGION ID(ElmitecUview.sendCommand) ENABLED START #
-        self.s.send(argin)
+        self.s.send(argin.encode("ascii"))
         data = self.TCPBlockingReceive()
         return data
         # PROTECTED REGION END #    //  ElmitecUview.sendCommand

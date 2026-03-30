@@ -29,11 +29,10 @@ import serial
 __all__ = ["SRIlockin830", "main"]
 
 
-class SRIlockin830(Device):
+class SRIlockin830(Device, metaclass=DeviceMeta):
     """
     Interface to the SRI 830 Lock in.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(SRIlockin830.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  SRIlockin830.class_variable
 
@@ -259,7 +258,7 @@ class SRIlockin830(Device):
         # PROTECTED REGION ID(SRIlockin830.SndCmdResponse) ENABLED START #
         self.ser.write (bytes (argin+"\n", "ascii"))
         resp=self.ser.read_until(bytes('\r',"ascii"))
-        return resp
+        return resp.decode("ascii")
         # PROTECTED REGION END #    //  SRIlockin830.SndCmdResponse
 
     @command(

@@ -37,18 +37,17 @@ def is_number(s):
 __all__ = ["Itech6000C", "main"]
 
 
-class Itech6000C(Device):
+class Itech6000C(Device, metaclass=DeviceMeta):
     """
     ITech6000C control through ethernet socket.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(Itech6000C.class_variable) ENABLED START #
     ItechConnected = False
 
     def TCPBlockingReceive(self):
-        Bytereceived = '0'
+        Bytereceived = b'0'
         szData = ''
-        szData=self.s.recv(1024)
+        szData=self.s.recv(1024).decode("ascii")
         return szData
         while ord(Bytereceived) != 0:
             ReceivedLength = 0
@@ -141,7 +140,7 @@ class Itech6000C(Device):
         Device.init_device(self)
         # PROTECTED REGION ID(Itech6000C.init_device) ENABLED START #
         self.connect()
-        self.s.send("OUTPUT?\n")
+        self.s.send(b"OUTPUT?\n")
         data = self.TCPBlockingReceive()
         print(data)
         if (data[0]=="1"):
@@ -166,52 +165,52 @@ class Itech6000C(Device):
 
     def read_Current(self):
         # PROTECTED REGION ID(Itech6000C.Current_read) ENABLED START #
-        self.s.send("MEASure:SCALar:CURRent:DC?\n")
+        self.s.send(b"MEASure:SCALar:CURRent:DC?\n")
         data = self.TCPBlockingReceive()
         return float(data)
         # PROTECTED REGION END #    //  Itech6000C.Current_read
 
     def read_Voltage(self):
         # PROTECTED REGION ID(Itech6000C.Voltage_read) ENABLED START #
-        self.s.send("MEASure:SCALar:VOLTAGE:DC?\n")
+        self.s.send(b"MEASure:SCALar:VOLTAGE:DC?\n")
         data = self.TCPBlockingReceive()
         return float(data)
         # PROTECTED REGION END #    //  Itech6000C.Voltage_read
 
     def read_Power(self):
         # PROTECTED REGION ID(Itech6000C.Power_read) ENABLED START #
-        self.s.send("MEASure:SCALar:POWER:DC?\n")
+        self.s.send(b"MEASure:SCALar:POWER:DC?\n")
         data = self.TCPBlockingReceive()
         return float(data)
         # PROTECTED REGION END #    //  Itech6000C.Power_read
 
     def read_SetVoltage(self):
         # PROTECTED REGION ID(Itech6000C.SetVoltage_read) ENABLED START #
-        self.s.send("SOURce:VOLTAGE:LEVel:IMMediate:AMPLitude?\n")
+        self.s.send(b"SOURce:VOLTAGE:LEVel:IMMediate:AMPLitude?\n")
         data = self.TCPBlockingReceive()
         return float(data)
         # PROTECTED REGION END #    //  Itech6000C.SetVoltage_read
 
     def write_SetVoltage(self, value):
         # PROTECTED REGION ID(Itech6000C.SetVoltage_write) ENABLED START #
-        self.s.send("SOURce:VOLTAGE:LEVel:IMMediate:AMPLitude %f\n"%(value))
+        self.s.send(("SOURce:VOLTAGE:LEVel:IMMediate:AMPLitude %f\n"%(value)).encode("ascii"))
         # PROTECTED REGION END #    //  Itech6000C.SetVoltage_write
 
     def read_SetCurrent(self):
         # PROTECTED REGION ID(Itech6000C.SetCurrent_read) ENABLED START #
-        self.s.send("SOURce:CURRENT:LEVel:IMMediate:AMPLitude?\n")
+        self.s.send(b"SOURce:CURRENT:LEVel:IMMediate:AMPLitude?\n")
         data = self.TCPBlockingReceive()
         return float(data)
         # PROTECTED REGION END #    //  Itech6000C.SetCurrent_read
 
     def write_SetCurrent(self, value):
         # PROTECTED REGION ID(Itech6000C.SetCurrent_write) ENABLED START #
-        self.s.send("SOURce:CURRENT:LEVel:IMMediate:AMPLitude %f\n"%(value))
+        self.s.send(("SOURce:CURRENT:LEVel:IMMediate:AMPLitude %f\n"%(value)).encode("ascii"))
         # PROTECTED REGION END #    //  Itech6000C.SetCurrent_write
 
     def read_Identification(self):
         # PROTECTED REGION ID(Itech6000C.Identification_read) ENABLED START #
-        self.s.send("SYST:VERS?\n")
+        self.s.send(b"SYST:VERS?\n")
         data = self.TCPBlockingReceive()
         return data
         # PROTECTED REGION END #    //  Itech6000C.Identification_read
@@ -228,7 +227,7 @@ class Itech6000C(Device):
     @DebugIt()
     def sendCommand(self, argin):
         # PROTECTED REGION ID(Itech6000C.sendCommand) ENABLED START #
-        self.s.send(argin+"\n")
+        self.s.send((argin+"\n").encode("ascii"))
         return
         # PROTECTED REGION END #    //  Itech6000C.sendCommand
 
@@ -237,7 +236,7 @@ class Itech6000C(Device):
     @DebugIt()
     def OutputOn(self):
         # PROTECTED REGION ID(Itech6000C.OutputOn) ENABLED START #
-        self.s.send("OUTPUT ON\n")
+        self.s.send(b"OUTPUT ON\n")
         self.set_state(PyTango.DevState.ON)
         # PROTECTED REGION END #    //  Itech6000C.OutputOn
 
@@ -246,7 +245,7 @@ class Itech6000C(Device):
     @DebugIt()
     def OutputOff(self):
         # PROTECTED REGION ID(Itech6000C.OutputOff) ENABLED START #
-        self.s.send("OUTPUT OFF\n")
+        self.s.send(b"OUTPUT OFF\n")
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  Itech6000C.OutputOff
 
@@ -258,7 +257,7 @@ class Itech6000C(Device):
     @DebugIt()
     def SendQuery(self, argin):
         # PROTECTED REGION ID(Itech6000C.SendQuery) ENABLED START #
-        self.s.send(argin+"\n")
+        self.s.send((argin+"\n").encode("ascii"))
         data = self.TCPBlockingReceive()
         return data
         # PROTECTED REGION END #    //  Itech6000C.SendQuery

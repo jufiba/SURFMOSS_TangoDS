@@ -29,11 +29,10 @@ import serial
 __all__ = ["MFC", "main"]
 
 
-class MFC(Device):
+class MFC(Device, metaclass=DeviceMeta):
     """
     Simple driver for the Bronkhorst Mass Flow Controllers.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(MFC.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  MFC.class_variable
 
@@ -80,8 +79,8 @@ class MFC(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(MFC.init_device) ENABLED START #
-	self.ser=serial.Serial(self.SerialPort,baudrate=38400,bytesize=8,parity="N",stopbits=1)
-	self.set_state(PyTango.DevState.ON)
+        self.ser=serial.Serial(self.SerialPort,baudrate=38400,bytesize=8,parity="N",stopbits=1)
+        self.set_state(PyTango.DevState.ON)
         # PROTECTED REGION END #    //  MFC.init_device
 
     def always_executed_hook(self):
@@ -91,7 +90,7 @@ class MFC(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(MFC.delete_device) ENABLED START #
- 	self.ser.close()
+        self.ser.close()
         pass
         # PROTECTED REGION END #    //  MFC.delete_device
 
@@ -101,7 +100,7 @@ class MFC(Device):
 
     def read_SetPoint(self):
         # PROTECTED REGION ID(MFC.SetPoint_read) ENABLED START #
-	message=":06800401210121\r\n"
+        message=b":06800401210121\r\n"
         self.ser.write(message)
         response=self.ser.readline()
         value=int(response[11:15],16)
@@ -110,17 +109,17 @@ class MFC(Device):
 
     def write_SetPoint(self, value):
         # PROTECTED REGION ID(MFC.SetPoint_write) ENABLED START #
-	value=int(320.0*value)
+        value=int(320.0*value)
         hx='{:04x}'.format(value)
-        message=":0680010121"+hx+"\r\n"
+        message=(":0680010121"+hx+"\r\n").encode("ascii")
         self.ser.write(message)
         response=self.ser.readline()
-        print response
+        print(response)
         # PROTECTED REGION END #    //  MFC.SetPoint_write
 
     def read_Measure(self):
         # PROTECTED REGION ID(MFC.Measure_read) ENABLED START #
-	message=":06800401210120\r\n"
+        message=b":06800401210120\r\n"
         self.ser.write(message)
         response=self.ser.readline()
         value=int(response[11:15],16)
@@ -137,10 +136,10 @@ class MFC(Device):
     @DebugIt()
     def Blink(self):
         # PROTECTED REGION ID(MFC.Blink) ENABLED START #
-        message=":06800100600139\r\n"
+        message=b":06800100600139\r\n"
         self.ser.write(message)
         response=self.ser.readline()
-        print response
+        print(response)
         # PROTECTED REGION END #    //  MFC.Blink
 
 # ----------

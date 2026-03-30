@@ -271,7 +271,7 @@ class PIDController (PyTango.Device_4Impl):
         state=self.get_state()
         if (state==PyTango.DevState.OFF):
             return
-        elif if (state==PyTango.DevState.ON):
+        elif (state==PyTango.DevState.ON):
             self.stop_ctrlloop = 1
             self.set_status("Control loop is stopped")
             self.set_state(PyTango.DevState.OFF)

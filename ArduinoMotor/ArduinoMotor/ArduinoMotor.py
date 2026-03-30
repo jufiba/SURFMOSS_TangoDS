@@ -29,11 +29,10 @@ import serial
 __all__ = ["ArduinoMotor", "main"]
 
 
-class ArduinoMotor(Device):
+class ArduinoMotor(Device, metaclass=DeviceMeta):
     """
     Custom server for an Arduino driving a motor.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(ArduinoMotor.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  ArduinoMotor.class_variable
 
@@ -113,28 +112,28 @@ class ArduinoMotor(Device):
         # PROTECTED REGION ID(ArduinoMotor.Position_read) ENABLED START #
         self.ser.write(bytes("POS?\n","ascii"))
         res=self.ser.readline()
-        return (int(res))
+        return (int(res.decode("ascii").strip()))
         # PROTECTED REGION END #    //  ArduinoMotor.Position_read
 
     def read_Info(self):
         # PROTECTED REGION ID(ArduinoMotor.Info_read) ENABLED START #
         self.ser.write(bytes("STAT?\n","ascii"))
         res=self.ser.readline()
-        return (res)
+        return (res.decode("ascii").strip())
         # PROTECTED REGION END #    //  ArduinoMotor.Info_read
 
     def read_Mode(self):
         # PROTECTED REGION ID(ArduinoMotor.Mode_read) ENABLED START #
         self.ser.write(bytes("MODO?\n","ascii"))
         res=self.ser.readline()
-        return (res)
+        return (res.decode("ascii").strip())
         # PROTECTED REGION END #    //  ArduinoMotor.Mode_read
 
     def read_Version(self):
         # PROTECTED REGION ID(ArduinoMotor.Version_read) ENABLED START #
         self.ser.write(bytes("IDN?\n","ascii"))
         res=self.ser.readline()
-        return (res)
+        return (res.decode("ascii").strip())
         # PROTECTED REGION END #    //  ArduinoMotor.Version_read
 
 

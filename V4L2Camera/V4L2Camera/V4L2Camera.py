@@ -29,11 +29,10 @@ import cv2
 __all__ = ["V4L2Camera", "main"]
 
 
-class V4L2Camera(Device):
+class V4L2Camera(Device, metaclass=DeviceMeta):
     """
     A simple driver to obtain frames from a V4L2 Camera.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(V4L2Camera.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  V4L2Camera.class_variable
 

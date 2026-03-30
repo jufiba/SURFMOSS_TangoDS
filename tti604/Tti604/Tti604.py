@@ -30,11 +30,10 @@ import time
 __all__ = ["Tti604", "main"]
 
 
-class Tti604(Device):
+class Tti604(Device, metaclass=DeviceMeta):
     """
     Device to use the RS TTI 604 DVMM. It has a rather horrible interface.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(Tti604.class_variable) ENABLED START #
     def parse_output(self,resp):
         units=["None","mV","V","mA","A","Ohm","Continuity","Diode Test"]

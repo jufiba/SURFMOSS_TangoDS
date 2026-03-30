@@ -29,25 +29,24 @@ import serial
 __all__ = ["PfeifferTU400", "main"]
 
 
-class PfeifferTU400(Device):
+class PfeifferTU400(Device, metaclass=DeviceMeta):
     """
     This is a server that provides the same funcionality as the Pfeiffer DCU display unit.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(PfeifferTU400.class_variable) ENABLED START #
-    
+
     def sendcommand(self,address,action,parameter,data):
-    	cmd_string=address+action+parameter+"%02d"%len(data)+data
-    	cmd=cmd_string+"%03d"%self.crc_code(cmd_string)+"\r"
-    	self.ser.write(cmd)
-    	resp=self.ser.read_until(terminator="\r")
+        cmd_string=address+action+parameter+"%02d"%len(data)+data
+        cmd=(cmd_string+"%03d"%self.crc_code(cmd_string)+"\r").encode("ascii")
+        self.ser.write(cmd)
+        resp=self.ser.read_until(terminator=b"\r").decode("ascii")
         raddress=resp[0:3]
         raction=resp[3:5]
         rparameter=resp[5:8]
         rdata=resp[10:10+int(resp[8:10])]
         rcrc=resp[-4:-1]
-    	return(raddress,raction,rparameter,rdata,rcrc)
-    
+        return(raddress,raction,rparameter,rdata,rcrc)
+
     def crc_code(self,a):
         result=0
         for i in range(0,len(a)):
@@ -76,7 +75,7 @@ class PfeifferTU400(Device):
 
     TemperatureBearing = attribute(
         dtype='int16',
-        unit="ºC",
+        unit="Â°C",
     )
 
     ActualSpeed = attribute(
@@ -86,7 +85,7 @@ class PfeifferTU400(Device):
 
     TemperatureMotor = attribute(
         dtype='uint16',
-        unit="ºC",
+        unit="Â°C",
     )
 
     Current = attribute(

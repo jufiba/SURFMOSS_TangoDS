@@ -29,11 +29,10 @@ import RPi.GPIO as GPIO
 __all__ = ["RaspberrySwitch", "main"]
 
 
-class RaspberrySwitch(Device):
+class RaspberrySwitch(Device, metaclass=DeviceMeta):
     """
     Read a switch connected to one of the GPIO pins.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(RaspberrySwitch.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  RaspberrySwitch.class_variable
 
@@ -93,19 +92,19 @@ class RaspberrySwitch(Device):
         # PROTECTED REGION ID(RaspberrySwitch.Switch_read) ENABLED START #
         reading=GPIO.input(self.GPIOport)
         if (reading):
-	    if (self.Sense):
-            	self.set_state(PyTango.DevState.ON)
-            	return True
-	    else:
-            	self.set_state(PyTango.DevState.OFF)
-            	return False
+            if (self.Sense):
+                self.set_state(PyTango.DevState.ON)
+                return True
+            else:
+                self.set_state(PyTango.DevState.OFF)
+                return False
         else:
-	    if (self.Sense):
-            	self.set_state(PyTango.DevState.OFF)
-            	return False
-	    else:
-            	self.set_state(PyTango.DevState.ON)
-            	return True
+            if (self.Sense):
+                self.set_state(PyTango.DevState.OFF)
+                return False
+            else:
+                self.set_state(PyTango.DevState.ON)
+                return True
         # PROTECTED REGION END #    //  RaspberrySwitch.Switch_read
 
 

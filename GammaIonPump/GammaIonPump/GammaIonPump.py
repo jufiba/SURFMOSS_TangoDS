@@ -29,20 +29,19 @@ import serial
 __all__ = ["GammaIonPump", "main"]
 
 
-class GammaIonPump(Device):
+class GammaIonPump(Device, metaclass=DeviceMeta):
     """
     Simple controller for running the Gamma Vacuum Ion Pump Controllers.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(GammaIonPump.class_variable) ENABLED START #
 
     def sendcommand(self,cmd):
         # Asume command is an string in hexadecimal, say C4.
-        # data is a string with an ASCII number, for example. 
+        # data is a string with an ASCII number, for example.
         cmd_string="~"+cmd+self.crc_code(cmd)+"\r"
-        self.ser.write(cmd_string)
-        resp=self.ser.read_until(terminator="\r")
-        return(resp)
+        self.ser.write(cmd_string.encode("ascii"))
+        resp=self.ser.read_until(terminator=b"\r")
+        return(resp.decode("ascii"))
 
     def crc_code(self,a):
         result=0

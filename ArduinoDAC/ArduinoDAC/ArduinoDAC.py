@@ -29,11 +29,10 @@ import serial
 __all__ = ["ArduinoDAC", "main"]
 
 
-class ArduinoDAC(Device):
+class ArduinoDAC(Device, metaclass=DeviceMeta):
     """
     Server for a simple interface of an Arduino connected to a DAC
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(ArduinoDAC.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  ArduinoDAC.class_variable
 

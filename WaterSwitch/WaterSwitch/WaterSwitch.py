@@ -28,11 +28,10 @@ import RPi.GPIO as GPIO
 __all__ = ["WaterSwitch", "main"]
 
 
-class WaterSwitch(Device):
+class WaterSwitch(Device, metaclass=DeviceMeta):
     """
     Simple device server to detect wheter water is flowing in a cooling water sensor
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(WaterSwitch.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  WaterSwitch.class_variable
 

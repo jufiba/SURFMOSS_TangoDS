@@ -29,11 +29,10 @@ import usb_1208LS
 __all__ = ["MCC1208LS", "main"]
 
 
-class MCC1208LS(Device):
+class MCC1208LS(Device, metaclass=DeviceMeta):
     """
     Simple interface to the MCC 1208LS usb DAC/ADC box.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(MCC1208LS.class_variable) ENABLED START #
     SelectGain=(usb_1208LS.usb_1208LS.BP_20_00V,usb_1208LS.usb_1208LS.BP_10_00V,usb_1208LS.usb_1208LS.BP_5_00V,usb_1208LS.usb_1208LS.BP_4_00V,usb_1208LS.usb_1208LS.BP_2_50V,usb_1208LS.usb_1208LS.BP_2_00V,usb_1208LS.usb_1208LS.BP_1_25V,usb_1208LS.usb_1208LS.BP_1_00V)
     # PROTECTED REGION END #    //  MCC1208LS.class_variable

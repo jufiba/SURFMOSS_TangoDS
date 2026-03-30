@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="ASCII"?>
-<pogoDsl:PogoSystem xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pogoDsl="http://www.esrf.fr/tango/pogo/PogoDsl">
+<pogoDsl:PogoSystem xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pogoDsl="http://tango-controls.org/pogo/PogoDsl">
   <classes name="AGPolaritySwitch" pogoRevision="9.4">
     <description description="A devicer server for changing the polarity of the high current (up to 30A) power supply. It is a relay box with an Arduino." title="AGPolaritySwitch" sourcePath="/home/juan/miNube/soft/tangoDrivers/AGPolaritySwitch" language="PythonHL" filestogenerate="XMI   file,Code files,Python Package,Protected Regions" license="GPL" copyright="" hasMandatoryProperty="false" hasConcreteProperty="true" hasAbstractCommand="false" hasAbstractAttribute="false">
       <inheritances classname="Device_Impl" sourcePath=""/>

@@ -40,11 +40,10 @@ import scipy
 __all__ = ["VSMControlDevice", "main"]
 
 
-class VSMControlDevice(Device):
+class VSMControlDevice(Device, metaclass=DeviceMeta):
     """
     Reading data and generation of images in hysteresis cycles
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(VSMControlDevice.class_variable) ENABLED START #
         
 

@@ -30,13 +30,12 @@ import struct
 __all__ = ["HuttingerPFGDC", "main"]
 
 
-class HuttingerPFGDC(Device):
+class HuttingerPFGDC(Device, metaclass=DeviceMeta):
     """
     Driver for the Huttinger DC generators, such as the PFG-DC1500, a 1500W 1KV power supply for magnetron sputtering growth.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(HuttingerPFGDC.class_variable) ENABLED START #
-    
+
     def sendcommand(self,address,command,data):
         # Asume command is an string in hexadecimal, say C4
         # address is 0 for generator, 1 for matchbox
@@ -44,25 +43,25 @@ class HuttingerPFGDC(Device):
         cmd_string=cmd+self.crc_code(cmd)
         self.ser.write(cmd_string)
         return(self.ser.read(5))
-    
+
     def parse_response(self,resp):
         (address,cmd,data,crc)=struct.unpack(">BBHB",resp)
-        cmd=ord(resp[1])
+        cmd=resp[1]
         if (cmd==21):
             command="NACK"
         elif (cmd==6):
             command="ACK"
         else:
-            command="%x"%ord(resp[1])
+            command="%x"%resp[1]
         return(address,command,data)
-                
+
     def byte_hex(self,a):
-         return("%02x"%ord(a))
-                
+         return("%02x"%a)
+
     def crc_code(self,a):
          result=0
          for i in range(0,len(a)):
-            result = result ^ ord(a[i])
+            result = result ^ a[i]
          return(struct.pack(">B",result))
 
 

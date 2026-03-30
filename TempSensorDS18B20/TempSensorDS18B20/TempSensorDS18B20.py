@@ -51,16 +51,15 @@ class ControlThread(Thread):
 __all__ = ["TempSensorDS18B20", "main"]
 
 
-class TempSensorDS18B20(Device):
+class TempSensorDS18B20(Device, metaclass=DeviceMeta):
     """
     Device server to read the temperature in a Raspberry PI with a DS18B20 sensor.
-    
+
     It needs (if using GPIO pin 4):
     - the w1_gpio,w1_therm modules in /etc/modules
     - set dtoverlay=w1-gpio,gpiopin=4 in /boot/config.txt&
     - python3-w1termsensor module
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(TempSensorDS18B20.class_variable) ENABLED START #
     temp=0.0
     # PROTECTED REGION END #    //  TempSensorDS18B20.class_variable

@@ -29,11 +29,10 @@ import serial
 __all__ = ["SpecsXRC1000", "main"]
 
 
-class SpecsXRC1000(Device):
+class SpecsXRC1000(Device, metaclass=DeviceMeta):
     """
     Device server for reading the status of the XRC1000 X-ray gun electronics.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(SpecsXRC1000.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  SpecsXRC1000.class_variable
 
@@ -68,8 +67,8 @@ class SpecsXRC1000(Device):
         self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
         try:
             self.ser.flush()
-            self.ser.write("SERNO ?\n")
-            resp=self.ser.readline()[:-1]
+            self.ser.write(b"SERNO ?\n")
+            resp=self.ser.readline().decode("ascii").strip()
             if (resp==">SERNO:000001D4B53828"):
                 self.set_status("Connected to our Specs XRC1000")
                 self.debug_stream("Connected to our Specs XRC1000")
@@ -78,8 +77,8 @@ class SpecsXRC1000(Device):
             self.set_status("Can't connect to Specs XRC1000")
             self.debug_stream("Can't connect to Specs XRC1000")
             return
-        self.ser.write("OPE ?\n")
-        resp=self.ser.readline()
+        self.ser.write(b"OPE ?\n")
+        resp=self.ser.readline().decode("ascii")
         o=int(resp[10])
         if (o==0):
             self.set_state(PyTango.DevState.OFF)
@@ -105,15 +104,15 @@ class SpecsXRC1000(Device):
 
     def read_Power(self):
         # PROTECTED REGION ID(SpecsXRC1000.Power_read) ENABLED START #
-        self.ser.write("PAN ?\n")
-        resp=float(self.ser.readline()[6:])
+        self.ser.write(b"PAN ?\n")
+        resp=float(self.ser.readline().decode("ascii")[6:])
         return resp
         # PROTECTED REGION END #    //  SpecsXRC1000.Power_read
 
     def read_Operation(self):
         # PROTECTED REGION ID(SpecsXRC1000.Operation_read) ENABLED START #
-        self.ser.write("OPE ?\n")
-        resp=self.ser.readline()
+        self.ser.write(b"OPE ?\n")
+        resp=self.ser.readline().decode("ascii")
         o=int(resp[10])
         if (o==0):
             self.set_state(PyTango.DevState.OFF)
@@ -136,8 +135,8 @@ class SpecsXRC1000(Device):
     @DebugIt()
     def SendCommand(self, argin):
         # PROTECTED REGION ID(SpecsXRC1000.SendCommand) ENABLED START #
-        self.ser.write(argin+"\n")
-        resp=self.ser.readline()
+        self.ser.write((argin+"\n").encode("ascii"))
+        resp=self.ser.readline().decode("ascii")
         return resp
         # PROTECTED REGION END #    //  SpecsXRC1000.SendCommand
 

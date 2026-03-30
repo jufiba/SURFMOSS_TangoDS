@@ -33,20 +33,20 @@ class ControlThread(Thread):
         Thread.__init__(self)
         self.ds = ds
  
-    def run(self):        
+    def run(self):
         while(self.ds.running):
-            self.ds.ser.write("#0032I1\r") # Check emission on IC1
+            self.ds.ser.write(b"#0032I1\r") # Check emission on IC1
             self.ds.ser.inWaiting()
-            resp=self.ds.ser.readline()
+            resp=self.ds.ser.readline().decode("ascii")
             if (resp==">01\r"): # Only check first gauge to set device status
                 self.ds.set_state(PyTango.DevState.ON)
-                self.ds.ser.write("#0002I1\r")
+                self.ds.ser.write(b"#0002I1\r")
                 self.ds.ser.inWaiting()
-                a=self.ds.ser.readline()
+                a=self.ds.ser.readline().decode("ascii")
                 self.ds.ig1=float(a[1:])
-                self.ds.ser.write("#0002I2\r")
+                self.ds.ser.write(b"#0002I2\r")
                 self.ds.ser.inWaiting()
-                a=self.ds.ser.readline()
+                a=self.ds.ser.readline().decode("ascii")
                 self.ds.ig2=float(a[1:])
             else:
                 self.ds.set_state(PyTango.DevState.OFF)
@@ -60,11 +60,10 @@ class ControlThread(Thread):
 __all__ = ["VarianMultiGauge", "main"]
 
 
-class VarianMultiGauge(Device):
+class VarianMultiGauge(Device, metaclass=DeviceMeta):
     """
     Simple devicer server for the Varian Multigauge controller. Asumes it has a hot cathode gauge.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(VarianMultiGauge.class_variable) ENABLED START #
     ig1=0.0
     ig2=0.0
@@ -108,12 +107,12 @@ class VarianMultiGauge(Device):
         # PROTECTED REGION ID(VarianMultiGauge.init_device) ENABLED START #
         try:
             self.ser=serial.Serial(self.SerialPort,baudrate=self.Speed,bytesize=8,parity="N",stopbits=1,timeout=1)
-            self.ser.write("#0011\r") # Set units to mbar
+            self.ser.write(b"#0011\r") # Set units to mbar
             self.ser.inWaiting()
-            resp=self.ser.readline()
-            self.ser.write("#0032I1\r") # Check emission on IC1
+            resp=self.ser.readline().decode("ascii")
+            self.ser.write(b"#0032I1\r") # Check emission on IC1
             self.ser.inWaiting()
-            resp=self.ser.readline()
+            resp=self.ser.readline().decode("ascii")
         except:
             self.set_state(PyTango.DevState.FAULT)
             self.set_status("Can't connect to Varian MultiGauge")
@@ -169,9 +168,9 @@ class VarianMultiGauge(Device):
     @DebugIt()
     def SendCommand(self, argin):
         # PROTECTED REGION ID(VarianMultiGauge.SendCommand) ENABLED START #
-        self.ser.write(argin+"\r")
+        self.ser.write((argin+"\r").encode("ascii"))
         self.ser.inWaiting()
-        res=self.ser.readline()
+        res=self.ser.readline().decode("ascii")
         return(res)
         # PROTECTED REGION END #    //  VarianMultiGauge.SendCommand
 

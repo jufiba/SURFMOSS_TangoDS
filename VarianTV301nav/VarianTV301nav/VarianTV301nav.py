@@ -29,38 +29,37 @@ import serial
 __all__ = ["VarianTV301nav", "main"]
 
 
-class VarianTV301nav(Device):
+class VarianTV301nav(Device, metaclass=DeviceMeta):
     """
     Driver for interfacing with the Varian/Agilent TV301 Navigator pump with integrated controller.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(VarianTV301nav.class_variable) ENABLED START #
-    
+
     status_code=["Stop","WaitinIntlk","Starting","Auto-tunning","Braking","Normal","Fail"]
-    
+
     def sendcommand(self,win,data):
-        cmd='\x02'+'\x80'+win+'\x31'+data+'\x03'
-        full_cmd=cmd+self.crc_code(cmd)
+        cmd=b'\x02\x80'+win.encode("ascii")+b'\x31'+data.encode("ascii")+b'\x03'
+        full_cmd=cmd+self.crc_code(cmd).encode("ascii")
         self.ser.write(full_cmd)
-        return(ord(self.ser.read(6)[2:3]))
+        return(self.ser.read(6)[2])
 
     def readcommand(self,win,nb):
-        cmd='\x02'+'\x80'+win+'\x30'+'\x03'
-        full_cmd=cmd+self.crc_code(cmd)
+        cmd=b'\x02\x80'+win.encode("ascii")+b'\x30\x03'
+        full_cmd=cmd+self.crc_code(cmd).encode("ascii")
         self.ser.write(full_cmd)
-        return(self.ser.read(nb))
-   
+        return(self.ser.read(nb).decode("ascii"))
+
     def crc_code(self,a):
         result=0
         for i in range(1,len(a)):
-            result = result ^ ord(a[i])
+            result = result ^ a[i]
         return('{:02x}'.format(result))
-        
+
     def setRemoteMode(self):
-	self.sendcommand("008","1") # Controller left in remote mode, not serial. It is the default mode after removing power. It is a read-only mode for all the settings.
+        self.sendcommand("008","1") # Controller left in remote mode, not serial. It is the default mode after removing power. It is a read-only mode for all the settings.
 
     def setSerialMode(self):
-	self.sendcommand("008","0") # Serial mode, full control.
+        self.sendcommand("008","0") # Serial mode, full control.
 
     # PROTECTED REGION END #    //  VarianTV301nav.class_variable
 
@@ -92,9 +91,9 @@ class VarianTV301nav(Device):
     temperature = attribute(
         dtype='uint16',
         label="temperature",
-        unit="ºC",
-        standard_unit="ºC",
-        display_unit="ºC",
+        unit="Â°C",
+        standard_unit="Â°C",
+        display_unit="Â°C",
         max_value=50,
         min_value=0,
     )
@@ -179,16 +178,16 @@ class VarianTV301nav(Device):
         Device.init_device(self)
         # PROTECTED REGION ID(VarianTV301nav.init_device) ENABLED START #
         self.ser=serial.Serial(self.serialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
-	if (self.read_running()==True):
-		self.setSerialMode() # Set comunicacion mode, not "remote"
-		self.sendcommand("000","1")
-		self.set_state(PyTango.DevState.ON)
-		self.set_status("VarianTV301 connected and running")
-	else:
-		self.setSerialMode() # Set serial comunicacion mode, not "remote"
-		self.sendcommand("000","0")
-		self.set_state(PyTango.DevState.OFF)
-		self.set_status("VarianTV301 connected")
+        if (self.read_running()==True):
+            self.setSerialMode() # Set comunicacion mode, not "remote"
+            self.sendcommand("000","1")
+            self.set_state(PyTango.DevState.ON)
+            self.set_status("VarianTV301 connected and running")
+        else:
+            self.setSerialMode() # Set serial comunicacion mode, not "remote"
+            self.sendcommand("000","0")
+            self.set_state(PyTango.DevState.OFF)
+            self.set_status("VarianTV301 connected")
         # PROTECTED REGION END #    //  VarianTV301nav.init_device
 
     def always_executed_hook(self):
@@ -198,9 +197,9 @@ class VarianTV301nav(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(VarianTV301nav.delete_device) ENABLED START #
-	    self.setRemoteMode() 
-	    # Set "Remote" read-only mode. Just in case.
-            self.ser.close()
+        self.setRemoteMode()
+        # Set "Remote" read-only mode. Just in case.
+        self.ser.close()
         # PROTECTED REGION END #    //  VarianTV301nav.delete_device
 
     # ------------------
@@ -241,66 +240,61 @@ class VarianTV301nav(Device):
 
     def read_turboStatus(self):
         # PROTECTED REGION ID(VarianTV301nav.turboStatus_read) ENABLED START #
- 	response=self.readcommand("205",15)
+        response=self.readcommand("205",15)
         return(self.status_code[int(response[6:12])])
         # PROTECTED REGION END #    //  VarianTV301nav.turboStatus_read
 
     def read_running(self):
         # PROTECTED REGION ID(VarianTV301nav.running_read) ENABLED START #
-	response=int(self.readcommand("000",10)[6:7])
+        response=int(self.readcommand("000",10)[6:7])
         if (response==0):
- 		return False
+            return False
         else:
-		return True
-	return False # Default
+            return True
         # PROTECTED REGION END #    //  VarianTV301nav.running_read
 
     def write_running(self, value):
         # PROTECTED REGION ID(VarianTV301nav.running_write) ENABLED START #
         if (value==True):
- 		res=self.sendcommand("000","1")
+            res=self.sendcommand("000","1")
         else:
-		res=self.sendcommand("000","0")
-	pass
+            res=self.sendcommand("000","0")
         # PROTECTED REGION END #    //  VarianTV301nav.running_write
 
     def read_valveOperation(self):
         # PROTECTED REGION ID(VarianTV301nav.valveOperation_read) ENABLED START #
-	response=int(self.readcommand("125",10)[6:7])
+        response=int(self.readcommand("125",10)[6:7])
         if (response==0):
-	        return False
-	elif (response==1):
-		return True
-	return False # Default
+            return False
+        elif (response==1):
+            return True
+        return False # Default
         # PROTECTED REGION END #    //  VarianTV301nav.valveOperation_read
 
     def write_valveOperation(self, value):
         # PROTECTED REGION ID(VarianTV301nav.valveOperation_write) ENABLED START #
         if (value==True):
- 		res=self.sendcommand("125","1")
+            res=self.sendcommand("125","1")
         else:
-		res=self.sendcommand("125","0")
-	pass
-
+            res=self.sendcommand("125","0")
         # PROTECTED REGION END #    //  VarianTV301nav.valveOperation_write
 
     def read_ventValve(self):
         # PROTECTED REGION ID(VarianTV301nav.ventValve_read) ENABLED START #
         response=int(self.readcommand("122",10)[6:7])
         if (response==0):
-	        return False
-	elif (response==1):
-		return True
-	return True # Default True, closed
+            return False
+        elif (response==1):
+            return True
+        return True # Default True, closed
         # PROTECTED REGION END #    //  VarianTV301nav.ventValve_read
 
     def write_ventValve(self, value):
         # PROTECTED REGION ID(VarianTV301nav.ventValve_write) ENABLED START #
-       	if (value==True):
- 		res=self.sendcommand("122","1")
+        if (value==True):
+            res=self.sendcommand("122","1")
         else:
-		res=self.sendcommand("122","0")
-	pass
+            res=self.sendcommand("122","0")
         # PROTECTED REGION END #    //  VarianTV301nav.ventValve_write
 
     def read_errorCode(self):
@@ -311,7 +305,7 @@ class VarianTV301nav(Device):
 
     def read_current(self):
         # PROTECTED REGION ID(VarianTV301nav.current_read) ENABLED START #
-	response=self.readcommand("200",15)
+        response=self.readcommand("200",15)
         return(int(response[6:12]))
         # PROTECTED REGION END #    //  VarianTV301nav.current_read
 
@@ -323,7 +317,7 @@ class VarianTV301nav(Device):
 
     def read_frecuency(self):
         # PROTECTED REGION ID(VarianTV301nav.frecuency_read) ENABLED START #
-	response=self.readcommand("203",15)
+        response=self.readcommand("203",15)
         return(int(response[6:12]))
         # PROTECTED REGION END #    //  VarianTV301nav.frecuency_read
 
@@ -337,9 +331,8 @@ class VarianTV301nav(Device):
     @DebugIt()
     def Start(self):
         # PROTECTED REGION ID(VarianTV301nav.Start) ENABLED START #
-	self.sendcommand("000","1")
-	self.set_state(PyTango.DevState.ON)
-        pass
+        self.sendcommand("000","1")
+        self.set_state(PyTango.DevState.ON)
         # PROTECTED REGION END #    //  VarianTV301nav.Start
 
     @command(
@@ -347,10 +340,8 @@ class VarianTV301nav(Device):
     @DebugIt()
     def Stop(self):
         # PROTECTED REGION ID(VarianTV301nav.Stop) ENABLED START #
-        pass
-	self.sendcommand("000","0")
-	self.set_state(PyTango.DevState.OFF)
-	pass
+        self.sendcommand("000","0")
+        self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  VarianTV301nav.Stop
 
     @command(
@@ -360,11 +351,11 @@ class VarianTV301nav(Device):
     @DebugIt()
     def SetSpeed(self, argin):
         # PROTECTED REGION ID(VarianTV301nav.SetSpeed) ENABLED START #
-	if (argin>950):
-		argin=950
-	elif (argin<150):
-		argin=150
-	speed_str="%06d"%argin
+        if (argin>950):
+            argin=950
+        elif (argin<150):
+            argin=150
+        speed_str="%06d"%argin
         res=self.sendcommand("120",speed_str)
         if (res==21):
             return(False)

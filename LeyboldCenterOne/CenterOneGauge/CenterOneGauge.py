@@ -29,25 +29,23 @@ import serial
 __all__ = ["CenterOneGauge", "main"]
 
 
-class CenterOneGauge(Device):
+class CenterOneGauge(Device, metaclass=DeviceMeta):
     """
     Single-Channel Vacuum Gauge
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(CenterOneGauge.class_variable) ENABLED START #
 
     def formatdata(self,str_data):
         status = str_data[0]
         data = str_data[2:]
-
-	return status , float(data)
+        return status , float(data)
 
     def sendcommand(self, str_command):
-		self.ser.write(str_command)
-		resp=self.ser.read_until(terminator="\r\n")
-		return resp
+        self.ser.write(str_command.encode("ascii"))
+        resp=self.ser.read_until(terminator=b"\r\n")
+        return resp.decode("ascii")
 
-	
+
     # PROTECTED REGION END #    //  CenterOneGauge.class_variable
 
     # -----------------
@@ -80,7 +78,6 @@ class CenterOneGauge(Device):
         # PROTECTED REGION ID(CenterOneGauge.init_device) ENABLED START #
         self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1)
         self.set_state(PyTango.DevState.ON)
-		
         # PROTECTED REGION END #    //  CenterOneGauge.init_device
 
     def always_executed_hook(self):
@@ -99,14 +96,14 @@ class CenterOneGauge(Device):
 
     def read_Pressure(self):
         # PROTECTED REGION ID(CenterOneGauge.Pressure_read) ENABLED START #
-	rcontrol = self.sendcommand("PR1 \r")
+        rcontrol = self.sendcommand("PR1 \r")
 
         if rcontrol[0] == "\x06":
-                        rdata = self.sendcommand("\x05")
-                        status, data = self.formatdata(rdata)
-
+            rdata = self.sendcommand("\x05")
+            status, data = self.formatdata(rdata)
         else:
             self.set_state(PyTango.DevState.OFF)
+            data = 0.0
 
         return data
         # PROTECTED REGION END #    //  CenterOneGauge.Pressure_read
@@ -121,17 +118,15 @@ class CenterOneGauge(Device):
     @DebugIt()
     def Reset(self):
         # PROTECTED REGION ID(CenterOneGauge.Reset) ENABLED START #
-		       	
-        self.set_state(PyTango.DevState.OFF)  
+        self.set_state(PyTango.DevState.OFF)
 
         rcontrol = self.sendcommand("RES [,1] \r")
         if rcontrol[0] == "\x06":
             rdata = self.sendcommand("\x05")
-        if rdata[0] == "0":
-            self.set_state(PyTango.DevState.ON)
-									 			
-        else: 					
-            return rdata 
+            if rdata[0] == "0":
+                self.set_state(PyTango.DevState.ON)
+            else:
+                return rdata
 
         # PROTECTED REGION END #    //  CenterOneGauge.Reset
 

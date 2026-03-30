@@ -29,11 +29,10 @@ import usbtmc
 __all__ = ["Keithley2100", "main"]
 
 
-class Keithley2100(Device):
+class Keithley2100(Device, metaclass=DeviceMeta):
     """
     Server for Keithley DVMM 61/2 digits
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(Keithley2100.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  Keithley2100.class_variable
 

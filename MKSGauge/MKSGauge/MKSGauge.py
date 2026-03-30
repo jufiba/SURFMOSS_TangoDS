@@ -29,11 +29,10 @@ import serial
 __all__ = ["MKSGauge", "main"]
 
 
-class MKSGauge(Device):
+class MKSGauge(Device, metaclass=DeviceMeta):
     """
     This is a very simple reader for the PDR9000 unit with a 972B transducer.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(MKSGauge.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  MKSGauge.class_variable
 
@@ -91,9 +90,9 @@ class MKSGauge(Device):
 
     def read_Pressure(self):
         # PROTECTED REGION ID(MKSGauge.Pressure_read) ENABLED START #
-        self.ser.write("@254PR4?;FF")
-        a=self.ser.read_until(terminator=";FF")
-        if (a[0:7]=="@253ACK"):
+        self.ser.write(b"@254PR4?;FF")
+        a=self.ser.read_until(terminator=b";FF")
+        if (a[0:7]==b"@253ACK"):
             return float(a[7:15])
         return 9999
         # PROTECTED REGION END #    //  MKSGauge.Pressure_read
@@ -111,8 +110,8 @@ class MKSGauge(Device):
     @DebugIt()
     def sendCommand(self, argin):
         # PROTECTED REGION ID(MKSGauge.sendCommand) ENABLED START #
-        self.ser.write(argin+";FF")
-        return self.ser.read_until(terminator=";FF")
+        self.ser.write((argin+";FF").encode("ascii"))
+        return self.ser.read_until(terminator=b";FF").decode("ascii")
         # PROTECTED REGION END #    //  MKSGauge.sendCommand
 
 # ----------

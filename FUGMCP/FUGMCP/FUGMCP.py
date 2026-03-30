@@ -29,11 +29,10 @@ import serial
 __all__ = ["FUGMCP", "main"]
 
 
-class FUGMCP(Device):
+class FUGMCP(Device, metaclass=DeviceMeta):
     """
     Device server for the HV power supply MCP 140-1250 (1250V, 100mA). It has a USB module for digital interfacing, Probus V.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(FUGMCP.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  FUGMCP.class_variable
 
@@ -222,7 +221,7 @@ class FUGMCP(Device):
 
     def read_Identification(self):
         # PROTECTED REGION ID(FUGMCP.Identification_read) ENABLED START #
-        return(self.identification)
+        return(self.identification.decode("ascii"))
         # PROTECTED REGION END #    //  FUGMCP.Identification_read
 
     def read_CC(self):
@@ -284,7 +283,7 @@ class FUGMCP(Device):
         # PROTECTED REGION ID(FUGMCP.sendCommand) ENABLED START #
         self.ser.write(bytes(argin+"\n","ascii"))
         result=self.ser.readline()
-        return(result)
+        return(result.decode("ascii"))
         # PROTECTED REGION END #    //  FUGMCP.sendCommand
 
 # ----------

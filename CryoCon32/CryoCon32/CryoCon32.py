@@ -29,11 +29,10 @@ import serial
 __all__ = ["CryoCon32", "main"]
 
 
-class CryoCon32(Device):
+class CryoCon32(Device, metaclass=DeviceMeta):
     """
     Minimalistic driver for the Cryocon32 controller used in our Mossbauer transmission setup.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(CryoCon32.class_variable) ENABLED START #      
     # PROTECTED REGION END #    //  CryoCon32.class_variable
 
@@ -95,16 +94,16 @@ class CryoCon32(Device):
         # PROTECTED REGION ID(CryoCon32.init_device) ENABLED START #
         try:
             self.ser=serial.Serial(self.SerialPort,self.SerialSpeed,bytesize=8,parity="N",stopbits=1,timeout=0.5)
-            self.ser.write("*IDN?\n")
-            idn=self.ser.readline()
+            self.ser.write(b"*IDN?\n")
+            idn=self.ser.readline().decode("ascii")
             if (idn[0:16]!="Cryocon Model 32"):
                 self.set_status("Not a CryoCon32 on serial port")
                 self.debug_stream("Not a CryoCon32 on serial port")
                 return
-            self.ser.write("INPUT A:UNITS K\n")
-            self.ser.write("LOOP 1:TYPE PID\n")
-            self.ser.write("CONTROL?\n")
-            mode=self.ser.readline()
+            self.ser.write(b"INPUT A:UNITS K\n")
+            self.ser.write(b"LOOP 1:TYPE PID\n")
+            self.ser.write(b"CONTROL?\n")
+            mode=self.ser.readline().decode("ascii")
             if mode[0:3]=="OFF":
                 self.set_state(PyTango.DevState.OFF)
             else:
@@ -134,34 +133,34 @@ class CryoCon32(Device):
 
     def read_TemperatureA(self):
         # PROTECTED REGION ID(CryoCon32.TemperatureA_read) ENABLED START #
-        self.ser.write("INPUT? A\n")
+        self.ser.write(b"INPUT? A\n")
         temperature=float(self.ser.readline())
         return(temperature)
         # PROTECTED REGION END #    //  CryoCon32.TemperatureA_read
 
     def read_SetPoint(self):
         # PROTECTED REGION ID(CryoCon32.SetPoint_read) ENABLED START #
-        self.ser.write("LOOP 1:SETPT?\n")
-        temperature=float(self.ser.readline()[:-2]) # Remove \n and units (assume we are in K!)
+        self.ser.write(b"LOOP 1:SETPT?\n")
+        temperature=float(self.ser.readline().decode("ascii")[:-2]) # Remove \n and units (assume we are in K!)
         return(temperature)
         # PROTECTED REGION END #    //  CryoCon32.SetPoint_read
 
     def write_SetPoint(self, value):
         # PROTECTED REGION ID(CryoCon32.SetPoint_write) ENABLED START #
-        self.ser.write("LOOP 1:SETPT %f \n"%(value))
+        self.ser.write(("LOOP 1:SETPT %f \n"%(value)).encode("ascii"))
         # PROTECTED REGION END #    //  CryoCon32.SetPoint_write
 
     def read_TemperatureB(self):
         # PROTECTED REGION ID(CryoCon32.TemperatureB_read) ENABLED START #
-        self.ser.write("INPUT? B\n")
+        self.ser.write(b"INPUT? B\n")
         temperature=float(self.ser.readline())
         return(temperature)
         # PROTECTED REGION END #    //  CryoCon32.TemperatureB_read
 
     def read_HeaterLevel(self):
         # PROTECTED REGION ID(CryoCon32.HeaterLevel_read) ENABLED START #
-        self.ser.write("LOOP 1:RANGE?\n")
-        res=self.ser.readline()
+        self.ser.write(b"LOOP 1:RANGE?\n")
+        res=self.ser.readline().decode("ascii")
         if(res[:-1]=="LOW"):
             return 0
         elif (res[:-1]=="MID"):
@@ -173,11 +172,11 @@ class CryoCon32(Device):
     def write_HeaterLevel(self, value):
         # PROTECTED REGION ID(CryoCon32.HeaterLevel_write) ENABLED START #
         if (value==0):
-            self.ser.write("LOOP 1:RANGE LOW\n")
+            self.ser.write(b"LOOP 1:RANGE LOW\n")
         elif (value==1):
-            self.ser.write("LOOP 1:RANGE MID\n")
+            self.ser.write(b"LOOP 1:RANGE MID\n")
         elif (value==2):
-            self.ser.write("LOOP 1:RANGE HI\n")
+            self.ser.write(b"LOOP 1:RANGE HI\n")
         return
         # PROTECTED REGION END #    //  CryoCon32.HeaterLevel_write
 
@@ -191,7 +190,7 @@ class CryoCon32(Device):
     @DebugIt()
     def On(self):
         # PROTECTED REGION ID(CryoCon32.On) ENABLED START #
-        self.ser.write("CONTROL ON\n")
+        self.ser.write(b"CONTROL ON\n")
         self.set_state(PyTango.DevState.ON)
         pass
         # PROTECTED REGION END #    //  CryoCon32.On
@@ -201,7 +200,7 @@ class CryoCon32(Device):
     @DebugIt()
     def Off(self):
         # PROTECTED REGION ID(CryoCon32.Off) ENABLED START #
-        self.ser.write("STOP\n")
+        self.ser.write(b"STOP\n")
         self.set_state(PyTango.DevState.OFF)
         pass
         # PROTECTED REGION END #    //  CryoCon32.Off
@@ -212,7 +211,7 @@ class CryoCon32(Device):
     @DebugIt()
     def SendCmd(self, argin):
         # PROTECTED REGION ID(CryoCon32.SendCmd) ENABLED START #
-        self.ser.write(argin+"\n")
+        self.ser.write((argin+"\n").encode("ascii"))
         return ""
         # PROTECTED REGION END #    //  CryoCon32.SendCmd
 
@@ -223,8 +222,8 @@ class CryoCon32(Device):
     @DebugIt()
     def SendQuery(self, argin):
         # PROTECTED REGION ID(CryoCon32.SendQuery) ENABLED START #
-        self.ser.write(argin+"\n")
-        return self.ser.readline()
+        self.ser.write((argin+"\n").encode("ascii"))
+        return self.ser.readline().decode("ascii")
         # PROTECTED REGION END #    //  CryoCon32.SendQuery
 
 # ----------

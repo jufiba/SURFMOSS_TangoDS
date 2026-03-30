@@ -29,11 +29,10 @@ import serial
 __all__ = ["ArduinoPt", "main"]
 
 
-class ArduinoPt(Device):
+class ArduinoPt(Device, metaclass=DeviceMeta):
     """
     An Arduino connected to a Pt module.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(ArduinoPt.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  ArduinoPt.class_variable
 
@@ -62,8 +61,8 @@ class ArduinoPt(Device):
         # PROTECTED REGION ID(ArduinoPt.init_device) ENABLED START #
         self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=5)
         try:
-            self.ser.write("*PT\n")
-            pt=self.ser.readline();
+            self.ser.write(b"*PT\n")
+            pt=self.ser.readline().decode("ascii").strip()
             if (pt=="Fault"):
                 self.set_state(PyTango.DevState.FAULT)
                 self.set_status("No Pt resistor connected")
@@ -95,8 +94,8 @@ class ArduinoPt(Device):
     def read_Temperature(self):
         # PROTECTED REGION ID(ArduinoPt.Temperature_read) ENABLED START #
         try:
-            self.ser.write("*PT\n")
-            pt=self.ser.readline();
+            self.ser.write(b"*PT\n")
+            pt=self.ser.readline().decode("ascii").strip()
             if (pt=="Fault"):
                 self.set_state(PyTango.DevState.FAULT)
                 self.set_status("No Pt1000 resistor connected")

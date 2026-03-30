@@ -29,11 +29,10 @@ import serial
 __all__ = ["AGPolaritySwitch", "main"]
 
 
-class AGPolaritySwitch(Device):
+class AGPolaritySwitch(Device, metaclass=DeviceMeta):
     """
     A devicer server for changing the polarity of the high current (up to 30A) power supply. It is a relay box with an Arduino.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(AGPolaritySwitch.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  AGPolaritySwitch.class_variable
 
@@ -67,7 +66,7 @@ class AGPolaritySwitch(Device):
         try:
             self.ser=serial.Serial(self.SerialPort,baudrate=self.Speed,bytesize=8,parity="N",stopbits=1,timeout=1)
             self.ser.write(bytearray("*STAT?\n","ascii"))
-            resp=self.ser.readline()
+            resp=self.ser.readline().decode("ascii").strip()
             dummy=self.ser.readline()
         except:
             self.set_state(PyTango.DevState.FAULT)
@@ -100,7 +99,7 @@ class AGPolaritySwitch(Device):
     def read_Polarity(self):
         # PROTECTED REGION ID(AGPolaritySwitch.Polarity_read) ENABLED START #
         self.ser.write(bytearray("*STAT?\n","ascii"))
-        resp=self.ser.readline()
+        resp=self.ser.readline().decode("ascii").strip()
         dummy=self.ser.readline()
         return resp
         # PROTECTED REGION END #    //  AGPolaritySwitch.Polarity_read
@@ -137,8 +136,8 @@ class AGPolaritySwitch(Device):
     def sendCommand(self, argin):
         # PROTECTED REGION ID(AGPolaritySwitch.sendCommand) ENABLED START #
         self.ser.write(bytearray(argin+"\n","ascii"))
-        resp=self.ser.readline()
-        return(resp) 
+        resp=self.ser.readline().decode("ascii").strip()
+        return(resp)
         # PROTECTED REGION END #    //  AGPolaritySwitch.sendCommand
 
 # ----------

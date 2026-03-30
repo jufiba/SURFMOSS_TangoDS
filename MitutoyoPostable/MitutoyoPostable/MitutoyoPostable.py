@@ -32,15 +32,15 @@ class ControlThread(Thread):
         Thread.__init__(self)
         self.ds = ds
  
-    def run(self):        
+    def run(self):
         while(self.ds.running):
-            self.ds.ser.write("*POS?\n")
+            self.ds.ser.write(b"*POS?\n")
             self.ds.ser.inWaiting()
-            pos=self.ds.ser.readline()
+            pos=self.ds.ser.readline().decode("ascii")
             while ("ERR" in pos):
-                self.ds.ser.write("*RST\n")
-                self.ds.ser.write("*POS?\n")
-                pos=self.ds.ser.readline()
+                self.ds.ser.write(b"*RST\n")
+                self.ds.ser.write(b"*POS?\n")
+                pos=self.ds.ser.readline().decode("ascii")
             self.ds.pos=pos
             time.sleep(2)
         
@@ -49,10 +49,9 @@ class ControlThread(Thread):
 __all__ = ["MitutoyoPostable", "main"]
 
 
-class MitutoyoPostable(Device):
+class MitutoyoPostable(Device, metaclass=DeviceMeta):
     """
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(MitutoyoPostable.class_variable) ENABLED START #
     pos="( 0.0 , 0.0)"
     # PROTECTED REGION END #    //  MitutoyoPostable.class_variable
@@ -82,8 +81,8 @@ class MitutoyoPostable(Device):
         # PROTECTED REGION ID(MitutoyoPostable.init_device) ENABLED START #
         self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
         try:
-            self.ser.write("*POS?\n")
-            idn=self.ser.readline()
+            self.ser.write(b"*POS?\n")
+            idn=self.ser.readline().decode("ascii")
             self.debug_stream(idn)
         except:
                 self.set_state(PyTango.DevState.FAULT)
@@ -129,7 +128,7 @@ class MitutoyoPostable(Device):
     @DebugIt()
     def Reset(self):
         # PROTECTED REGION ID(MitutoyoPostable.Reset) ENABLED START #
-        self.ser.write("*RST\n");
+        self.ser.write(b"*RST\n");
         # Dangerous!! Now there is a thread running at the same time, this will collide with it. 
         # PROTECTED REGION END #    //  MitutoyoPostable.Reset
 
@@ -141,9 +140,9 @@ class MitutoyoPostable(Device):
     @DebugIt()
     def SendCommand(self, argin):
         # PROTECTED REGION ID(MitutoyoPostable.SendCommand) ENABLED START #
-        self.ser.write(argin)
-        reading=self.ser.readline()
-         # Dangerous!! Now there is a thread running at the same time, this will collide with it. 
+        self.ser.write(argin.encode("ascii"))
+        reading=self.ser.readline().decode("ascii")
+         # Dangerous!! Now there is a thread running at the same time, this will collide with it.
         return reading
         # PROTECTED REGION END #    //  MitutoyoPostable.SendCommand
 

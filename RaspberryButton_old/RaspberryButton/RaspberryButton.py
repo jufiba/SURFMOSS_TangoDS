@@ -29,11 +29,10 @@ import time
 __all__ = ["RaspberryButton", "main"]
 
 
-class RaspberryButton(Device):
+class RaspberryButton(Device, metaclass=DeviceMeta):
     """
     A device to turn on for a second one of the lines of the GPIO, used to drive a relay for turning on an off equipment.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(RaspberryButton.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  RaspberryButton.class_variable
 

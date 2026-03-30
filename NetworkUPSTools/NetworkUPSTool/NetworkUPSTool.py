@@ -29,11 +29,10 @@ import PyNUT
 __all__ = ["NetworkUPSTool", "main"]
 
 
-class NetworkUPSTool(Device):
+class NetworkUPSTool(Device, metaclass=DeviceMeta):
     """
     A wrapper for showing the more relevant information from NUT, the network UPS tool.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(NetworkUPSTool.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  NetworkUPSTool.class_variable
 
@@ -56,7 +55,7 @@ class NetworkUPSTool(Device):
     Temperature = attribute(
         dtype='double',
         label="Temperature",
-        unit="ºC",
+        unit="ï¿½C",
     )
 
     Load = attribute(

@@ -9,7 +9,7 @@
 
 """ WisselMCA
 
-Device server for the Wissel Multichannel Analyzer used for Mössbauer spectroscopy.
+Device server for the Wissel Multichannel Analyzer used for Mï¿½ssbauer spectroscopy.
 """
 
 # PyTango imports
@@ -28,11 +28,10 @@ from PyTango import AttrWriteType, PipeWriteType
 __all__ = ["WisselMCA", "main"]
 
 
-class WisselMCA(Device):
+class WisselMCA(Device, metaclass=DeviceMeta):
     """
-    Device server for the Wissel Multichannel Analyzer used for Mössbauer spectroscopy.
+    Device server for the Wissel Multichannel Analyzer used for M\xf6ssbauer spectroscopy.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(WisselMCA.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  WisselMCA.class_variable
 

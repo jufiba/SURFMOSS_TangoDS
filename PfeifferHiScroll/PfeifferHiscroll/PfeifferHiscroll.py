@@ -29,24 +29,23 @@ import serial
 __all__ = ["PfeifferHiscroll", "main"]
 
 
-class PfeifferHiscroll(Device):
+class PfeifferHiscroll(Device, metaclass=DeviceMeta):
     """
     This is a server that provides the same funcionality as the Pfeiffer DCU display unit.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(PfeifferHiscroll.class_variable) ENABLED START #
     def sendcommand(self,address,action,parameter,data):
-    	cmd_string=address+action+parameter+"%02d"%len(data)+data
-    	cmd=cmd_string+"%03d"%self.crc_code(cmd_string)+"\r"
-    	self.ser.write(cmd)
-    	resp=self.ser.read_until(terminator="\r")
+        cmd_string=address+action+parameter+"%02d"%len(data)+data
+        cmd=(cmd_string+"%03d"%self.crc_code(cmd_string)+"\r").encode("ascii")
+        self.ser.write(cmd)
+        resp=self.ser.read_until(terminator=b"\r").decode("ascii")
         raddress=resp[0:3]
         raction=resp[3:5]
         rparameter=resp[5:8]
         rdata=resp[10:10+int(resp[8:10])]
         rcrc=resp[-4:-1]
-    	return(raddress,raction,rparameter,rdata,rcrc)
-    
+        return(raddress,raction,rparameter,rdata,rcrc)
+
     def crc_code(self,a):
         result=0
         for i in range(0,len(a)):
@@ -74,7 +73,7 @@ class PfeifferHiscroll(Device):
 
     TemperatureElectronics = attribute(
         dtype='int16',
-        unit="ºC",
+        unit="Â°C",
     )
 
     ActualSpeed = attribute(
@@ -84,7 +83,7 @@ class PfeifferHiscroll(Device):
 
     TemperatureMotor = attribute(
         dtype='uint16',
-        unit="ºC",
+        unit="Â°C",
     )
 
     Current = attribute(
@@ -94,7 +93,7 @@ class PfeifferHiscroll(Device):
 
     TemperatureFinalStage = attribute(
         dtype='double',
-	unit="ºC",
+        unit="Â°C",
     )
 
     # ---------------

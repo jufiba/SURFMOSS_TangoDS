@@ -30,11 +30,10 @@ import pygame.camera
 __all__ = ["WebCam", "main"]
 
 
-class WebCam(Device):
+class WebCam(Device, metaclass=DeviceMeta):
     """
     A simple device server for a webcam conencted through v4l2, using pygame.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(WebCam.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  WebCam.class_variable
 

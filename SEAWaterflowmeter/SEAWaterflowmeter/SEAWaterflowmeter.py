@@ -65,11 +65,10 @@ class ControlThread(Thread):
 __all__ = ["SEAWaterflowmeter", "main"]
 
 
-class SEAWaterflowmeter(Device):
+class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
     """
     Device server to interface a Raspberry PI using the GPIO to the SEA YF-S201 water flow sensor.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(SEAWaterflowmeter.class_variable) ENABLED START #
    
  
