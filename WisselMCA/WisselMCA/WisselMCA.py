@@ -31,9 +31,8 @@ class cmca:
     VendorID=0x0925
     InstrumentID=0x0035
     dev=hid.device()
-    
+
     def open(self):
-        #self.dev=hid.device()
         self.dev.open(self.VendorID,self.InstrumentID)
         self.dev.set_nonblocking(False)
         return(True)
@@ -41,7 +40,7 @@ class cmca:
     def close(self):
         self.dev.close()
         return(True)
-        
+
     def crc(self,a):
         result=0
         for i in range(0,len(a)):
@@ -65,121 +64,141 @@ class cmca:
         return(True,"%d %d %d"%(year,week,serialnumber))
 
     def start(self):
-        self.dev.write(self.code(bytes([0x84]))) #Read mo
+        self.dev.write(self.code(bytes([0x84]))) # Read mode
         r=self.dev.read(4)
-        if (r[0]!=3):                        
+        if (r[0]!=3):
             return(False, "wrong count in response")
-        self.dev.write(self.code(bytes([0x04,r[2]|0b00010000]))) # Set bit4
-        self.dev.read(4) # Doc is wrong. Response is same as for read
+        self.dev.write(self.code(bytes([0x04,r[2]|0b00010000]))) # Set bit4 (Start)
+        self.dev.read(4)
         if (r[0]!=3):
             return(False,"wrong count in response")
         return(True)
-       
+
     def stop(self):
-        self.dev.write(self.code(bytes([0x84]))) #Read mode
+        self.dev.write(self.code(bytes([0x84]))) # Read mode
         r=self.dev.read(4)
         if (r[0]!=3):
             return(False)
-        self.dev.write(self.code(bytes([0x04,r[2]&0b11101111]))) # Reset Bit4
-        self.dev.read(4) # Doc is wrong. Response is same as for read
+        self.dev.write(self.code(bytes([0x04,r[2]&0b11101111]))) # Reset bit4 (Start)
+        self.dev.read(4)
         if (r[0]!=3):
             return(False,"wrong count in response")
         return(True)
-    
+
     def readgeneral(self):
-        self.dev.write(self.code(bytes([0x81]))) 
+        self.dev.write(self.code(bytes([0x81])))
         r=self.dev.read(5)
-        if (r[0]!=4):                        
+        if (r[0]!=4):
             return(False, "wrong count in response %d"%r[0])
         return(True,r[2]+256*r[3])
-    
+
     def writegeneral(self,setupbytes):
-        self.dev.write(self.code(bytes([0x01,setupbytes%256,setupbytes//256]))) 
+        self.dev.write(self.code(bytes([0x01,setupbytes%256,setupbytes//256])))
         r=self.dev.read(3)
-        if (r[0]!=2):                        
+        if (r[0]!=2):
             return(False, "wrong count in response %d"%r[0])
         return(True)
-        
+
     def setmode(self,mode):
         self.dev.write(self.code(bytes([0x04,mode])))
-        r=self.dev.read(3) # Doc is wrong. Response is same as for read
+        r=self.dev.read(3)
         if (r[0]!=2):
             return(False,"wrong count in response %d"%r[0])
         return(True)
-        
+
     def readmode(self):
-        self.dev.write(self.code(bytes([0x84]))) 
+        self.dev.write(self.code(bytes([0x84])))
         r=self.dev.read(4)
-        if (r[0]!=3):                        
+        if (r[0]!=3):
             return(False, "wrong count in response %d"%r[0])
         return(True,r[2])
-    
+
     def cleardata(self):
-        self.dev.write(self.code(bytes([0x13,0]))) # Clear all RAM
-        r=self.dev.read(3) # Doc is wrong. Response is same as for read
+        # Block 0 clears entire RAM for MCS and PHA
+        self.dev.write(self.code(bytes([0x13,0])))
+        r=self.dev.read(3)
         if (r[0]!=2):
             return(False,"wrong count in response")
         return(True)
 
     def readPHA(self):
+        # Returns (True, array of 5 uint16): [Hysteresis, LLD1, ULD1, LLD2, ULD2]
+        # Values are 14-bit: 0=0V, 16383=10V
         self.dev.write(self.code(bytes([0x88])))
         r=self.dev.read(13)
         if (r[0]!=12):
-            return(False,"")
+            return(False,"wrong count in response")
         w=numpy.frombuffer(bytes(r[2:12]),dtype="<u2")
-        #w[0]= hyst, w[1]=lowerLevel_LowerWindow, w[2]=upperLevel_LowerWindow,w[3]=lowerLevel_UpperWindow, w[4]=upperLevel_UpperWindow
+        # w[0]=Hysteresis, w[1]=LLD1, w[2]=ULD1, w[3]=LLD2, w[4]=ULD2
         return(True,w)
 
-    def writePHA(self,w): # w should be a int array
+    def writePHA(self,w): # w should be a uint16 array of 5 elements
         message=bytes([0x08])+w.tobytes()
         self.dev.write(self.code(message))
         r=self.dev.read(3)
         if (r[0]!=2):
             return(False,"wrong count in response %d"%r[0])
         return(True)
-    
-    def readlastchannel(self): #
+
+    def readlastchannel(self):
         self.dev.write(self.code(bytes([0x92])))
         r=self.dev.read(5)
         if (r[0]!=4):
             return(False,"wrong count in response %d"%r[0])
-        chan=r[3]+r[2]*256
+        chan=r[2]*256+r[3]
         return(True,chan)
-    
+
     def readchannel(self,channel):
+        # Channel number 0-8191; returns 32-bit count
         self.dev.write(self.code(bytes([0x91,channel//256,channel%256])))
         r=self.dev.read(7)
         if (r[0]!=6):
             return(False,"wrong count in response %d"%r[0])
         chan=numpy.frombuffer(bytes(r[2:6]),dtype="<u4")
-        return(True,chan[0])
-        
+        return(True,int(chan[0]))
+
     def readpage(self,page):
+        # Each page = 32 channels x 4 bytes = 128 bytes
+        # pageH always 0 for pages 0-255
         self.dev.write(self.code(bytes([0x90,0,page])))
         r=self.dev.read(131)
         if (r[0]!=130):
             return(False,"wrong count in response %d"%r[0])
-        #chan=numpy.frombuffer(bytes(r[2:130]),dtype="<u4")
         return(True,bytes(r[2:130]))
 
-    def readspectrum(self,l0,l1):
-        data=numpy.zeros(l1-l0)	
-        for i in range(l0,l1):
-           (status,data[i])=self.readchannel(i-l0)
-           if (status!=True):
-              return(False,"problem reading channel %d"%i)
-        return(True,data)
+    def readspectrum_pages(self, first_channel=0, n_channels=256):
+        # Fast spectrum read using page transfers (32 channels per page)
+        # first_channel must be a multiple of 32
+        first_page = first_channel // 32
+        n_pages = (n_channels + 31) // 32
+        data = numpy.zeros(n_pages * 32, dtype=numpy.uint64)
+        for i in range(n_pages):
+            (status, raw) = self.readpage(first_page + i)
+            if not status:
+                return (False, "problem reading page %d" % (first_page + i))
+            page_data = numpy.frombuffer(raw, dtype='<u4')
+            data[i*32:(i+1)*32] = page_data
+        return (True, data[:n_channels])
+
+    def readspectrum(self, l0, l1):
+        # Slow channel-by-channel read; use readspectrum_pages for better performance
+        data = numpy.zeros(l1-l0, dtype=numpy.uint64)
+        for i in range(l0, l1):
+            (status, val) = self.readchannel(i)
+            if not status:
+                return (False, "problem reading channel %d" % i)
+            data[i-l0] = val
+        return (True, data)
 
 # PROTECTED REGION END #    //  WisselMCA.additionnal_import
 
 __all__ = ["WisselMCA", "main"]
 
 
-class WisselMCA(Device):
+class WisselMCA(Device, metaclass=DeviceMeta):
     """
     Device server for the Wissel Multichannel Analyzer used for Mossbauer spectroscopy.
     """
-    __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(WisselMCA.class_variable) ENABLED START #
     # PROTECTED REGION END #    //  WisselMCA.class_variable
 
@@ -207,13 +226,23 @@ class WisselMCA(Device):
         format="%5.0f",
         max_value=10000,
         min_value=0,
-        doc="Window lower limit of windows in channels. 16383 channels = l0 Volts, so 0.61mV/channel.",
+        doc="Lower level of lower window in mV. 16383 channels = 10 Volts.",
     )
 
     Upper_Window_Limit = attribute(
         dtype='float',
         access=AttrWriteType.READ_WRITE,
         label="Window Upper Limit",
+        unit="mV",
+        format="%5.0f",
+        max_value=10000,
+        min_value=0,
+    )
+
+    Hysteresis = attribute(
+        dtype='float',
+        access=AttrWriteType.READ_WRITE,
+        label="Hysteresis",
         unit="mV",
         format="%5.0f",
         max_value=10000,
@@ -244,12 +273,13 @@ class WisselMCA(Device):
 
     Mode = attribute(
         dtype='DevEnum',
-        enum_labels=["None", "AnalogMCA", "MCA", "PHA", ],
+        enum_labels=["None", "MCS_digital", "MCS_analog", "PHA"],
     )
 
     Spectrum = attribute(
         dtype=('uint64',),
         max_dim_x=8192,
+        label="Spectrum",
         standard_unit="counts",
     )
 
@@ -260,32 +290,38 @@ class WisselMCA(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(WisselMCA.init_device) ENABLED START #
-        self.lastchannel= numpy.ushort(512)
-        self.firstchannel= numpy.ushort(0)
-        self.c=cmca()
-        self.c.VendorID=self.VendorID
-        self.c.InstrumentID=self.InstrumentID
+        self.lastchannel = 512
+        self.firstchannel = 0
+        self.c = cmca()
+        self.c.VendorID = self.VendorID
+        self.c.InstrumentID = self.InstrumentID
         try:
             self.c.open()
         except:
             self.set_state(PyTango.DevState.FAULT)
-            self.set_status("Can't connect to Wissel MCA %x"%self.InstrumentID)
-            self.debug_stream("Can't connect to Wissel MCA %x"%self.InstrumentID)
+            self.set_status("Can't connect to Wissel MCA %x" % self.InstrumentID)
+            self.debug_stream("Can't connect to Wissel MCA %x" % self.InstrumentID)
             return
-        mode=self.c.readmode()
-        if (mode[1]&0b10000):
-            self.set_state(PyTango.DevState.ON)
-        else:
-            self.set_state(PyTango.DevState.OFF)
-        self.set_status("Connected to Wissel MCA %x"%self.InstrumentID)
-        self.debug_stream("Connected to Wissel MCA %x"%self.InstrumentID)
-        m=self.read_Mode
-        if (mode==3): # We are in PHA mode
-            self.firstchannel=self.read_Lower_Window_Limit()*16383/20000
-            self.lastchannel=self.read_Upper_Window_Limit()*16383/20000
-        elif (mode==2): # We are in MCA mode
-            self.firstchannel=0
-            self.lastchannel=512
+        (ok, modebyte) = self.c.readmode()
+        if ok:
+            if modebyte & 0b00010000:
+                self.set_state(PyTango.DevState.ON)   # counting
+            else:
+                self.set_state(PyTango.DevState.OFF)  # stopped
+            mode = modebyte & 0b11
+            if mode == 3:  # PHA mode
+                self.firstchannel = 0
+                (ok2, w) = self.c.readPHA()
+                if ok2:
+                    self.lastchannel = int(w[2] * 16383 / 10000)  # ULD1 in channels
+            elif mode == 2:  # MCS analog
+                self.firstchannel = 0
+                self.lastchannel = 512
+            else:  # MCS digital or None
+                self.firstchannel = 0
+                self.lastchannel = 512
+        self.set_status("Connected to Wissel MCA %x" % self.InstrumentID)
+        self.debug_stream("Connected to Wissel MCA %x" % self.InstrumentID)
         # PROTECTED REGION END #    //  WisselMCA.init_device
 
     def always_executed_hook(self):
@@ -304,43 +340,56 @@ class WisselMCA(Device):
 
     def read_Lower_Window_Limit(self):
         # PROTECTED REGION ID(WisselMCA.Lower_Window_Limit_read) ENABLED START #
-        (t,r)=self.c.readPHA()
-        w=float(r[1]*10000/16383)
-        return w
+        (t, r) = self.c.readPHA()
+        return float(r[1] * 10000 / 16383)  # LLD1 in mV
         # PROTECTED REGION END #    //  WisselMCA.Lower_Window_Limit_read
 
     def write_Lower_Window_Limit(self, value):
         # PROTECTED REGION ID(WisselMCA.Lower_Window_Limit_write) ENABLED START #
-        (t,r)=self.c.readPHA()
-        rc=r.copy()
-        rc[1]=numpy.ushort(16383*value/10000) # Translate from mV to channel, 1383 channels are 10V
+        (t, r) = self.c.readPHA()
+        rc = r.copy()
+        rc[1] = numpy.uint16(round(16383 * value / 10000))  # LLD1
         self.c.writePHA(rc)
         # PROTECTED REGION END #    //  WisselMCA.Lower_Window_Limit_write
 
     def read_Upper_Window_Limit(self):
         # PROTECTED REGION ID(WisselMCA.Upper_Window_Limit_read) ENABLED START #
-        (t,r)=self.c.readPHA()
-        w=float(r[2]*10000/16383)
-        return w
+        (t, r) = self.c.readPHA()
+        return float(r[2] * 10000 / 16383)  # ULD1 in mV
         # PROTECTED REGION END #    //  WisselMCA.Upper_Window_Limit_read
 
     def write_Upper_Window_Limit(self, value):
         # PROTECTED REGION ID(WisselMCA.Upper_Window_Limit_write) ENABLED START #
-        (t,r)=self.c.readPHA()
-        rc=r.copy()
-        rc[2]=rc[3]=rc[4]=numpy.ushort(value*16383/10000)
+        (t, r) = self.c.readPHA()
+        rc = r.copy()
+        ch = numpy.uint16(round(value * 16383 / 10000))
+        rc[2] = rc[3] = rc[4] = ch  # ULD1=LLD2=ULD2 (single window mode per protocol)
         self.c.writePHA(rc)
         # PROTECTED REGION END #    //  WisselMCA.Upper_Window_Limit_write
 
+    def read_Hysteresis(self):
+        # PROTECTED REGION ID(WisselMCA.Hysteresis_read) ENABLED START #
+        (t, r) = self.c.readPHA()
+        return float(r[0] * 10000 / 16383)
+        # PROTECTED REGION END #    //  WisselMCA.Hysteresis_read
+
+    def write_Hysteresis(self, value):
+        # PROTECTED REGION ID(WisselMCA.Hysteresis_write) ENABLED START #
+        (t, r) = self.c.readPHA()
+        rc = r.copy()
+        rc[0] = numpy.uint16(round(value * 16383 / 10000))
+        self.c.writePHA(rc)
+        # PROTECTED REGION END #    //  WisselMCA.Hysteresis_write
+
     def read_Model(self):
         # PROTECTED REGION ID(WisselMCA.Model_read) ENABLED START #
-        (t,r)=self.c.model()
+        (t, r) = self.c.model()
         return r
         # PROTECTED REGION END #    //  WisselMCA.Model_read
 
     def read_Configuration(self):
         # PROTECTED REGION ID(WisselMCA.Configuration_read) ENABLED START #
-        (t,r)=self.c.readgeneral()
+        (t, r) = self.c.readgeneral()
         return r
         # PROTECTED REGION END #    //  WisselMCA.Configuration_read
 
@@ -356,25 +405,25 @@ class WisselMCA(Device):
 
     def write_LastChannel(self, value):
         # PROTECTED REGION ID(WisselMCA.LastChannel_write) ENABLED START #
-        self.lastchannel=numpy.ushort(value)
+        self.lastchannel = int(value)
         # PROTECTED REGION END #    //  WisselMCA.LastChannel_write
 
     def read_ModeByte(self):
         # PROTECTED REGION ID(WisselMCA.ModeByte_read) ENABLED START #
-        (t,r)=self.c.readmode()
+        (t, r) = self.c.readmode()
         return r
         # PROTECTED REGION END #    //  WisselMCA.ModeByte_read
 
     def read_Mode(self):
         # PROTECTED REGION ID(WisselMCA.Mode_read) ENABLED START #
-        (t,r)=self.c.readmode()
-        m=int(r&0b11)
-        return m
+        (t, r) = self.c.readmode()
+        return int(r & 0b11)
         # PROTECTED REGION END #    //  WisselMCA.Mode_read
 
     def read_Spectrum(self):
         # PROTECTED REGION ID(WisselMCA.Spectrum_read) ENABLED START #
-        (t,d)=self.c.readspectrum(self.firstchannel,self.lastchannel)
+        n_channels = self.lastchannel - self.firstchannel
+        (t, d) = self.c.readspectrum_pages(self.firstchannel, n_channels)
         return d
         # PROTECTED REGION END #    //  WisselMCA.Spectrum_read
 
@@ -388,8 +437,8 @@ class WisselMCA(Device):
     @DebugIt()
     def Start(self):
         # PROTECTED REGION ID(WisselMCA.Start) ENABLED START #
-        self.set_state(PyTango.DevState.ON)
         self.c.start()
+        self.set_state(PyTango.DevState.ON)
         # PROTECTED REGION END #    //  WisselMCA.Start
 
     @command(
@@ -397,8 +446,8 @@ class WisselMCA(Device):
     @DebugIt()
     def Stop(self):
         # PROTECTED REGION ID(WisselMCA.Stop) ENABLED START #
-        self.set_state(PyTango.DevState.OFF)
         self.c.stop()
+        self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  WisselMCA.Stop
 
     @command(
@@ -408,9 +457,10 @@ class WisselMCA(Device):
         # PROTECTED REGION ID(WisselMCA.setPHAmode) ENABLED START #
         self.c.setmode(3)
         self.set_state(PyTango.DevState.OFF)
-        self.firstchannel=self.read_Lower_Window_Limit()*16383/20000
-        self.lastchannel=self.read_Upper_Window_Limit()*16383/20000
-        self.set_status("Entering PHA mode, with window %d %d"%(self.firstchannel,self.lastchannel))
+        self.firstchannel = 0
+        upper_mV = self.read_Upper_Window_Limit()
+        self.lastchannel = int(round(upper_mV * 16383 / 10000))
+        self.set_status("PHA mode, window 0 - %d channels (0 - %d mV)" % (self.lastchannel, int(upper_mV)))
         # PROTECTED REGION END #    //  WisselMCA.setPHAmode
 
     @command(
@@ -419,20 +469,20 @@ class WisselMCA(Device):
     def setMCAmode(self):
         # PROTECTED REGION ID(WisselMCA.setMCAmode) ENABLED START #
         self.c.setmode(2)
-        self.firstchannel=0
-        self.lastchannel=512
+        self.firstchannel = 0
+        self.lastchannel = 512
         self.set_state(PyTango.DevState.OFF)
-        self.set_status("Entering PHA mode, with window %d %d"%(0,512))
+        self.set_status("MCS analog mode, 512 channels")
         # PROTECTED REGION END #    //  WisselMCA.setMCAmode
 
     @command(
-    dtype_in='uint16', 
+    dtype_in='uint16',
     display_level=DispLevel.EXPERT,
     )
     @DebugIt()
     def SetLastChannel(self, argin):
         # PROTECTED REGION ID(WisselMCA.SetLastChannel) ENABLED START #
-        self.lastchannel=numpy.uint(argin)
+        self.lastchannel = int(argin)
         # PROTECTED REGION END #    //  WisselMCA.SetLastChannel
 
     @command(
@@ -444,13 +494,13 @@ class WisselMCA(Device):
         # PROTECTED REGION END #    //  WisselMCA.ClearMem
 
     @command(
-    dtype_in='uint16', 
+    dtype_in='uint16',
     display_level=DispLevel.EXPERT,
     )
     @DebugIt()
     def SetFirstChannel(self, argin):
         # PROTECTED REGION ID(WisselMCA.SetFirstChannel) ENABLED START #
-        self.firstchannel=numpy.uint(argin)
+        self.firstchannel = int(argin)
         # PROTECTED REGION END #    //  WisselMCA.SetFirstChannel
 
     @command(
@@ -459,8 +509,8 @@ class WisselMCA(Device):
     @DebugIt()
     def ReadLastChannel(self):
         # PROTECTED REGION ID(WisselMCA.ReadLastChannel) ENABLED START #
-        (t,r)=self.c.readlastchannel()
-        self.lastchannel=numpy.ushort(r+1) # Number of channels is lastchannel+1, as first channel is 0.
+        (t, r) = self.c.readlastchannel()
+        self.lastchannel = int(r) + 1  # lastchannel+1 = number of channels (first channel is 0)
         # PROTECTED REGION END #    //  WisselMCA.ReadLastChannel
 
 # ----------

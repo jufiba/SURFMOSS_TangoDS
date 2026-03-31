@@ -9,3 +9,4 @@ LICENSE.txt
 MANIFEST.in
 README.rst
 *egg-info
+*.pdf
