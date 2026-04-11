@@ -111,7 +111,7 @@ pip install .
 | Directory | Description |
 |---|---|
 | `NetworkUPSTools` | Wrapper for NUT (Network UPS Tools) |
-| `PANIC` | PANIC alarm system device server |
+| `PANIC` | PANIC alarm system device server (fork of [tango-controls/PANIC](https://github.com/tango-controls/PANIC)) |
 
 ### Raspberry Pi
 
