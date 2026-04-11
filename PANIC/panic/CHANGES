@@ -1,0 +1,276 @@
+PANIC 7.1.1
+-----------
+
+7.1.2 - Solved bugs at gui startup
+
+7.1.1 - Solved bugs on server init, add test_telegram.py
+
+7.1.0 - Merged pull requests from github
+
+S2Innovation: Solve -r problems, added MailRDashOptio for backwards compatibility
+Gabriel Jover: Add Telegram messaging, using SendTelegram command and TGConfig property
+Daniel Roldan: patch in setup.py for Debian packaging
+
+7.0.0 AlarmHandler compatibility, use TANGO properties instead of PyAlarm class
+
+6.5.1 Fixes on new/delete alarms by s2innovation
+
+6.5.0: Fix New Alarm button bug
+
+"New Alarm" button fix by S2innovation
+Improve Status Message
+update kpi
+
+6.4.1: solved high cpu issues in pyalarm
+
+Solve High CPU bug: init_callbacks(50ms) added to panic.engine and PyAlarm
+fix case bug in panic.view.check_multi_host
+Avoid api.devices clear during load, do 1by1 update instead
+
+Temporary patch: Multiple disabling/ack disabled to
+prevent PyAlarm exceptions. see CS4-526
+Add Enabled sorting as "PreCondition" to sort alarms by operation modes
+Solve bugs on editing formulas or looking at remote values
+remove unnecessary imports
+Solve bug on writing arrays on ACTION
+Execute SNAP/actions on DEBUG Alarms (only sms ignored)
+Add warning on reset of active alarms
+Remove unused severity checkboxes from main window
+(replaced by priority filter)
+Force devices update on PhoneBook values change
+remove wrong multi-host warning
+Return exception strings on evaluation from client
+
+Add warnings on modifying Device config, unify calls on gui/editor
+Add exceptions on wrong tag name, use UNACK as active state
+Extend regexp syntax to key=value and & clauses
+add minimal widget for panic system status
+
+PANIC 6.3.1
+-----------
+
+PANIC 7 GUI is ready. PanicEngine/PanicViewDS devices are pending.
+
+Added QAlarmPanels, searches and userfilters to GUI
+
+Zillions of bugs solved.
+
+PANIC 6.2.1
+-----------
+
+IEC & Elettra compatibility, QAlarmPanel widget, new GUI usable
+
+AlarmSummary/GetAlarmInfo added to PyAlarm for GUI connection; format agreed with Elettra for cross-compatibility
+Requires Fandango > 13.2
+Alarm States and Fields renamed to match IEC terminology
+New GUI using AlarmView to query attribute values as arrays,
+AlarmView backwards compatibility with Panic <6
+Performance improvement using latest Fandango (cached DB/DeviceProxy searches)
+Split and refactor gui module in gui/actions/views
+New Alarm object state machine based on json-like arrays (AlarmSummary)
+Increase ERROR alarms visibility
+Allow '~' for negated regexp searches
+New QAlarmPanel widget
+New methods for .json exporting / web browsing
+Many GUI bugs solved
+Add ArchivingBrowser launcher to toolbar
+Solve validation issues on AlarmForm editor
+API refactoring, solved internal imports problem
+
+PANIC 6.0
+---------
+
+Package refactored to build valid system/PIP/rpm packages
+PANIC Migrated to github.
+Development moved to develop branch, stable to master
+
+Main new features:
+
+ * enhanced logs and actions
+ * properties managed in the API side
+ * added multiple test cases
+ * added GlobalReceivers and Defines
+ * logs: record local or remote using text or json
+ * enabled plugin methods for user validation
+ * solved many, many bugs
+ 
+Dropped features from this release:
+
+ * gui refactoring
+ * alarm collections
+ * IEC compliance (in progress)
+ * kibana integration
+ 
+
+Summary of changes since PANIC 5.4 (Last Sourceforge release):
+
+
+ PyAlarm device server:
+ 
+  All panic times are now seconds, added deprecated message for pollings in milliseconds
+  Quality of failed alarms set to INVALID (~DISABLED)
+  
+  Solve bug on PyAlarm.GenerateReport command
+  Solve bug on "zombie" alarm deleted/removed 
+  Move Reset notification to send_alarm()
+  Replace phonebook entries on ACTION receivers
+  reload global_receivers on init()
+  
+  free_alarm and send_alarm methods refactored for better actions
+  Added SendAlarm as command
+  kill/pause events added
+  Added MemUsage/LastUpdate attributes  
+  Properties definition moved to panic.properties
+  Add invalid quality to disabled alarms
+  Add FAULT state when many alarms are failed
+  Add LastUpdate and MemUsage attributes
+  Avoid update_locals to reread attributes if check=False
+  Add receiver defines: $ALARM/TAG/NAME/DEVICE/DESCRIPTION/VALUES/REPORT/DATE/JSON
+  
+  Implement Pause() command and kill/pause methods for thread management.
+  LogFiles capable of saving remotely using fandango.device.FolderDS 
+  
+  Solved bugs on trigger_action (see documentation on github)
+  Properties definition moved to panic.properties
+  Added global receivers property  
+  Add Reports Cache, refactor send_alarm logging
+  Refactor PyAlarm.parse_receivers
+  Alarm actions will be executed before mail and snapshot.
+  Added replacement of $DESCRIPTION,$ALARM in actions
+  
+ GUI:
+  New panic Icon
+  Reduce gui dependencies to speed up startup
+  GUI adapted to Taurus 4
+  launcher renamed to just "panic"
+  Solve GUI bug on empty ActiveAlarms attribute
+  Solve getParams deprecation on Taurus4
+  Added User login access via UserValidator widget
+
+ API: 
+ 
+  Logging added to AlarmAPI
+  Added Alarm.disabled flag
+  to_dict and ping() methods for Alarms and AlarmDS objects
+  get_active_alarms() method added to AlarmDS
+  AlarmDS.Enable/Disable methods now can enable both Devices and individual Alarms
+  Added export_to_csv and export_to_dict API methods
+  panic.Evaluate() timeout set to 1000. 
+  allow multiple filters on GlobalReceivers
+  Add test cases for Group/Action/Clock/Reset
+  Solve API bug on empty receivers  
+  Solve bug on AlarmAPI.put_db_properties (Wrote to device instead of free property)
+  Solve bug in AlarmsAPI.get_global_properties
+  Solved bug on phonebook parsing
+  Group macro refactored (see documentation/recipes)
+  Add api.split_formula()
+  Change api.evaluate() timeout and checks
+
+
+  
+Release 5.4 - 2015/12
+---------------------
+
+Changes in API and device server to solve several multi-host evaluation issues.
+Small patches required by SKA project.
+
+Release 5.2 - New evaluate() from API/GUI, added user admins for alarms
+-------------------------------------------------------------------------------
+evaluate() method adapted to be usable by GUI and test evaluation on a remote PyAlarm device
+Bug solved on SentEmails recording.
+
+Release 5.1 - May 2015
+-------------------------------------------------------------------------------
+PyAlarm: added try/except to update_locals() method
+API: get_admins_for_alarm() method added to enable some minimal access control.
+
+Release 5.0 - May 2015
+-------------------------------------------------------------------------------
+NOTE: Requires Fandango update, to use NaN values and new TangoEval macros
+
+API: Improved group macro to use only cached values for evaluation
+API: Improved caselessness on API
+Eval: Added EvalTimes dictionary to keep the time needed on each EvaluateFormula() call.
+Eval: Added DEVICE, ALARMS, PANIC objects to locals()
+Eval: Added own Attribute values to Eval cache to avoid deadlocks when evaluating itself
+Enabled property, converted from string to DevVarStringArray to allow time and formulas
+Attributes: Removed locks from read methods (UI was locking the evaluation trend), lock is needed only on write/update actions
+Solved bug that didn't send VALUES on State/Attribute exception
+RethrowAttribute, from boolean to string to allow choosing False/0/NaN/None
+Emails: solved problems string arrays and '\r' and '"' characters
+Traces: shortened strings
+
+
+
+Release 4.20
+-------------------------------------------------------------------------------
+@pending: solve threads and UseProcess issues
+MaxAlarmsPerDay property removed (was unused)
+Added new GROUP macro to formula evaluation.
+SnapContext: Using modify instead of create context when this already exists
+Added methods to taurus-like get_model from alarms
+Email report refactored to show values in rows and parse state values.
+Added methods do import/export alarm configurations from .csv files
+EvaluateFormula converted in a Tango command callable by clients
+Solved bugs using SNAP as receiver.
+Snap: Using newest context when several match the alarm name
+Eval cache reduced to AlarmThreshold+1 to adjust .delta to AlarmThreshold
+Solved bug in SMS sending when source contains non-alpha characters
+
+Release 4.19
+@pending: solve threads and UseProcess issues
+Solved bugs in alarm parsing, loading .csv and loading alarms from device
+Added AlarmValueLabel widget
+
+Release 4.18
+Disable screen in launch script, replaced by Tango logging
+Added DDebug device for debugging threads
+AlarmsAPI.load() time consumption reduced to avoid timeouts
+RethrowState=False and RethrowAttribute=False will disable exception propagation from TangoEval, it allows to manage exceptions as None in the alarm formulas.
+Added IgnoreExceptions property
+Using polling period instead of timeout as keeptime on TangoEval
+Renamed method get_attribute_values to get_last_values
+
+In AlarmAPI:
+
+Added filter_alarms, export_to_csv, modify methods
+get/filter* methods modified to allow custom alarm lists
+Bugs solved in load_from_csv
+getCurrent will return last API instance used
+
+Added IgnoreExceptions property
+children() replaced by get_basic_alarms method
+parse_variables replaced by parse_attributes and evaluate()
+
+
+Release 4.17 2013/09/09
+
+Added VersionNumber attribute
+Added methods Status/dev_status to remove automatic messages on qualities.
+Added self.update_locals() for a better update of alarm values, periods and conditions reviewed.
+fandango.threads.WorkerProcess has been optimized, PyAlarm modified to use new pause method
+Methods returning sorted lists
+
+
+Release 4.16
+
+References to taurus removed if UseTaurus property is False (default)
+Minimum polling reduced to 250 ms
+Using panic.PyAlarmDefaultProperties to have consitency between api/gui/device
+Solved bug that caused timeouts on alarm exception (time wait before finally clause)
+Disable method is now capable to disable alarms only for TIMEOUT argument
+If Enabled property is an integer, alarm changes will be ignored for INT seconds at startup; it should allow to restart devices w/out resending all active alarms; a ResetAll() can be used to rethrow all messages if wanted.
+CheckDisabled will manage alarm reactivation after timeout
+
+The Panic module has been renamed to panic; several bugs have been solved and methods for enabling/disabling alarms have been added.
+
+
+4.15 September 2012
+Disabled LogFile by default
+BETA: Cache added to TangoEval to try alarm on transition.
+
+4.14, September 2012
+Added StartupDelay property
+Bugs solved in Snap context creation.
+Added user message to alarm RESET emails.
+ 
