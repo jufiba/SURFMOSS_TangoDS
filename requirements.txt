@@ -1,0 +1,28 @@
+# Core Tango framework — required by all device servers
+pytango
+
+# Serial communication — required by most device servers
+pyserial
+
+# Scientific computing — required by VSMControlDevice, WisselMCA, ElmitecUview
+numpy
+matplotlib
+
+# PID controller — required by PIDController
+simple-pid
+
+# USB-TMC instrument communication — required by Keithley2100
+usbtmc
+
+# Computer vision — required by V4L2Camera
+opencv-python
+
+# Raspberry Pi GPIO — required by RaspberryButton, RaspberrySwitch, TempSensorDS18B20
+# Uncomment on Raspberry Pi targets:
+# RPi.GPIO
+# w1thermsensor
+
+# MCC 1208LS DAQ — required by MCC1208LS
+# Not available on PyPI; install from source:
+# https://github.com/wjasper/Linux_Drivers
+# usb_1208LS

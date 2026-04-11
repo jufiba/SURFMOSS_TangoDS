@@ -33,7 +33,6 @@ import time
 import os
 from datetime import datetime
 import threading
-import scipy
 
 # PROTECTED REGION END #    //  VSMControlDevice.additionnal_import
 
@@ -74,7 +73,7 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
         plt.ylabel("Magnetization (arb. units)")
         
         
-        scipy.savetxt(path + day_folder +"/"+ filename,data,header=comment)
+        np.savetxt(path + day_folder +"/"+ filename,data,header=comment)
         plt.savefig(path + day_folder +"/"+ filename+".png")
         plt.savefig(path + day_folder +"/"+ filename+".pdf")
 
