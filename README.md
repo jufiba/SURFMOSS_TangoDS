@@ -12,6 +12,13 @@ See `requirements.txt` for the full list of Python dependencies.
 
 ## Installation
 
+Clone the repository:
+
+```bash
+git clone <repo-url>
+cd SURFMOSS_TangoDS
+```
+
 Install dependencies:
 
 ```bash
