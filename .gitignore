@@ -7,3 +7,13 @@ dist/
 
 # Editable-install / packaging artifacts
 *.egg-link
+.claude/
+
+#Others
+setup.py
+MANIFEST.in
+test/
+LICENSE.txt
+README.rst
+release.py
+*.pdf
