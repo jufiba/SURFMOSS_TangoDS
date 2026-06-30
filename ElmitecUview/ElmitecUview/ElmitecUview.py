@@ -23,8 +23,8 @@ from PyTango import AttrQuality, DispLevel, DevState
 from PyTango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(ElmitecUview.additionnal_import) ENABLED START #
-import numpy
 import socket
+# import numpy  # re-add when ImageData_read is implemented
 
 
 def is_number(s):

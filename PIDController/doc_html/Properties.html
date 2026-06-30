@@ -1,0 +1,54 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+<head>
+<title> PIDController Tango Class Properties </title>
+</head>
+<body text="Black" bgcolor="White" link="Blue" vlink="Purple" alink="Red">
+<br><br><br>
+<font size="+1"><u><b> PIDController  Properties : </b></u></font>
+<br><br><br>
+<font size="+1"><u><b> There is no class properties </b></u></font>
+<br><br><br>
+<Table Border=2 Cellpadding=3 CELLSPACING=0>
+	<tr bgcolor="#CCCCFF" class="TableHeadingColor">
+	<td colspan=4> <font size=+1> <center><b> Device Properties </b></font></center></td>
+	<tr bgcolor="#CCCCFF" class="TableHeadingColor">
+		<td> <center><b> Name </b></center> </td>
+		<td> <center><b> Description </b></center> </td>
+		<td> <center><b> Type </b></center> </td>
+		<td> <center><b> Default Value </b></center> </td>
+	</tr>
+	<tr>
+		<td> InputDS </td>
+		<td> Device Server where the input parameters are read from </td>
+		<td> String </td>
+		<td> None <br> </td>
+	</tr>
+	<tr>
+		<td> OutputDS </td>
+		<td> Device Server where the output parameter is write to </td>
+		<td> String </td>
+		<td> None <br> </td>
+	</tr>
+	<tr>
+		<td> InputValueLogic </td>
+		<td> String describing what to read from the input device and possible operations:<Br>
+			0 -> read value<Br>
+			1 -> difference of average values<Br>
+			Format, ex.<Br>
+			0,AttrIbuteName (read attribute AttributeName from InputDS and used as input value)<Br>
+			1,Attr1,Attr2,Attr3,Attr4 (read Attr1 ,Attr2 ,Attr3 and Attr4 form InputDS <Br>
+			                                            and use (Attr1+Attr) - (Attr3+Attr4) as input value<Br>
+			More logics can be implemented. </td>
+		<td> String </td>
+		<td> none </td>
+	</tr>
+	<tr>
+		<td> OutputAttribute </td>
+		<td> Name of the attribute for writing the pid computed value. </td>
+		<td> String </td>
+		<td> none </td>
+	</tr>
+</table>
+</body>
+</html>
