@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
+# v2.7 17/07/2026 Modified to stop acquisition before any exposure change 
 #
 # v2.6 26/9/2024 Modified for python3 again...
 #
@@ -50,10 +51,10 @@ def frange(start, stop=None, step=None):
 #end of function frange()
 
 
-counter_filename="/Superficies/LEEM_Madrid/macros.dat"
+counter_filename="/home/tvips/Superficies/LEEM_Madrid/macros.dat"
 name="000"
 
-gaugeMCH=tango.DeviceProxy("leem/vacuum/gaugeMCH")
+#gaugeMCH=tango.DeviceProxy("leem/vacuum/gaugeMCH")
 leem_pid=tango.DeviceProxy("leem/control/sample_leem_pid")
 doser1_pid=tango.DeviceProxy("leem/control/doser_pid")
 doser2_pid=tango.DeviceProxy("leem/control/doser2_pid")
@@ -114,7 +115,7 @@ def leem_makenextfolder_and_inc():
 
 def leem_savesettings(name):
     f=open(name,"w")
-    f.write("Position    : %s\n"%position.Position[1:-3])
+    #f.write("Position    : %s\n"%position.Position[1:-3])
     f.write("LEEM2k----------------------------\n")
     f.write("StartVoltage: %5.2f Volt\n"%leem2k.StartVoltage)
     f.write("Preset      : %s \n"%leem2k.Preset)
@@ -142,9 +143,9 @@ def leemSaveSingleImage(exp=500,avg=0):
     oldExposure=uview.Exposure
     oldAverage=uview.Average
     oldAcq=uview.ContinousAcquisition
+    uview.ContinousAcquisition=False
     uview.Exposure=exp
     uview.Average=avg
-    uview.ContinousAcquisition=False
     uview.AcquireSingleImage()
     leem_savesettings(full+"/"+expname+".txt")
     while (uview.AcquisitionInProgress):
@@ -152,9 +153,9 @@ def leemSaveSingleImage(exp=500,avg=0):
     res=uview.SaveImageAsDAT(wfull+"/"+expname)
     if (res=="0"):
         print("Succesfull saving %s"%expname)
-    uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+    uview.ContinousAcquisition=True
 
 def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
     """ leemSequenceImage (exposure (ms), average, number_of_images (-1=infinite), delay (s)
@@ -167,7 +168,7 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
     expname="SEQ"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
+    uview.ContinousAcquisition=False
     uview.Exposure=exp
     uview.Average=avg
     uview.ContinousAcquisition=True
@@ -189,9 +190,10 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
                 time.sleep(delay)
     except KeyboardInterrupt:
         print("Ok, so you want to finish. Let me clean up.")
-    uview.ContinousAcquisition=True
+    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+    uview.ContinousAcquisition=True
 
 def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False)
@@ -205,7 +207,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
+    uview.ContinousAcquisition=False
     uview.Exposure=exp
     uview.Average=avg
     uview.ContinousAcquisition=True
@@ -235,9 +237,10 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     except KeyboardInterrupt:
         print("Ok, ok, stopping adquisition. Let me clean up")
     f.close()
-    uview.ContinousAcquisition=True
+    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+    uview.ContinousAcquisition=True
 
 
 def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=False):
@@ -252,7 +255,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
+    uview.ContinousAcquisition=False
     uview.Exposure=exp
     uview.Average=avg
     uview.ContinousAcquisition=True
@@ -316,9 +319,10 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
     if (plot==True):
         savefig(full+"/plot.pdf")
         savefig(full+"/plot.png")
-    uview.ContinousAcquisition=True
+    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+    uview.ContinousAcquisition=True
 
 
 def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
@@ -332,7 +336,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
+    uview.ContinousAcquisition=False
     uview.Exposure=exp
     uview.Average=avg
     uview.ContinousAcquisition=True
@@ -355,9 +359,10 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
             print("Saved %s"%savename)
         a+=1
     f.close()
-    uview.ContinousAcquisition=True
+    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+    uview.ContinousAcquisition=True
 
 def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
     """ pidRampTo (desired_setpoint, step, time_step, pressure_limit)
@@ -374,8 +379,8 @@ def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
     for a in r:
         pid.SetPoint=a
         print("Going to %f"%a)
-        while (gaugeMCH.Pressure_IG1 > pressure_limit):
-             time.sleep(10)
+        #while (gaugeMCH.Pressure_IG1 > pressure_limit):
+        #     time.sleep(10)
         time.sleep(time_step)
 
 def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveImage=False):
@@ -487,7 +492,7 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     expname="ARRES"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
+    uview.ContinousAcquisition=False
     uview.Exposure=exp
     uview.Average=avg
     uview.ContinousAcquisition=True
@@ -541,7 +546,7 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
         
     plt.subplot(121)
     plt.imshow(flip(arres0.swapaxes(0,1),1),aspect="auto",origin="lower")
-    plt.yticks( arange(nE), arange(E0,Ef,1+(Ef-E0)/(nE)))
+    #plt.yticks( arange(nE), arange(E0,Ef,1+(Ef-E0)/(nE)))
     plt.show()
     f.close()
     leemSetDeflection(b[0])
@@ -595,15 +600,16 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
         
     plt.subplot(122)
     plt.imshow(arres1.swapaxes(0,1),aspect="auto",origin="lower")
-    plt.yticks(array([]),array([]))
+    #plt.yticks(array([]),array([]))
     plt.show()
     f.close()
     leemSetDeflection(b[0])
     numpy.save(full+"/arres1.npy",arres1)
     savefig(full+"/arres1.pdf")
-    uview.ContinousAcquisition=True
+    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+    uview.ContinousAcquisition=False
     return(arres0,arres1)
     
 def leemSetDeflection(beam):
