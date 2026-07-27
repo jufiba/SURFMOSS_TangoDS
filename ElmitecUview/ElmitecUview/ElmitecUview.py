@@ -160,7 +160,7 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
 
     ContinousAcquisition = attribute(
         dtype='bool',
-        access=AttrWriteType.WRITE,
+        access=AttrWriteType.READ_WRITE,
         memorized=True,
         hw_memorized=True,
     )
@@ -234,9 +234,11 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
 
     def read_AcquisitionInProgress(self):
         # PROTECTED REGION ID(ElmitecUview.AcquisitionInProgress_read) ENABLED START #
-        self.s.send(b"aip")
-        data = self.TCPBlockingReceive()
-        return int(data)
+        # Deprecated: this used to send "aip" too, so it and ContinousAcquisition
+        # stepped on each other on the single UView socket. Read
+        # ContinousAcquisition instead; this stub is kept only so existing
+        # clients of the attribute do not break.
+        return (True)
         # PROTECTED REGION END #    //  ElmitecUview.AcquisitionInProgress_read
 
     def read_ImageWidth(self):
@@ -259,6 +261,13 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
         data = self.TCPBlockingReceive()
         return int(data.split()[0])
         # PROTECTED REGION END #    //  ElmitecUview.Binning_read
+
+    def read_ContinousAcquisition(self):
+        # PROTECTED REGION ID(ElmitecUview.ContinousAcquisition_read) ENABLED START #
+        self.s.send(b"aip")
+        data = self.TCPBlockingReceive()
+        return int(data)
+        # PROTECTED REGION END #    //  ElmitecUview.ContinousAcquisition_read
 
     def write_ContinousAcquisition(self, value):
         # PROTECTED REGION ID(ElmitecUview.ContinousAcquisition_write) ENABLED START #

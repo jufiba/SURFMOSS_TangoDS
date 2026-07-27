@@ -1,7 +1,10 @@
 #!/usr/bin/python
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
-# v2.7 17/07/2026 Modified to stop acquisition before any exposure change 
+#
+# v2.8 27/07/2026 Modified to stop Continuous acquisition for every sequence that requires synchronization (modified also the UView device server to use only a RW ContinuousAcquisition variable instead of a W ContinuousAcquisition and a R AcquisitionInProgress, which I think were stepping on each other). Note there is still a typo: Continous instead of Continuous. Also had to add a delay after switching on and off continuous mode, and we also have to throw away one image after such changes.
+#
+# v2.7 17/07/2026 Modified to stop acquisition before any exposure change
 #
 # v2.6 26/9/2024 Modified for python3 again...
 #
@@ -24,7 +27,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "2.7"
+__version__ = "2.8"
 
 from datetime import date
 import tango
@@ -144,13 +147,16 @@ def leemSaveSingleImage(exp=500,avg=0):
     expname="IMG"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
     uview.ContinousAcquisition=False
+    time.sleep(0.5)
     uview.Exposure=exp
     uview.Average=avg
-    uview.AcquireSingleImage()
+    uview.AcquireSingleImage() # Throw one away
     leem_savesettings(full+"/"+expname+".txt")
-    while (uview.AcquisitionInProgress):
+    while (uview.ContinousAcquisition):
+        pass
+    uview.AcquireSingleImage()
+    while (uview.ContinousAcquisition):
         pass
     res=uview.SaveImageAsDAT(wfull+"/"+expname)
     if (res=="0"):
@@ -173,7 +179,9 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
     uview.ContinousAcquisition=False
     uview.Exposure=exp
     uview.Average=avg
+    time.sleep(0.5)
     uview.ContinousAcquisition=True
+    time.sleep(0.5)
     leem_savesettings(full+"/"+expname+".txt")
     try:
         if (n==-1):
@@ -210,12 +218,16 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     oldExposure=uview.Exposure
     oldAverage=uview.Average
     uview.ContinousAcquisition=False
+    time.sleep(0.5)
     uview.Exposure=exp
     uview.Average=avg
-    uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
     f.write("# Image number  Energy (eV) time\n")
+
+    uview.AcquireSingleImage() # Throw one away
+    while (uview.ContinousAcquisition):
+        pass
     a=0
     try:
         while (True):
@@ -228,7 +240,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
                 print("Image %d Energy %f Time %s"%(a,float(i),timenow))
                 f.write("%d %f %s\n"%(a,float(i),timenow))
                 uview.AcquireSingleImage()
-                while (uview.AcquisitionInProgress):
+                while (uview.ContinousAcquisition):
                     pass
                 savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
@@ -239,7 +251,6 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     except KeyboardInterrupt:
         print("Ok, ok, stopping adquisition. Let me clean up")
     f.close()
-    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
@@ -258,11 +269,14 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
     oldExposure=uview.Exposure
     oldAverage=uview.Average
     uview.ContinousAcquisition=False
+    time.sleep(0.5)
     uview.Exposure=exp
     uview.Average=avg
-    uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
+    uview.AcquireSingleImage() # Throw one away
+    while (uview.ContinousAcquisition):
+        pass
     f.write("# Image number  Energy (eV) ROI1 (arb.u.) time\n")
     a=0
     if (plot==True):
@@ -284,7 +298,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
             for i in e:
                 leem2k.StartVoltage=i
                 uview.AcquireSingleImage()
-                while (uview.AcquisitionInProgress):
+                while (uview.ContinousAcquisition):
                     pass
                 rois[k]=float(uview.IntensityROI1)
                 if (roi==2):
@@ -321,7 +335,6 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
     if (plot==True):
         savefig(full+"/plot.pdf")
         savefig(full+"/plot.png")
-    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
@@ -339,10 +352,13 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     oldExposure=uview.Exposure
     oldAverage=uview.Average
     uview.ContinousAcquisition=False
+    time.sleep(0.5)
     uview.Exposure=exp
     uview.Average=avg
-    uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
+    uview.AcquireSingleImage() # Throw one away
+    while (uview.ContinousAcquisition):
+        pass
     f=open(full+"/LOG.txt","w")
     f.write("# Image number  Energy (eV) Objective (mA)\n")
     e=frange(E0,Ef,dE)
@@ -353,7 +369,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
         print("Image %d Energy %f Objective %f"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
         f.write("%d %f %f\n"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
         uview.AcquireSingleImage()
-        while (uview.AcquisitionInProgress):
+        while (uview.ContinousAcquisition):
             pass
         #uview.SaveImageAsPNG(expname)
         savename=expname+"_%05d"%a
@@ -361,7 +377,6 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
             print("Saved %s"%savename)
         a+=1
     f.close()
-    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
@@ -392,12 +407,15 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
     start=leem_pid.SetPoint
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    oldAcq=uview.ContinousAcquisition
+    uview.ContinousAcquisition=False
+    time.sleep(0.5)
     uview.Exposure=exp
     uview.Average=avg
-    uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
+    uview.AcquireSingleImage() # Throw one away
+    while (uview.ContinousAcquisition):
+        pass
     f.write("# Image number Temp SetTemp ROI time\n")
     if (start>temp):
         r=numpy.arange(start,temp,-step)
@@ -411,7 +429,7 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
             time.sleep(time_step)
             temp=leem2k.SampleTemperature
             uview.AcquireSingleImage()
-            while (uview.AcquisitionInProgress):
+            while (uview.ContinousAcquisition):
                 pass
             roi=float(uview.IntensityROI1)
             t=time.localtime()
@@ -427,9 +445,9 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
        print("Ok, ok, you want me to stop. Cleaning up.")
     f.flush()
     f.close()
-    uview.ContinousAcquisition=True
     uview.Exposure=oldExposure
     uview.Average=oldAverage
+    uview.ContinousAcquisition=True
 
 def leemRampTemperatureTo(temp,temp_step=1.0,time_step=1.0,pressure_limit=1):
     """ leemRampTemperatureTo (temp, temp_step, time_step, pressure_limit)
@@ -495,10 +513,13 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     oldExposure=uview.Exposure
     oldAverage=uview.Average
     uview.ContinousAcquisition=False
+    time.sleep(0.5)
     uview.Exposure=exp
     uview.Average=avg
-    uview.ContinousAcquisition=True
     leem_savesettings(full+"/"+expname+".txt")
+    uview.AcquireSingleImage() # Throw one away
+    while (uview.ContinousAcquisition):
+        pass
     
     f=open(full+"/"+expname+"_deflection.txt","w")
     f.write("Normal Incidence condition IDX %f IDY %f IEX %f IEY %f \n"%(b[0,0],b[0,1],b[0,2],b[0,3]))
@@ -533,7 +554,7 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
             t=time.localtime()
             timenow=time.strftime("%c", t)
             uview.AcquireSingleImage()
-            while (uview.AcquisitionInProgress):
+            while (uview.ContinousAcquisition):
                 pass
             savename=expname+"_0_%05d"%a
             if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
@@ -557,9 +578,9 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     
     # Check if we have 2 directions to measure. If only one, finish up.
     if (len(b)==2):
-        uview.ContinousAcquisition=True
         uview.Exposure=oldExposure
         uview.Average=oldAverage
+        uview.ContinousAcquisition=True
         return(arres0)
     
     f=open(full+"/LOG1.txt","w")
@@ -587,7 +608,7 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
             t=time.localtime()
             timenow=time.strftime("%c", t)
             uview.AcquireSingleImage()
-            while (uview.AcquisitionInProgress):
+            while (uview.ContinousAcquisition):
                 pass
             savename=expname+"_1_%05d"%a
             if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
@@ -608,7 +629,6 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     leemSetDeflection(b[0])
     numpy.save(full+"/arres1.npy",arres1)
     savefig(full+"/arres1.pdf")
-    uview.ContinousAcquisition=False
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=False
