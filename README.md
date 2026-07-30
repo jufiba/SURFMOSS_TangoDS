@@ -129,7 +129,23 @@ pip install .
 
 ## Scripts
 
-The `scripts/` directory contains Tango macros and utility scripts for instrument control (LEEM, VSM, sputtering, dosing).
+The `scripts/` directory contains Tango macros and utility scripts for instrument control (LEEM, VSM, sputtering, dosing). These are loaded directly in the instrument control session, not installed as packages.
+
+### Versioning
+
+`LEEMmacros.py` was historically kept as a series of `LEEMmacros_vX_pY.py` copies. Those snapshots are now imported into git history: there is one canonical `scripts/LEEMmacros.py`, and each past version is a commit tagged `leemmacros-vX.Y`.
+
+```bash
+git tag -l 'leemmacros-*'                          # list known versions
+git log -p scripts/LEEMmacros.py                   # change history
+git show leemmacros-v2.3:scripts/LEEMmacros.py     # retrieve an old version
+```
+
+To release a new version, edit `LEEMmacros.py` in place, update `__version__` and the header changelog, commit, and tag it `leemmacros-vX.Y`. Do not create new `_vX_pY.py` files.
+
+The imported history begins at the `leemmacros-v1.7` commit. Because the snapshots were grafted onto a tip that carried v2.2, that first commit shows a large diff going *backwards* to v1.7 — that is the graft point, not a regression.
+
+Note: `leemmacros-v2.6` is the Python 3 port. Tags up to and including `leemmacros-v2.5` are Python 2 and will not run under Python 3. There is no `leemmacros-v2.4` tag — that version appears in the changelog but no copy of it survived.
 
 ## Synoptics
 
