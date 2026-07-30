@@ -24,6 +24,8 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
+__version__ = "2.7"
+
 from datetime import date
 import tango
 import os
