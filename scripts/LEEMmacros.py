@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.0 31/07/2026 Removed all live plotting, so the macros no longer open windows and no longer depend on the ipython --pylab namespace. show(), savefig(), zeros(), array() and flip() were being used without ever being imported, and only resolved because the file is run into a --pylab session; they are now numpy./Figure. calls. Plots are written to files with matplotlib's Figure object API (no pyplot, no backend, no global state), so they also work from a worker thread. leemIV_ROI has lost its plot parameter, it always writes plot.png/plot.pdf now, and no longer crashes on its default arguments (fig was used outside the plot guard). leemARRESrun writes arres0/arres1 .pdf and .png and no longer leaves the camera stopped on the two-direction path. Fixed a python2 leftover bare print. The module can now be imported, which is what the GUI needs.
+#
 # v2.9 31/07/2026 leemSaveSingleImage and leemSequenceImages now only stop the camera when the requested exposure differs from the current one. Otherwise the camera is left running (started if it was stopped) and the average is changed live, which saves the thrown-away image. BEWARE: on that path leemSaveSingleImage no longer triggers a fresh exposure, it saves the frame UView currently holds, so with avg=1 (sliding average) the image can include frames from before the call. Note also that with the camera running ContinousAcquisition reads True forever, so the single-image trigger and its wait loop can only be used on the stopped path. Exposure and average are now optional in both commands: left out, the value already set in the camera is used, so calling them with no arguments never stops the camera. This changes the old no-argument behaviour, which forced 500ms/avg 0 for a single image and 400ms/avg 1 for a sequence.
 #
 # v2.8 27/07/2026 Modified to stop Continuous acquisition for every sequence that requires synchronization (modified also the UView device server to use only a RW ContinuousAcquisition variable instead of a W ContinuousAcquisition and a R AcquisitionInProgress, which I think were stepping on each other). Note there is still a typo: Continous instead of Continuous. Also had to add a delay after switching on and off continuous mode, and we also have to throw away one image after such changes.
@@ -29,14 +31,14 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "2.9"
+__version__ = "3.0"
 
 from datetime import date
 import tango
 import os
 import numpy
 import time
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from scipy.interpolate import interp1d
 
 def frange(start, stop=None, step=None):
@@ -307,12 +309,13 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     uview.ContinousAcquisition=True
 
 
-def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=False):
-    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False), plot (default=False), roi (default=1, or use 2 for two boxes), saveImage (default=False)
-    
-    Save intensity of ROI changing energy, and optionally, plot it.
+def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
+    """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False), roi (default=1, or use 2 for two boxes), saveImage (default=False)
+
+    Save intensity of ROI changing energy. The curve is written to plot.png and
+    plot.pdf in the experiment folder, no window is opened.
     For repeated loops (repeat=True), press CTRL-C to finish.
-    
+
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
@@ -330,9 +333,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
         pass
     f.write("# Image number  Energy (eV) ROI1 (arb.u.) time\n")
     a=0
-    if (plot==True):
-        fig=plt.figure()
-        show()
+    fig=Figure()
     if (roi==1):
         ax=fig.add_subplot(111)
     else:
@@ -368,24 +369,19 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,plot=False,roi=1,saveImage=
                     f.write("%d %f %f %f %s\n"%(a,i,rois[k],rois2[k],timenow))
                 a+=1
                 k+=1
-            if (plot==True):
-                if (roi==1):
-                    ax.plot(e,rois)
-                else:
-                    ax.plot(e,rois)
-                    ax2.plot(e,rois2)
-                show()
-                #fig.canvas.draw()
-                savefig(full+"/plot.png")
+            ax.plot(e,rois)
+            if (roi!=1):
+                ax2.plot(e,rois2)
+            # Rewritten every pass, so the file can be watched while repeating.
+            fig.savefig(full+"/plot.png")
             f.flush()
             if (repeat==False):
                break
     except KeyboardInterrupt:
         print("Ok, ok, you want me to stop. Cleaning up.")
     f.close()
-    if (plot==True):
-        savefig(full+"/plot.pdf")
-        savefig(full+"/plot.png")
+    fig.savefig(full+"/plot.pdf")
+    fig.savefig(full+"/plot.png")
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
@@ -537,7 +533,7 @@ def leemARRESset():
     Reads normal incidence IDX,IDY,IEX,IEY and ask to change the incidence for two endpoints.
     Used as reciprocal space positions in leemARRESrun()
     """
-    b = zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0 position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
+    b = numpy.zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0 position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
     b[0]=leemReadDeflection()
     print("Normal Incidence condition IDX,IDY,IEX,IEY = ",b[0])
     input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
@@ -615,17 +611,17 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
             f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
             a+=1
             a_e+=1
-        print
+        print()
         a_k+=1
         
-    plt.subplot(121)
-    plt.imshow(flip(arres0.swapaxes(0,1),1),aspect="auto",origin="lower")
-    #plt.yticks( arange(nE), arange(E0,Ef,1+(Ef-E0)/(nE)))
-    plt.show()
+    fig0=Figure()
+    ax0=fig0.add_subplot(111)
+    ax0.imshow(numpy.flip(arres0.swapaxes(0,1),1),aspect="auto",origin="lower")
     f.close()
     leemSetDeflection(b[0])
     numpy.save(full+"/arres0.npy",arres0)
-    savefig(full+"/arres0.pdf")
+    fig0.savefig(full+"/arres0.pdf")
+    fig0.savefig(full+"/arres0.png")
     
     # Check if we have 2 directions to measure. If only one, finish up.
     if (len(b)==2):
@@ -672,17 +668,17 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
         print()
         a_k+=1 
         
-    plt.subplot(122)
-    plt.imshow(arres1.swapaxes(0,1),aspect="auto",origin="lower")
-    #plt.yticks(array([]),array([]))
-    plt.show()
+    fig1=Figure()
+    ax1=fig1.add_subplot(111)
+    ax1.imshow(arres1.swapaxes(0,1),aspect="auto",origin="lower")
     f.close()
     leemSetDeflection(b[0])
     numpy.save(full+"/arres1.npy",arres1)
-    savefig(full+"/arres1.pdf")
+    fig1.savefig(full+"/arres1.pdf")
+    fig1.savefig(full+"/arres1.png")
     uview.Exposure=oldExposure
     uview.Average=oldAverage
-    uview.ContinousAcquisition=False
+    uview.ContinousAcquisition=True
     return(arres0,arres1)
     
 def leemSetDeflection(beam):
@@ -696,4 +692,4 @@ def leemReadDeflection():
     idy=leem2k.IllDefY
     iex=leem2k.ImEqX
     iey=leem2k.ImEqY
-    return(array([idx,idy,iex,iey]))
+    return(numpy.array([idx,idy,iex,iey]))
