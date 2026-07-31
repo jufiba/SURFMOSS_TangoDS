@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v2.9 31/07/2026 leemSaveSingleImage and leemSequenceImages now only stop the camera when the requested exposure differs from the current one. Otherwise the camera is left running (started if it was stopped) and the average is changed live, which saves the thrown-away image. BEWARE: on that path leemSaveSingleImage no longer triggers a fresh exposure, it saves the frame UView currently holds, so with avg=1 (sliding average) the image can include frames from before the call. Note also that with the camera running ContinousAcquisition reads True forever, so the single-image trigger and its wait loop can only be used on the stopped path.
+#
 # v2.8 27/07/2026 Modified to stop Continuous acquisition for every sequence that requires synchronization (modified also the UView device server to use only a RW ContinuousAcquisition variable instead of a W ContinuousAcquisition and a R AcquisitionInProgress, which I think were stepping on each other). Note there is still a typo: Continous instead of Continuous. Also had to add a delay after switching on and off continuous mode, and we also have to throw away one image after such changes.
 #
 # v2.7 17/07/2026 Modified to stop acquisition before any exposure change
@@ -27,7 +29,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "2.8"
+__version__ = "2.9"
 
 from datetime import date
 import tango
@@ -138,6 +140,15 @@ def leem_savesettings(name):
     f.write("ImageWidth  : %4d \n"%uview.ImageWidth)
     f.close()
 
+def leem_exposure_differs(current,exp):
+    """ True if the camera is not already at the requested exposure (ms).
+
+    Only an exposure change needs the camera stopped and restarted, which costs
+    a thrown-away image because of the UView/TVIPS triggering problem. Compared
+    with a tolerance because Exposure is read back as a float from UView.
+    """
+    return abs(current-exp)>0.01
+
 def leemSaveSingleImage(exp=500,avg=0):
     """ leemSaveSingleImage( exposure (ms), average )
     
@@ -147,23 +158,37 @@ def leemSaveSingleImage(exp=500,avg=0):
     expname="IMG"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    uview.ContinousAcquisition=False
-    time.sleep(0.5)
-    uview.Exposure=exp
-    uview.Average=avg
-    uview.AcquireSingleImage() # Throw one away
+    restarted=leem_exposure_differs(oldExposure,exp)
+    if restarted:
+        uview.ContinousAcquisition=False
+        time.sleep(0.5)
+        uview.Exposure=exp
+        uview.Average=avg
+        uview.AcquireSingleImage() # Throw one away
+        while (uview.ContinousAcquisition):
+            pass
+        uview.AcquireSingleImage()
+        while (uview.ContinousAcquisition):
+            pass
+    else:
+        # Exposure already correct, so keep the camera running and grab the
+        # frame it has. BEWARE: with the camera running, ContinousAcquisition
+        # reads True forever, so AcquireSingleImage and the wait loops above
+        # must not be used here.
+        uview.Average=avg
+        if not uview.ContinousAcquisition:
+            uview.ContinousAcquisition=True
+            time.sleep(0.5)
     leem_savesettings(full+"/"+expname+".txt")
-    while (uview.ContinousAcquisition):
-        pass
-    uview.AcquireSingleImage()
-    while (uview.ContinousAcquisition):
-        pass
     res=uview.SaveImageAsDAT(wfull+"/"+expname)
     if (res=="0"):
         print("Succesfull saving %s"%expname)
-    uview.Exposure=oldExposure
-    uview.Average=oldAverage
-    uview.ContinousAcquisition=True
+    if restarted:
+        uview.Exposure=oldExposure
+        uview.Average=oldAverage
+        uview.ContinousAcquisition=True
+    else:
+        uview.Average=oldAverage
 
 def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
     """ leemSequenceImage (exposure (ms), average, number_of_images (-1=infinite), delay (s)
@@ -176,12 +201,20 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
     expname="SEQ"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
-    uview.ContinousAcquisition=False
-    uview.Exposure=exp
-    uview.Average=avg
-    time.sleep(0.5)
-    uview.ContinousAcquisition=True
-    time.sleep(0.5)
+    restarted=leem_exposure_differs(oldExposure,exp)
+    if restarted:
+        uview.ContinousAcquisition=False
+        uview.Exposure=exp
+        uview.Average=avg
+        time.sleep(0.5)
+        uview.ContinousAcquisition=True
+        time.sleep(0.5)
+    else:
+        # Exposure already correct, so leave the camera running.
+        uview.Average=avg
+        if not uview.ContinousAcquisition:
+            uview.ContinousAcquisition=True
+            time.sleep(0.5)
     leem_savesettings(full+"/"+expname+".txt")
     try:
         if (n==-1):
@@ -200,10 +233,13 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
                 time.sleep(delay)
     except KeyboardInterrupt:
         print("Ok, so you want to finish. Let me clean up.")
-    uview.ContinousAcquisition=False
-    uview.Exposure=oldExposure
-    uview.Average=oldAverage
-    uview.ContinousAcquisition=True
+    if restarted:
+        uview.ContinousAcquisition=False
+        uview.Exposure=oldExposure
+        uview.Average=oldAverage
+        uview.ContinousAcquisition=True
+    else:
+        uview.Average=oldAverage
 
 def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     """ leemIV (Initial Energy (V), Final Energy (V), increment E (V), exposure (ms), average, repeat (default=False)
