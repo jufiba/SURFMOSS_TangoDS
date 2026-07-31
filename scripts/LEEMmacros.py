@@ -2,7 +2,7 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
-# v2.9 31/07/2026 leemSaveSingleImage and leemSequenceImages now only stop the camera when the requested exposure differs from the current one. Otherwise the camera is left running (started if it was stopped) and the average is changed live, which saves the thrown-away image. BEWARE: on that path leemSaveSingleImage no longer triggers a fresh exposure, it saves the frame UView currently holds, so with avg=1 (sliding average) the image can include frames from before the call. Note also that with the camera running ContinousAcquisition reads True forever, so the single-image trigger and its wait loop can only be used on the stopped path.
+# v2.9 31/07/2026 leemSaveSingleImage and leemSequenceImages now only stop the camera when the requested exposure differs from the current one. Otherwise the camera is left running (started if it was stopped) and the average is changed live, which saves the thrown-away image. BEWARE: on that path leemSaveSingleImage no longer triggers a fresh exposure, it saves the frame UView currently holds, so with avg=1 (sliding average) the image can include frames from before the call. Note also that with the camera running ContinousAcquisition reads True forever, so the single-image trigger and its wait loop can only be used on the stopped path. Exposure and average are now optional in both commands: left out, the value already set in the camera is used, so calling them with no arguments never stops the camera. This changes the old no-argument behaviour, which forced 500ms/avg 0 for a single image and 400ms/avg 1 for a sequence.
 #
 # v2.8 27/07/2026 Modified to stop Continuous acquisition for every sequence that requires synchronization (modified also the UView device server to use only a RW ContinuousAcquisition variable instead of a W ContinuousAcquisition and a R AcquisitionInProgress, which I think were stepping on each other). Note there is still a typo: Continous instead of Continuous. Also had to add a delay after switching on and off continuous mode, and we also have to throw away one image after such changes.
 #
@@ -149,15 +149,21 @@ def leem_exposure_differs(current,exp):
     """
     return abs(current-exp)>0.01
 
-def leemSaveSingleImage(exp=500,avg=0):
+def leemSaveSingleImage(exp=None,avg=None):
     """ leemSaveSingleImage( exposure (ms), average )
-    
+
+    Both are optional. Left out, whatever the camera is already set to is used.
+
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="IMG"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
+    if exp is None:
+        exp=oldExposure
+    if avg is None:
+        avg=oldAverage
     restarted=leem_exposure_differs(oldExposure,exp)
     if restarted:
         uview.ContinousAcquisition=False
@@ -175,7 +181,8 @@ def leemSaveSingleImage(exp=500,avg=0):
         # frame it has. BEWARE: with the camera running, ContinousAcquisition
         # reads True forever, so AcquireSingleImage and the wait loops above
         # must not be used here.
-        uview.Average=avg
+        if avg!=oldAverage:
+            uview.Average=avg
         if not uview.ContinousAcquisition:
             uview.ContinousAcquisition=True
             time.sleep(0.5)
@@ -187,20 +194,27 @@ def leemSaveSingleImage(exp=500,avg=0):
         uview.Exposure=oldExposure
         uview.Average=oldAverage
         uview.ContinousAcquisition=True
-    else:
+    elif avg!=oldAverage:
         uview.Average=oldAverage
 
-def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
+def leemSequenceImages(exp=None,avg=None,n=-1,delay=1.0):
     """ leemSequenceImage (exposure (ms), average, number_of_images (-1=infinite), delay (s)
-    
+
     Save sequence of images. For infinite, press CTRL-C to stop.
-     
+
+    Exposure and average are optional. Left out, whatever the camera is already
+    set to is used.
+
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="SEQ"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
+    if exp is None:
+        exp=oldExposure
+    if avg is None:
+        avg=oldAverage
     restarted=leem_exposure_differs(oldExposure,exp)
     if restarted:
         uview.ContinousAcquisition=False
@@ -211,7 +225,8 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
         time.sleep(0.5)
     else:
         # Exposure already correct, so leave the camera running.
-        uview.Average=avg
+        if avg!=oldAverage:
+            uview.Average=avg
         if not uview.ContinousAcquisition:
             uview.ContinousAcquisition=True
             time.sleep(0.5)
@@ -238,7 +253,7 @@ def leemSequenceImages(exp=400,avg=1,n=-1,delay=1.0):
         uview.Exposure=oldExposure
         uview.Average=oldAverage
         uview.ContinousAcquisition=True
-    else:
+    elif avg!=oldAverage:
         uview.Average=oldAverage
 
 def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
