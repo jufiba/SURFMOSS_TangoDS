@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.1 01/08/2026 Added a Qt acquisition GUI, in LEEMgui.py, opened with gui(). It exposes single image, sequence, IV, IV with ROI, IV with objective and the temperature ramp, each with its parameters, a Stop button and a log box. ARRES stays command line only because leemARRESset() asks for input() at the terminal. Acquisitions run in a worker thread, so a stop cannot use CTRL-C: instead leem_abort is set and the loops poll it through leem_checkstop(), which raises KeyboardInterrupt so a GUI stop unwinds through exactly the same cleanup as CTRL-C. The sleeps in leemSequenceImages and leemRampTemperatureROI now use leem_abort.wait(), so stopping does not have to wait out the delay. leemIVandObj gained the KeyboardInterrupt handler it never had, which also fixes CTRL-C there leaving the camera stopped at the wrong exposure.
+#
 # v3.0 31/07/2026 Removed all live plotting, so the macros no longer open windows and no longer depend on the ipython --pylab namespace. show(), savefig(), zeros(), array() and flip() were being used without ever being imported, and only resolved because the file is run into a --pylab session; they are now numpy./Figure. calls. Plots are written to files with matplotlib's Figure object API (no pyplot, no backend, no global state), so they also work from a worker thread. leemIV_ROI has lost its plot parameter, it always writes plot.png/plot.pdf now, and no longer crashes on its default arguments (fig was used outside the plot guard). leemARRESrun writes arres0/arres1 .pdf and .png and no longer leaves the camera stopped on the two-direction path. Fixed a python2 leftover bare print. The module can now be imported, which is what the GUI needs.
 #
 # v2.9 31/07/2026 leemSaveSingleImage and leemSequenceImages now only stop the camera when the requested exposure differs from the current one. Otherwise the camera is left running (started if it was stopped) and the average is changed live, which saves the thrown-away image. BEWARE: on that path leemSaveSingleImage no longer triggers a fresh exposure, it saves the frame UView currently holds, so with avg=1 (sliding average) the image can include frames from before the call. Note also that with the camera running ContinousAcquisition reads True forever, so the single-image trigger and its wait loop can only be used on the stopped path. Exposure and average are now optional in both commands: left out, the value already set in the camera is used, so calling them with no arguments never stops the camera. This changes the old no-argument behaviour, which forced 500ms/avg 0 for a single image and 400ms/avg 1 for a sequence.
@@ -31,15 +33,32 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.0"
+__version__ = "3.1"
 
 from datetime import date
 import tango
 import os
 import numpy
 import time
+import threading
 from matplotlib.figure import Figure
 from scipy.interpolate import interp1d
+
+# Set by the GUI Stop button. The acquisition loops poll it through
+# leem_checkstop() and raise KeyboardInterrupt, so a GUI stop unwinds through
+# exactly the same cleanup code as CTRL-C from the command line.
+leem_abort=threading.Event()
+
+def leem_checkstop():
+    """ Raise KeyboardInterrupt if a stop has been requested from the GUI. """
+    if leem_abort.is_set():
+        raise KeyboardInterrupt
+
+def gui():
+    """ Open the acquisition GUI. Imported lazily so that a plain command line
+    session does not need PySide6. """
+    from LEEMgui import leem_gui_main
+    return leem_gui_main()
 
 def frange(start, stop=None, step=None):
     #Use float number in range() function
@@ -237,17 +256,19 @@ def leemSequenceImages(exp=None,avg=None,n=-1,delay=1.0):
         if (n==-1):
             a=0
             while (1):
+                leem_checkstop()
                 savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
                     print("Saved %s"%savename)
                 a+=1
-                time.sleep(delay)
+                leem_abort.wait(delay)
         else:
             for a in range(n):
+                leem_checkstop()
                 savename=expname+"_%05d"%a
                 if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
                     print("Saved %s"%savename)
-                time.sleep(delay)
+                leem_abort.wait(delay)
     except KeyboardInterrupt:
         print("Ok, so you want to finish. Let me clean up.")
     if restarted:
@@ -287,6 +308,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
             #e=frange(E0,Ef,dE)
             e=numpy.arange(E0,Ef+dE,dE)
             for i in e:
+                leem_checkstop()
                 leem2k.StartVoltage=float(i)
                 t=time.localtime()
                 timenow=time.strftime("%c", t)
@@ -348,6 +370,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
                 rois2=numpy.zeros(len(e))
             k=0
             for i in e:
+                leem_checkstop()
                 leem2k.StartVoltage=i
                 uview.AcquireSingleImage()
                 while (uview.ContinousAcquisition):
@@ -410,19 +433,23 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     f.write("# Image number  Energy (eV) Objective (mA)\n")
     e=frange(E0,Ef,dE)
     a=0
-    for i in e:
-        leem2k.StartVoltage=float(i)
-        leem2k.Objective=float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)
-        print("Image %d Energy %f Objective %f"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
-        f.write("%d %f %f\n"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
-        uview.AcquireSingleImage()
-        while (uview.ContinousAcquisition):
-            pass
-        #uview.SaveImageAsPNG(expname)
-        savename=expname+"_%05d"%a
-        if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
-            print("Saved %s"%savename)
-        a+=1
+    try:
+        for i in e:
+            leem_checkstop()
+            leem2k.StartVoltage=float(i)
+            leem2k.Objective=float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)
+            print("Image %d Energy %f Objective %f"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
+            f.write("%d %f %f\n"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
+            uview.AcquireSingleImage()
+            while (uview.ContinousAcquisition):
+                pass
+            #uview.SaveImageAsPNG(expname)
+            savename=expname+"_%05d"%a
+            if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                print("Saved %s"%savename)
+            a+=1
+    except KeyboardInterrupt:
+        print("Ok, so you want to finish. Let me clean up.")
     f.close()
     uview.Exposure=oldExposure
     uview.Average=oldAverage
@@ -471,9 +498,10 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
     c=0
     try:
         for a in r:
+            leem_checkstop()
             leem_pid.SetPoint=a
             print("Going to %f"%a)
-            time.sleep(time_step)
+            leem_abort.wait(time_step)
             temp=leem2k.SampleTemperature
             uview.AcquireSingleImage()
             while (uview.ContinousAcquisition):

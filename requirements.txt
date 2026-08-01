@@ -8,6 +8,9 @@ pyserial
 numpy        # inactive/VSMControlDevice, inactive/WisselMCA
 matplotlib   # inactive/VSMControlDevice, scripts/
 
+# Qt GUI — only needed for scripts/LEEMgui.py (LEEMmacros.gui())
+PySide6
+
 # PID controller — required by PIDController
 simple-pid
 
