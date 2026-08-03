@@ -26,13 +26,13 @@ def _param(name,label,type_,default=None,choices=None,optional=False):
                 choices=choices,optional=optional)
 
 _EXPOSURES=[100,200,400,500,1000]
-_AVERAGES=[0,1,2,4,8]
+_AVERAGES=[0,1,2,4,8,16,32,64]   # UView goes up to 64; 1 is a sliding average
 
 def _exposure():
     return _param("exp","Exposure (ms)",float,choices=_EXPOSURES,optional=True)
 
 def _average():
-    return _param("avg","Average",int,choices=_AVERAGES,optional=True)
+    return _param("avg","Average (1=sliding)",int,choices=_AVERAGES,optional=True)
 
 # Everything the GUI can launch. stoppable=False greys out Stop, so the button
 # never claims an acquisition can be interrupted when it cannot.
@@ -48,14 +48,14 @@ ACQUISITIONS=[
                  _param("Ef","Ef (V)",float,default="10.0"),
                  _param("dE","dE (V)",float,default="0.5"),
                  _param("exp","Exposure (ms)",float,default="400",choices=_EXPOSURES),
-                 _param("avg","Average",int,default="0",choices=_AVERAGES),
+                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES),
                  _param("repeat","Repeat",bool,default=False)]),
     dict(label="IV scan with ROI", func="leemIV_ROI", stoppable=True,
          params=[_param("E0","E0 (V)",float,default="0.0"),
                  _param("Ef","Ef (V)",float,default="10.0"),
                  _param("dE","dE (V)",float,default="0.5"),
                  _param("exp","Exposure (ms)",float,default="400",choices=_EXPOSURES),
-                 _param("avg","Average",int,default="0",choices=_AVERAGES),
+                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES),
                  _param("repeat","Repeat",bool,default=False),
                  _param("roi","ROIs",int,default="1",choices=[1,2]),
                  _param("saveImage","Save images",bool,default=False)]),
@@ -66,13 +66,13 @@ ACQUISITIONS=[
                  _param("startObj","Start obj (mA)",float,default="0.0"),
                  _param("endObj","End obj (mA)",float,default="0.0"),
                  _param("exp","Exposure (ms)",float,default="400",choices=_EXPOSURES),
-                 _param("avg","Average",int,default="0",choices=_AVERAGES)]),
+                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES)]),
     dict(label="Temperature ramp with ROI", func="leemRampTemperatureROI", stoppable=True,
          params=[_param("temp","Target T (C)",float,default="0.0"),
                  _param("step","T step (C)",float,default="1.0"),
                  _param("time_step","Time step (s)",float,default="1.0"),
                  _param("exp","Exposure (ms)",float,default="100",choices=_EXPOSURES),
-                 _param("avg","Average",int,default="0",choices=_AVERAGES),
+                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES),
                  _param("saveImage","Save images",bool,default=False)]),
     # Ramps only move a PID setpoint, they take no images. pressure_limit is not
     # offered because the pressure check inside pidRampTo is commented out.

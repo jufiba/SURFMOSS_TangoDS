@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.3 03/08/2026 GUI average presets now go up to 64, matching UView, and the field is labelled "Average (1=sliding)" so the sliding average is visible without reading the docstring. The boxes stay editable, so any value in between can still be typed.
+#
 # v3.2 03/08/2026 Added the three PID ramps to the GUI: leemRampTemperatureTo, doser1RampPowerTo and doser2RampPowerTo. They all go through pidRampTo, which now polls leem_checkstop() and waits on leem_abort, so the Stop button works for them and CTRL-C is caught instead of escaping as a traceback. A ramp needs no cleanup, it just stops where it got to, and the setpoint it reached is printed. pressure_limit is not offered in the GUI because the pressure check inside pidRampTo is commented out and the parameter currently does nothing.
 #
 # v3.1 01/08/2026 Added a Qt acquisition GUI, in LEEMgui.py, opened with gui(). It exposes single image, sequence, IV, IV with ROI, IV with objective and the temperature ramp, each with its parameters, a Stop button and a log box. ARRES stays command line only because leemARRESset() asks for input() at the terminal. Acquisitions run in a worker thread, so a stop cannot use CTRL-C: instead leem_abort is set and the loops poll it through leem_checkstop(), which raises KeyboardInterrupt so a GUI stop unwinds through exactly the same cleanup as CTRL-C. The sleeps in leemSequenceImages and leemRampTemperatureROI now use leem_abort.wait(), so stopping does not have to wait out the delay. leemIVandObj gained the KeyboardInterrupt handler it never had, which also fixes CTRL-C there leaving the camera stopped at the wrong exposure.
@@ -35,7 +37,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.2"
+__version__ = "3.3"
 
 from datetime import date
 import tango
