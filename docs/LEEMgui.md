@@ -13,6 +13,18 @@ options that were considered and rejected.
 pip install PySide6            # or: sudo apt install python3-pyside6.qtwidgets
 ```
 
+The easiest way, GUI and console together:
+
+```bash
+cd .../scripts && ./leemgui        # -n / --no-gui for the console alone
+```
+
+`leemgui` starts ipython with the Qt event loop already integrated, imports the
+macros and opens the window, then leaves you at a prompt sharing the same module
+as the GUI. It changes to its own directory first, so it works from anywhere, and
+pins `QT_API=pyside6` so ipython cannot pick a PyQt5 that happens to be
+installed. If the GUI fails to open you still get the prompt.
+
 Standalone, no console:
 
 ```bash

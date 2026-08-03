@@ -1,0 +1,53 @@
+#!/bin/sh
+# Launch the LEEM acquisition GUI with an ipython console attached.
+#
+# Starts ipython with the Qt event loop already integrated, imports the macros
+# and opens the GUI, then leaves you at an interactive prompt sharing the same
+# module as the window: uview, leem2k and every macro are right there.
+#
+#   ./leemgui           GUI plus console
+#   ./leemgui -n        console only, no window (gui() opens it later)
+#
+# Runs from any directory: it changes to its own directory first, so that
+# "import LEEMmacros" finds the file next to this script.
+#
+# Juan de la Figuera juan.delafiguera@gmail.com
+
+set -e
+
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$here"
+
+if ! command -v ipython >/dev/null 2>&1; then
+    echo "leemgui: ipython not found." >&2
+    echo "  install it with:  sudo apt install ipython3" >&2
+    echo "  or run the GUI on its own with:  python3 $here/LEEMgui.py" >&2
+    exit 1
+fi
+
+# Pin the Qt binding. Without this, ipython may pick PyQt5 if it is also
+# installed and then fail to load, while LEEMgui.py itself needs PySide6.
+QT_API=pyside6
+export QT_API
+
+startup="from LEEMmacros import *"
+banner="LEEM macros loaded. GUI is open."
+case "$1" in
+    -n|--no-gui)
+        banner="LEEM macros loaded. Type gui() to open the window."
+        ;;
+    "")
+        startup="$startup; gui()"
+        ;;
+    *)
+        echo "leemgui: unknown option '$1'" >&2
+        echo "usage: leemgui [-n|--no-gui]" >&2
+        exit 2
+        ;;
+esac
+
+# --gui=qt6 does what %gui qt6 does at the prompt, but before anything runs, so
+# the console stays usable while the window is open. -i keeps the prompt after
+# the startup code. If the GUI fails to open, the traceback is printed and you
+# are still dropped at the prompt.
+exec ipython --gui=qt6 -i -c "$startup; print('$banner')"
