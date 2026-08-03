@@ -192,6 +192,11 @@ function signatures — no unknown kwargs, no missing required arguments.
 What it does **not** cover: real Qt rendering, and anything touching Tango or the
 camera. Those are only exercised on the instrument.
 
+The grouped layout of v3.4 was run on the instrument on 3 August 2026 and
+behaved correctly, so the worker thread, the shared imaging panel and the
+read-only setpoint fields are confirmed against real device servers and not only
+against the stub.
+
 ## Deliberately left out
 
 - **ARRES.** `leemARRESset()` blocks on `input()` at the terminal, which does not
@@ -208,7 +213,10 @@ camera. Those are only exercised on the instrument.
 
 ## Possible future work
 
-An embedded console was discussed and deferred. Two approaches:
+An embedded console was discussed and put **on hold** in August 2026: running the
+GUI alongside an external ipython, with `%gui qt6` or in a second terminal, turned
+out to be easier in practice. Revisit only if that stops being true. Two
+approaches were considered:
 
 - **A command line into the log box.** A `QLineEdit` evaluated against the
   LEEMmacros namespace, output to the existing log. No new dependencies, and it
