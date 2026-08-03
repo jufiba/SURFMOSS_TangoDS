@@ -460,18 +460,36 @@ class LEEMWindow(QtWidgets.QWidget):
 
 _window=None
 
+def _under_ipython():
+    """ True when an IPython shell is driving this process.
+
+    IPython installs its Qt hook when the prompt starts, which is *after* any
+    startup code has run. So even under "ipython --gui=qt6 -c ...", both
+    active_eventloop and QApplication.instance() are still empty at this point
+    and cannot be used to detect it. Calling app.exec() here would block the
+    console for good; leaving the loop alone lets IPython pump it as soon as
+    the prompt appears.
+    """
+    try:
+        from IPython import get_ipython
+    except Exception:
+        return False
+    return get_ipython() is not None
+
 def leem_gui_main():
     """ Show the acquisition window.
 
-    Under a plain python/ipython prompt this blocks until the window is closed.
-    Run %gui qt in ipython first to keep the console usable while it is open.
+    Under plain python this blocks until the window is closed. Under ipython it
+    returns immediately and the console stays usable, provided ipython drives
+    the Qt event loop -- start it with --gui=qt6, or run %gui qt6 before this.
+    The leemgui script does that for you.
     """
     global _window
     existing=QtWidgets.QApplication.instance()
     app=existing or QtWidgets.QApplication(sys.argv)
     _window=LEEMWindow()
     _window.show()
-    if existing is None:
+    if existing is None and not _under_ipython():
         app.exec()
     return _window
 

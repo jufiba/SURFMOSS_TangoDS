@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.5 03/08/2026 Fixed gui() blocking the ipython prompt. IPython installs its Qt hook when the prompt starts, which is after any startup code has run, so under "ipython --gui=qt6 -c ..." both active_eventloop and QApplication.instance() are still empty when gui() runs and cannot be used to detect that IPython will drive the loop. gui() now simply skips app.exec() whenever an IPython shell is present and lets IPython pump the event loop once the prompt appears; under plain python it still blocks as before.
+#
 # v3.4 03/08/2026 GUI reorganised into groups: Image(s), IV, Sample temperature ramp and Doser ramp, each choosing one variant with radio buttons and having its own Run button and a preview line showing the exact call it will make. Exposure and average moved to a shared "Imaging conditions" panel, E0/Ef/dE to a "Scan voltage" panel inside the IV group. The ramps show the PID setpoint they will start from as a read-only field, because the macros always ramp from the current setpoint and there is no way to pass a starting value. For the shared panel to work, leemIV, leemIV_ROI, leemIVandObj, leemRampTemperatureROI and leemARRESrun now accept exp=None and avg=None meaning "use whatever the camera is set to", as leemSaveSingleImage and leemSequenceImages already did; their defaults are unchanged, so calling them from the command line behaves exactly as before.
 #
 # v3.3 03/08/2026 GUI average presets now go up to 64, matching UView, and the field is labelled "Average (1=sliding)" so the sliding average is visible without reading the docstring. The boxes stay editable, so any value in between can still be typed.
@@ -39,7 +41,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.4"
+__version__ = "3.5"
 
 from datetime import date
 import tango
