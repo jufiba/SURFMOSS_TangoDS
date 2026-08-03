@@ -16,14 +16,39 @@ pip install PySide6            # or: sudo apt install python3-pyside6.qtwidgets
 The easiest way, GUI and console together:
 
 ```bash
-cd .../scripts && ./leemgui        # -n / --no-gui for the console alone
+leemgui           # -n / --no-gui for the console alone
 ```
 
 `leemgui` starts ipython with the Qt event loop already integrated, imports the
 macros and opens the window, then leaves you at a prompt sharing the same module
-as the GUI. It changes to its own directory first, so it works from anywhere, and
-pins `QT_API=pyside6` so ipython cannot pick a PyQt5 that happens to be
-installed. If the GUI fails to open you still get the prompt.
+as the GUI. It prefers `ipython3` over `ipython`, pins `QT_API=pyside6` so
+ipython cannot pick a PyQt5 that happens to be installed, and uses `-i`, so if
+the GUI fails to open you get the traceback and still land at the prompt.
+
+It is meant to be symlinked into a bin directory, and resolves the link to find
+the macros next to the real script:
+
+```bash
+ln -s ~/SURFMOSS_TangoDS/scripts/leemgui ~/bin/leemgui
+```
+
+Two directories, separately overridable, because the code and the data do not
+live in the same place on the instrument:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `LEEM_CODEDIR` | the script's own directory | where `LEEMmacros.py` and `LEEMgui.py` are; goes on `PYTHONPATH` |
+| `LEEM_RUNDIR` | `/home/tvips/Superficies/LEEM_Madrid` | working directory for the session |
+
+On the LEEM PC the checkout lives on the WSL local disk while the data lives on
+the mounted server share, so `git pull` is the whole deployment step.
+
+**Python searches the working directory before `PYTHONPATH`**, so a copy of
+`LEEMmacros.py` left in the data directory silently wins over the checkout —
+which is exactly how the repository and the instrument drifted apart before.
+`leemgui` checks for that on startup and says which copy will be imported,
+loudly if the two differ. Delete the copies in the data directory once the
+checkout works.
 
 Standalone, no console:
 

@@ -5,36 +5,96 @@
 # and opens the GUI, then leaves you at an interactive prompt sharing the same
 # module as the window: uview, leem2k and every macro are right there.
 #
-#   ./leemgui           GUI plus console
-#   ./leemgui -n        console only, no window (gui() opens it later)
+#   leemgui           GUI plus console
+#   leemgui -n        console only, no window (gui() opens it later)
 #
-# Runs from any directory: it changes to its own directory first, so that
-# "import LEEMmacros" finds the file next to this script.
+# Meant to be symlinked into a bin directory:
+#
+#   ln -s ~/SURFMOSS_TangoDS/scripts/leemgui ~/bin/leemgui
+#
+# The session runs in the lab data directory, while the macros are imported
+# from the directory holding this script, so a git checkout anywhere can drive
+# data living somewhere else. Both are overridable:
+#
+#   LEEM_RUNDIR    working directory for the session
+#   LEEM_CODEDIR   directory holding LEEMmacros.py and LEEMgui.py
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
 set -e
 
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-cd "$here"
+# Resolve symlinks by hand rather than with readlink -f, which is not portable,
+# so that a link in ~/bin still finds the macros next to the real script.
+target=$0
+while [ -L "$target" ]; do
+    link=$(readlink -- "$target")
+    case $link in
+        /*) target=$link ;;
+        *)  target=$(dirname -- "$target")/$link ;;
+    esac
+done
+here=$(CDPATH= cd -- "$(dirname -- "$target")" && pwd)
 
-if ! command -v ipython >/dev/null 2>&1; then
-    echo "leemgui: ipython not found." >&2
-    echo "  install it with:  sudo apt install ipython3" >&2
-    echo "  or run the GUI on its own with:  python3 $here/LEEMgui.py" >&2
+codedir=${LEEM_CODEDIR:-$here}
+rundir=${LEEM_RUNDIR:-/home/tvips/Superficies/LEEM_Madrid}
+
+if [ ! -f "$codedir/LEEMmacros.py" ]; then
+    echo "leemgui: no LEEMmacros.py in $codedir" >&2
+    echo "         set LEEM_CODEDIR to the directory holding it." >&2
     exit 1
 fi
+
+if [ -d "$rundir" ]; then
+    cd "$rundir"
+else
+    echo "leemgui: $rundir not found, running in $codedir instead" >&2
+    rundir=$codedir
+    cd "$codedir"
+fi
+
+PYTHONPATH="$codedir${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
+
+# Python searches the working directory before PYTHONPATH, so a stale copy of
+# the macros left in the data directory would silently win over the checkout.
+# That is exactly how the repository and the instrument drifted apart before.
+for stale in LEEMmacros.py LEEMgui.py; do
+    if [ "$rundir" != "$codedir" ] && [ -f "$rundir/$stale" ]; then
+        if cmp -s "$rundir/$stale" "$codedir/$stale"; then
+            echo "leemgui: $rundir/$stale duplicates the one in $codedir," >&2
+            echo "         it is the copy that will be imported. Consider deleting it." >&2
+        else
+            echo "leemgui: WARNING $rundir/$stale DIFFERS from $codedir/$stale" >&2
+            echo "         the one in $rundir wins. Delete or rename it to use the checkout." >&2
+        fi
+    fi
+done
 
 # Pin the Qt binding. Without this, ipython may pick PyQt5 if it is also
 # installed and then fail to load, while LEEMgui.py itself needs PySide6.
 QT_API=pyside6
 export QT_API
 
+ipy=
+for candidate in ipython3 ipython; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        ipy=$candidate
+        break
+    fi
+done
+
+if [ -z "$ipy" ]; then
+    echo "leemgui: neither ipython3 nor ipython found." >&2
+    echo "  install it with:  sudo apt install ipython3" >&2
+    echo "  or run the GUI on its own with:  python3 $codedir/LEEMgui.py" >&2
+    exit 1
+fi
+
 startup="from LEEMmacros import *"
-banner="LEEM macros loaded. GUI is open."
+banner="LEEM macros loaded, GUI open. Running in $rundir"
 case "$1" in
     -n|--no-gui)
-        banner="LEEM macros loaded. Type gui() to open the window."
+        banner="LEEM macros loaded. Type gui() to open the window. Running in $rundir"
         ;;
     "")
         startup="$startup; gui()"
@@ -50,4 +110,4 @@ esac
 # the console stays usable while the window is open. -i keeps the prompt after
 # the startup code. If the GUI fails to open, the traceback is printed and you
 # are still dropped at the prompt.
-exec ipython --gui=qt6 -i -c "$startup; print('$banner')"
+exec "$ipy" --gui=qt6 -i -c "$startup; print('$banner')"
