@@ -131,6 +131,10 @@ pip install .
 
 The `scripts/` directory contains Tango macros and utility scripts for instrument control (LEEM, VSM, sputtering, dosing). These are loaded directly in the instrument control session, not installed as packages.
 
+`LEEMgui.py` is a Qt front end for the LEEM acquisition macros, opened with `LEEMmacros.gui()` or by running the file directly. It needs PySide6, imported lazily so a command line session does not.
+
+See [docs/LEEMmacros.md](docs/LEEMmacros.md) and [docs/LEEMgui.md](docs/LEEMgui.md) for the reasoning behind their design and the constraints to respect when changing them.
+
 ### Versioning
 
 `LEEMmacros.py` was historically kept as a series of `LEEMmacros_vX_pY.py` copies. Those snapshots are now imported into git history: there is one canonical `scripts/LEEMmacros.py`, and each past version is a commit tagged `leemmacros-vX.Y`.
@@ -150,3 +154,13 @@ Note: `leemmacros-v2.6` is the Python 3 port. Tags up to and including `leemmacr
 ## Synoptics
 
 The `synoptics/` directory contains Tango synoptic panel definitions.
+
+## Documentation
+
+The `docs/` directory holds the longer-form documentation:
+
+| File | Contents |
+|---|---|
+| `LEEMmacros.md` | LEEM acquisition macros: versioning, change history with reasoning, invariants to preserve |
+| `LEEMgui.md` | Acquisition GUI: architecture, layout decisions, how to add an acquisition, testing |
+| `surfmoss-device-server-migration-reference.md` | Device server restructuring and Trixie migration reference |
