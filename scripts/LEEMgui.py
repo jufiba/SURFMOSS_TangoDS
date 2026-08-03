@@ -6,6 +6,12 @@
 # streamed into the log box, and Stop unwinds it through the same cleanup path
 # as CTRL-C (see leem_checkstop in LEEMmacros).
 #
+# The window is organised as groups (Image(s), IV, Sample temperature ramp,
+# Doser ramp). Settings shared by several calls live in their own panel:
+# exposure and average at the top, and the scan voltage inside the IV group.
+# Each group picks one variant with radio buttons and has its own Run button,
+# with a preview line showing the exact call it will make.
+#
 # Launch it with LEEMmacros.gui(), or run this file directly.
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
@@ -21,74 +27,268 @@ KEEP="(keep current)"
 
 def _param(name,label,type_,default=None,choices=None,optional=False):
     """ One entry field. optional=True adds the "(keep current)" choice, which
-    passes None so the macro leaves the camera setting alone. """
+    passes None so the macro keeps whatever the camera is set to. """
     return dict(name=name,label=label,type=type_,default=default,
                 choices=choices,optional=optional)
 
 _EXPOSURES=[100,200,400,500,1000]
 _AVERAGES=[0,1,2,4,8,16,32,64]   # UView goes up to 64; 1 is a sliding average
 
-def _exposure():
-    return _param("exp","Exposure (ms)",float,choices=_EXPOSURES,optional=True)
+# Shared by every call that takes images.
+IMAGING=[_param("exp","Exposure (ms)",float,choices=_EXPOSURES,optional=True),
+         _param("avg","Average (1=sliding)",int,choices=_AVERAGES,optional=True)]
 
-def _average():
-    return _param("avg","Average (1=sliding)",int,choices=_AVERAGES,optional=True)
+# Shared by the IV variants.
+SCANV=[_param("E0","E0 (V)",float,default="0.0"),
+       _param("Ef","Ef (V)",float,default="10.0"),
+       _param("dE","dE (V)",float,default="0.5")]
 
-# Everything the GUI can launch. stoppable=False greys out Stop, so the button
-# never claims an acquisition can be interrupted when it cannot.
-ACQUISITIONS=[
-    dict(label="Single image", func="leemSaveSingleImage", stoppable=False,
-         params=[_exposure(),_average()]),
-    dict(label="Sequence of images", func="leemSequenceImages", stoppable=True,
-         params=[_exposure(),_average(),
-                 _param("n","Images (-1=forever)",int,default="-1"),
-                 _param("delay","Delay (s)",float,default="1.0")]),
-    dict(label="IV scan", func="leemIV", stoppable=True,
-         params=[_param("E0","E0 (V)",float,default="0.0"),
-                 _param("Ef","Ef (V)",float,default="10.0"),
-                 _param("dE","dE (V)",float,default="0.5"),
-                 _param("exp","Exposure (ms)",float,default="400",choices=_EXPOSURES),
-                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES),
-                 _param("repeat","Repeat",bool,default=False)]),
-    dict(label="IV scan with ROI", func="leemIV_ROI", stoppable=True,
-         params=[_param("E0","E0 (V)",float,default="0.0"),
-                 _param("Ef","Ef (V)",float,default="10.0"),
-                 _param("dE","dE (V)",float,default="0.5"),
-                 _param("exp","Exposure (ms)",float,default="400",choices=_EXPOSURES),
-                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES),
-                 _param("repeat","Repeat",bool,default=False),
-                 _param("roi","ROIs",int,default="1",choices=[1,2]),
-                 _param("saveImage","Save images",bool,default=False)]),
-    dict(label="IV scan with objective", func="leemIVandObj", stoppable=True,
-         params=[_param("E0","E0 (V)",float,default="0.0"),
-                 _param("Ef","Ef (V)",float,default="10.0"),
-                 _param("dE","dE (V)",float,default="0.5"),
-                 _param("startObj","Start obj (mA)",float,default="0.0"),
-                 _param("endObj","End obj (mA)",float,default="0.0"),
-                 _param("exp","Exposure (ms)",float,default="400",choices=_EXPOSURES),
-                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES)]),
-    dict(label="Temperature ramp with ROI", func="leemRampTemperatureROI", stoppable=True,
-         params=[_param("temp","Target T (C)",float,default="0.0"),
-                 _param("step","T step (C)",float,default="1.0"),
-                 _param("time_step","Time step (s)",float,default="1.0"),
-                 _param("exp","Exposure (ms)",float,default="100",choices=_EXPOSURES),
-                 _param("avg","Average (1=sliding)",int,default="0",choices=_AVERAGES),
-                 _param("saveImage","Save images",bool,default=False)]),
-    # Ramps only move a PID setpoint, they take no images. pressure_limit is not
-    # offered because the pressure check inside pidRampTo is commented out.
-    dict(label="Ramp temperature (PID must be on)", func="leemRampTemperatureTo", stoppable=True,
-         params=[_param("temp","Target T (C)",float,default="0.0"),
-                 _param("temp_step","T step (C)",float,default="1.0"),
-                 _param("time_step","Time step (s)",float,default="1.0")]),
-    dict(label="Ramp doser 1 power (PID must be on)", func="doser1RampPowerTo", stoppable=True,
-         params=[_param("power","Target power (W)",float,default="0.0"),
-                 _param("power_step","Power step (W)",float,default="1.0"),
-                 _param("time_step","Time step (s)",float,default="1.0")]),
-    dict(label="Ramp doser 2 power (PID must be on)", func="doser2RampPowerTo", stoppable=True,
-         params=[_param("power","Target power (W)",float,default="0.0"),
-                 _param("power_step","Power step (W)",float,default="1.0"),
-                 _param("time_step","Time step (s)",float,default="1.0")]),
+def _variant(label,func,params,stoppable=True,imaging=False,scanv=False,setpoint=None):
+    """ One runnable call. imaging/scanv say which shared panels feed it;
+    setpoint names the PID in LEEMmacros whose current value is shown as the
+    read-only ramp start. """
+    return dict(label=label,func=func,params=params,stoppable=stoppable,
+                imaging=imaging,scanv=scanv,setpoint=setpoint)
+
+GROUPS=[
+    dict(label="Image(s)",variants=[
+        _variant("Single image","leemSaveSingleImage",[],stoppable=False,imaging=True),
+        _variant("Sequence of images","leemSequenceImages",
+                 [_param("n","Images (-1=forever)",int,default="-1"),
+                  _param("delay","Delay (s)",float,default="1.0")],imaging=True),
+    ]),
+    dict(label="IV",variants=[
+        _variant("Plain IV","leemIV",
+                 [_param("repeat","Repeat",bool,default=False)],imaging=True,scanv=True),
+        _variant("IV + ROI","leemIV_ROI",
+                 [_param("repeat","Repeat",bool,default=False),
+                  _param("roi","ROIs",int,default="1",choices=[1,2]),
+                  _param("saveImage","Save images",bool,default=False)],
+                 imaging=True,scanv=True),
+        _variant("IV + objective","leemIVandObj",
+                 [_param("startObj","Start obj (mA)",float,default="0.0"),
+                  _param("endObj","End obj (mA)",float,default="0.0")],
+                 imaging=True,scanv=True),
+    ]),
+    dict(label="Sample temperature ramp (PID must be on)",variants=[
+        _variant("Temperature + ROI (takes images)","leemRampTemperatureROI",
+                 [_param("temp","Final T (C)",float,default="0.0"),
+                  _param("step","T step (C)",float,default="1.0"),
+                  _param("time_step","Time step (s)",float,default="1.0"),
+                  _param("saveImage","Save images",bool,default=False)],
+                 imaging=True,setpoint="leem_pid"),
+        _variant("Temperature (setpoint only)","leemRampTemperatureTo",
+                 [_param("temp","Final T (C)",float,default="0.0"),
+                  _param("temp_step","T step (C)",float,default="1.0"),
+                  _param("time_step","Time step (s)",float,default="1.0")],
+                 setpoint="leem_pid"),
+    ]),
+    dict(label="Doser ramp (PID must be on)",variants=[
+        _variant("Doser 1 power","doser1RampPowerTo",
+                 [_param("power","Final power (W)",float,default="0.0"),
+                  _param("power_step","Power step (W)",float,default="1.0"),
+                  _param("time_step","Time step (s)",float,default="1.0")],
+                 setpoint="doser1_pid"),
+        _variant("Doser 2 power","doser2RampPowerTo",
+                 [_param("power","Final power (W)",float,default="0.0"),
+                  _param("power_step","Power step (W)",float,default="1.0"),
+                  _param("time_step","Time step (s)",float,default="1.0")],
+                 setpoint="doser2_pid"),
+    ]),
 ]
+
+
+def build_widget(p):
+    if p["type"] is bool:
+        w=QtWidgets.QCheckBox()
+        w.setChecked(bool(p["default"]))
+    elif p["choices"]:
+        w=QtWidgets.QComboBox()
+        w.setEditable(True)              # presets are shortcuts, not a cage
+        if p["optional"]:
+            w.addItem(KEEP)
+        for c in p["choices"]:
+            w.addItem(str(c))
+        w.setCurrentText(KEEP if p["optional"] else str(p["default"]))
+        w.setMinimumWidth(120)
+    else:
+        w=QtWidgets.QLineEdit(str(p["default"]))
+        w.setMaximumWidth(90)
+    return w
+
+def read_widget(p,w):
+    """ Value for one field, or None for "(keep current)". """
+    if p["type"] is bool:
+        return w.isChecked()
+    text=(w.currentText() if isinstance(w,QtWidgets.QComboBox) else w.text()).strip()
+    if p["optional"] and text in (KEEP,""):
+        return None
+    try:
+        return p["type"](text)
+    except ValueError:
+        raise ValueError("%s: cannot read %r as %s"%(p["label"],text,p["type"].__name__))
+
+def on_change(w,slot):
+    if isinstance(w,QtWidgets.QCheckBox):
+        w.toggled.connect(slot)
+    elif isinstance(w,QtWidgets.QComboBox):
+        w.currentTextChanged.connect(slot)
+    else:
+        w.textChanged.connect(slot)
+
+
+class FieldPanel(QtWidgets.QWidget):
+    """ A row of fields built from a param list. """
+
+    def __init__(self,params,parent=None):
+        super().__init__(parent)
+        self.params=params
+        self.widgets={}
+        layout=QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0,0,0,0)
+        for p in params:
+            layout.addWidget(QtWidgets.QLabel(p["label"]+":"))
+            w=build_widget(p)
+            self.widgets[p["name"]]=w
+            layout.addWidget(w)
+        layout.addStretch(1)
+
+    def values(self):
+        return {p["name"]:read_widget(p,self.widgets[p["name"]]) for p in self.params}
+
+    def connect_all(self,slot):
+        for w in self.widgets.values():
+            on_change(w,slot)
+
+    def set_enabled(self,on):
+        for w in self.widgets.values():
+            w.setEnabled(on)
+
+
+class VariantPage(FieldPanel):
+    """ The fields belonging to one variant, plus the read-only ramp start. """
+
+    def __init__(self,variant,parent=None):
+        super().__init__(variant["params"],parent)
+        self.variant=variant
+        self.startField=None
+        if variant["setpoint"]:
+            self.startField=QtWidgets.QLineEdit()
+            self.startField.setReadOnly(True)
+            self.startField.setMaximumWidth(90)
+            self.startField.setToolTip("Current PID setpoint. The ramp starts here; "
+                                       "it is not something the macros let you set.")
+            row=self.layout()
+            row.insertWidget(0,self.startField)
+            row.insertWidget(0,QtWidgets.QLabel("From (setpoint):"))
+
+    def refresh_start(self):
+        """ Read the live setpoint. Never raises: the GUI must survive a device
+        server being down. """
+        if self.startField is None:
+            return
+        try:
+            pid=getattr(M,self.variant["setpoint"])
+            self.startField.setText("%.2f"%pid.SetPoint)
+        except Exception:
+            self.startField.setText("unavailable")
+
+
+class GroupBox(QtWidgets.QGroupBox):
+    """ One group: radio buttons choosing a variant, that variant's fields, a
+    preview of the call and a Run button. """
+
+    run=QtCore.Signal(object)
+
+    def __init__(self,spec,shared,parent=None):
+        super().__init__(spec["label"],parent)
+        self.spec=spec
+        self.shared=shared               # callable -> dict of shared values
+        layout=QtWidgets.QVBoxLayout(self)
+
+        self.buttons=QtWidgets.QButtonGroup(self)
+        radios=QtWidgets.QHBoxLayout()
+        for i,v in enumerate(spec["variants"]):
+            b=QtWidgets.QRadioButton(v["label"])
+            b.setChecked(i==0)
+            self.buttons.addButton(b,i)
+            radios.addWidget(b)
+        radios.addStretch(1)
+        layout.addLayout(radios)
+
+        self.scanv=None
+        if any(v["scanv"] for v in spec["variants"]):
+            box=QtWidgets.QGroupBox("Scan voltage")
+            inner=QtWidgets.QVBoxLayout(box)
+            self.scanv=FieldPanel(SCANV)
+            inner.addWidget(self.scanv)
+            layout.addWidget(box)
+
+        self.stack=QtWidgets.QStackedWidget()
+        self.pages=[]
+        for v in spec["variants"]:
+            page=VariantPage(v)
+            self.pages.append(page)
+            self.stack.addWidget(page)
+        layout.addWidget(self.stack)
+
+        bottom=QtWidgets.QHBoxLayout()
+        self.preview=QtWidgets.QLabel("")
+        self.preview.setWordWrap(True)
+        self.preview.setStyleSheet("color: gray;")
+        self.preview.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
+        bottom.addWidget(self.preview,1)
+        self.button=QtWidgets.QPushButton("Run")
+        self.button.clicked.connect(lambda: self.run.emit(self))
+        bottom.addWidget(self.button)
+        layout.addLayout(bottom)
+
+        self.buttons.idToggled.connect(self._switch)
+        if self.scanv:
+            self.scanv.connect_all(self.refresh_preview)
+        for page in self.pages:
+            page.connect_all(self.refresh_preview)
+
+    def _switch(self,index,checked):
+        if checked:
+            self.stack.setCurrentIndex(index)
+            self.pages[index].refresh_start()
+            self.refresh_preview()
+
+    def current(self):
+        return self.spec["variants"][self.buttons.checkedId()]
+
+    def values(self):
+        """ Shared panels plus this variant's own fields, in call order. """
+        v=self.current()
+        page=self.pages[self.buttons.checkedId()]
+        out={}
+        if v["scanv"] and self.scanv:
+            out.update(self.scanv.values())
+        out.update(page.values())
+        if v["imaging"]:
+            out.update(self.shared())
+        return out
+
+    def refresh_preview(self):
+        v=self.current()
+        try:
+            args=", ".join("%s=%r"%(k,val) for k,val in self.values().items())
+            self.preview.setText("%s(%s)"%(v["func"],args))
+        except ValueError as e:
+            self.preview.setText("%s(...)   %s"%(v["func"],e))
+
+    def refresh_start(self):
+        self.pages[self.buttons.checkedId()].refresh_start()
+
+    def set_enabled(self,on):
+        self.button.setEnabled(on)
+        for b in self.buttons.buttons():
+            b.setEnabled(on)
+        if self.scanv:
+            self.scanv.set_enabled(on)
+        for page in self.pages:
+            page.set_enabled(on)
 
 
 class _Stream:
@@ -147,67 +347,6 @@ class Worker(QtCore.QThread):
         self.done.emit(error)
 
 
-class AcquisitionRow(QtWidgets.QGroupBox):
-    """ One acquisition: its parameter fields and a Run button. """
-
-    run=QtCore.Signal(object)
-
-    def __init__(self,spec,parent=None):
-        super().__init__(spec["label"],parent)
-        self.spec=spec
-        self.widgets={}
-        layout=QtWidgets.QHBoxLayout(self)
-        for p in spec["params"]:
-            layout.addWidget(QtWidgets.QLabel(p["label"]+":"))
-            layout.addWidget(self._build(p))
-        layout.addStretch(1)
-        self.button=QtWidgets.QPushButton("Run")
-        self.button.clicked.connect(lambda: self.run.emit(self))
-        layout.addWidget(self.button)
-
-    def _build(self,p):
-        if p["type"] is bool:
-            w=QtWidgets.QCheckBox()
-            w.setChecked(bool(p["default"]))
-        elif p["choices"]:
-            w=QtWidgets.QComboBox()
-            w.setEditable(True)          # presets are shortcuts, not a cage
-            if p["optional"]:
-                w.addItem(KEEP)
-            for c in p["choices"]:
-                w.addItem(str(c))
-            w.setCurrentText(KEEP if p["optional"] else str(p["default"]))
-            w.setMinimumWidth(120)
-        else:
-            w=QtWidgets.QLineEdit(str(p["default"]))
-            w.setMaximumWidth(90)
-        self.widgets[p["name"]]=w
-        return w
-
-    def values(self):
-        """ Read the fields. Raises ValueError naming the offending field. """
-        out={}
-        for p in self.spec["params"]:
-            w=self.widgets[p["name"]]
-            if p["type"] is bool:
-                out[p["name"]]=w.isChecked()
-                continue
-            text=(w.currentText() if isinstance(w,QtWidgets.QComboBox) else w.text()).strip()
-            if p["optional"] and text in (KEEP,""):
-                out[p["name"]]=None
-                continue
-            try:
-                out[p["name"]]=p["type"](text)
-            except ValueError:
-                raise ValueError("%s: cannot read %r as %s"%(p["label"],text,p["type"].__name__))
-        return out
-
-    def set_enabled(self,on):
-        self.button.setEnabled(on)
-        for w in self.widgets.values():
-            w.setEnabled(on)
-
-
 class LEEMWindow(QtWidgets.QWidget):
 
     def __init__(self,parent=None):
@@ -216,12 +355,24 @@ class LEEMWindow(QtWidgets.QWidget):
         self.worker=None
         layout=QtWidgets.QVBoxLayout(self)
 
-        self.rows=[]
-        for spec in ACQUISITIONS:
-            row=AcquisitionRow(spec)
-            row.run.connect(self.start)
-            layout.addWidget(row)
-            self.rows.append(row)
+        box=QtWidgets.QGroupBox("Imaging conditions")
+        inner=QtWidgets.QVBoxLayout(box)
+        self.imaging=FieldPanel(IMAGING)
+        inner.addWidget(self.imaging)
+        caption=QtWidgets.QLabel("Used by Image(s), IV and the temperature ramp with ROI. "
+                                 "The setpoint-only ramps take no images and ignore these.")
+        caption.setStyleSheet("color: gray;")
+        caption.setWordWrap(True)
+        inner.addWidget(caption)
+        layout.addWidget(box)
+
+        self.groups=[]
+        for spec in GROUPS:
+            g=GroupBox(spec,self.imaging.values)
+            g.run.connect(self.start)
+            layout.addWidget(g)
+            self.groups.append(g)
+        self.imaging.connect_all(self.refresh_previews)
 
         note=QtWidgets.QLabel("ARRES is command line only: run leemARRESset() then "
                               "leemARRESrun() from the console.")
@@ -246,30 +397,42 @@ class LEEMWindow(QtWidgets.QWidget):
         self.log.setMaximumBlockCount(5000)
         self.log.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
         layout.addWidget(self.log,1)
-        self.resize(900,600)
+        self.resize(1000,780)
+
+        self.refresh_starts()
+        self.refresh_previews()
+
+    def refresh_previews(self):
+        for g in self.groups:
+            g.refresh_preview()
+
+    def refresh_starts(self):
+        for g in self.groups:
+            g.refresh_start()
 
     def append(self,text):
         self.log.appendPlainText(text)
 
-    def start(self,row):
+    def start(self,group):
         if self.worker is not None:
             return                      # already running; Run buttons are disabled anyway
+        variant=group.current()
         try:
-            kwargs=row.values()
+            kwargs=group.values()
         except ValueError as e:
             self.append("! %s"%e)
             return
-        func=getattr(M,row.spec["func"])
-        shown=", ".join("%s=%r"%(k,v) for k,v in kwargs.items())
-        self.append(">>> %s(%s)"%(row.spec["func"],shown))
+        func=getattr(M,variant["func"])
+        self.append(">>> %s(%s)"%(variant["func"],
+                                  ", ".join("%s=%r"%kv for kv in kwargs.items())))
         self.worker=Worker(func,kwargs,self)
         self.worker.line.connect(self.append)
         self.worker.done.connect(self.finished)
-        self._running(True,row.spec["stoppable"],row.spec["label"])
+        self._running(True,variant["stoppable"],variant["label"])
         self.worker.start()
 
     def stop(self):
-        self.append("--- stop requested, finishing the current image ---")
+        self.append("--- stop requested, finishing the current step ---")
         self.stopButton.setEnabled(False)
         M.leem_abort.set()
 
@@ -279,10 +442,12 @@ class LEEMWindow(QtWidgets.QWidget):
         self.worker=None
         self._running(False,False,"")
         self.append("--- finished ---")
+        self.refresh_starts()           # a ramp will have moved the setpoint
 
     def _running(self,busy,stoppable,label):
-        for row in self.rows:
-            row.set_enabled(not busy)
+        for g in self.groups:
+            g.set_enabled(not busy)
+        self.imaging.set_enabled(not busy)
         self.stopButton.setEnabled(busy and stoppable)
         self.status.setText(("Running: "+label) if busy else "Idle")
 

@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.4 03/08/2026 GUI reorganised into groups: Image(s), IV, Sample temperature ramp and Doser ramp, each choosing one variant with radio buttons and having its own Run button and a preview line showing the exact call it will make. Exposure and average moved to a shared "Imaging conditions" panel, E0/Ef/dE to a "Scan voltage" panel inside the IV group. The ramps show the PID setpoint they will start from as a read-only field, because the macros always ramp from the current setpoint and there is no way to pass a starting value. For the shared panel to work, leemIV, leemIV_ROI, leemIVandObj, leemRampTemperatureROI and leemARRESrun now accept exp=None and avg=None meaning "use whatever the camera is set to", as leemSaveSingleImage and leemSequenceImages already did; their defaults are unchanged, so calling them from the command line behaves exactly as before.
+#
 # v3.3 03/08/2026 GUI average presets now go up to 64, matching UView, and the field is labelled "Average (1=sliding)" so the sliding average is visible without reading the docstring. The boxes stay editable, so any value in between can still be typed.
 #
 # v3.2 03/08/2026 Added the three PID ramps to the GUI: leemRampTemperatureTo, doser1RampPowerTo and doser2RampPowerTo. They all go through pidRampTo, which now polls leem_checkstop() and waits on leem_abort, so the Stop button works for them and CTRL-C is caught instead of escaping as a traceback. A ramp needs no cleanup, it just stops where it got to, and the setpoint it reached is printed. pressure_limit is not offered in the GUI because the pressure check inside pidRampTo is commented out and the parameter currently does nothing.
@@ -37,7 +39,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.3"
+__version__ = "3.4"
 
 from datetime import date
 import tango
@@ -295,6 +297,10 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
+    if exp is None:
+        exp=oldExposure
+    if avg is None:
+        avg=oldAverage
     uview.ContinousAcquisition=False
     time.sleep(0.5)
     uview.Exposure=exp
@@ -348,6 +354,10 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
+    if exp is None:
+        exp=oldExposure
+    if avg is None:
+        avg=oldAverage
     uview.ContinousAcquisition=False
     time.sleep(0.5)
     uview.Exposure=exp
@@ -425,6 +435,10 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
+    if exp is None:
+        exp=oldExposure
+    if avg is None:
+        avg=oldAverage
     uview.ContinousAcquisition=False
     time.sleep(0.5)
     uview.Exposure=exp
@@ -490,6 +504,10 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
     start=leem_pid.SetPoint
     oldExposure=uview.Exposure
     oldAverage=uview.Average
+    if exp is None:
+        exp=oldExposure
+    if avg is None:
+        avg=oldAverage
     uview.ContinousAcquisition=False
     time.sleep(0.5)
     uview.Exposure=exp
@@ -596,6 +614,10 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     expname="ARRES"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
+    if exp is None:
+        exp=oldExposure
+    if avg is None:
+        avg=oldAverage
     uview.ContinousAcquisition=False
     time.sleep(0.5)
     uview.Exposure=exp
