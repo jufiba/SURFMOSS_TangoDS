@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.2 03/08/2026 Added the three PID ramps to the GUI: leemRampTemperatureTo, doser1RampPowerTo and doser2RampPowerTo. They all go through pidRampTo, which now polls leem_checkstop() and waits on leem_abort, so the Stop button works for them and CTRL-C is caught instead of escaping as a traceback. A ramp needs no cleanup, it just stops where it got to, and the setpoint it reached is printed. pressure_limit is not offered in the GUI because the pressure check inside pidRampTo is commented out and the parameter currently does nothing.
+#
 # v3.1 01/08/2026 Added a Qt acquisition GUI, in LEEMgui.py, opened with gui(). It exposes single image, sequence, IV, IV with ROI, IV with objective and the temperature ramp, each with its parameters, a Stop button and a log box. ARRES stays command line only because leemARRESset() asks for input() at the terminal. Acquisitions run in a worker thread, so a stop cannot use CTRL-C: instead leem_abort is set and the loops poll it through leem_checkstop(), which raises KeyboardInterrupt so a GUI stop unwinds through exactly the same cleanup as CTRL-C. The sleeps in leemSequenceImages and leemRampTemperatureROI now use leem_abort.wait(), so stopping does not have to wait out the delay. leemIVandObj gained the KeyboardInterrupt handler it never had, which also fixes CTRL-C there leaving the camera stopped at the wrong exposure.
 #
 # v3.0 31/07/2026 Removed all live plotting, so the macros no longer open windows and no longer depend on the ipython --pylab namespace. show(), savefig(), zeros(), array() and flip() were being used without ever being imported, and only resolved because the file is run into a --pylab session; they are now numpy./Figure. calls. Plots are written to files with matplotlib's Figure object API (no pyplot, no backend, no global state), so they also work from a worker thread. leemIV_ROI has lost its plot parameter, it always writes plot.png/plot.pdf now, and no longer crashes on its default arguments (fig was used outside the plot guard). leemARRESrun writes arres0/arres1 .pdf and .png and no longer leaves the camera stopped on the two-direction path. Fixed a python2 leftover bare print. The module can now be imported, which is what the GUI needs.
@@ -33,7 +35,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.1"
+__version__ = "3.2"
 
 from datetime import date
 import tango
@@ -467,12 +469,17 @@ def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
         r=numpy.arange(start,final,-step)
     else:
         r=numpy.arange(start,final,step)
-    for a in r:
-        pid.SetPoint=a
-        print("Going to %f"%a)
-        #while (gaugeMCH.Pressure_IG1 > pressure_limit):
-        #     time.sleep(10)
-        time.sleep(time_step)
+    try:
+        for a in r:
+            leem_checkstop()
+            pid.SetPoint=a
+            print("Going to %f"%a)
+            #while (gaugeMCH.Pressure_IG1 > pressure_limit):
+            #     time.sleep(10)
+            leem_abort.wait(time_step)
+    except KeyboardInterrupt:
+        # Nothing to restore, a ramp just stops where it got to.
+        print("Ok, stopping the ramp. Setpoint left at %f"%pid.SetPoint)
 
 def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveImage=False):
     """ leemRampTemperatureROI( temp, temp_step=1.0, time_step=1.0, exposure=100, average=0, saveimage=False)"""

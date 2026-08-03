@@ -74,6 +74,20 @@ ACQUISITIONS=[
                  _param("exp","Exposure (ms)",float,default="100",choices=_EXPOSURES),
                  _param("avg","Average",int,default="0",choices=_AVERAGES),
                  _param("saveImage","Save images",bool,default=False)]),
+    # Ramps only move a PID setpoint, they take no images. pressure_limit is not
+    # offered because the pressure check inside pidRampTo is commented out.
+    dict(label="Ramp temperature (PID must be on)", func="leemRampTemperatureTo", stoppable=True,
+         params=[_param("temp","Target T (C)",float,default="0.0"),
+                 _param("temp_step","T step (C)",float,default="1.0"),
+                 _param("time_step","Time step (s)",float,default="1.0")]),
+    dict(label="Ramp doser 1 power (PID must be on)", func="doser1RampPowerTo", stoppable=True,
+         params=[_param("power","Target power (W)",float,default="0.0"),
+                 _param("power_step","Power step (W)",float,default="1.0"),
+                 _param("time_step","Time step (s)",float,default="1.0")]),
+    dict(label="Ramp doser 2 power (PID must be on)", func="doser2RampPowerTo", stoppable=True,
+         params=[_param("power","Target power (W)",float,default="0.0"),
+                 _param("power_step","Power step (W)",float,default="1.0"),
+                 _param("time_step","Time step (s)",float,default="1.0")]),
 ]
 
 
