@@ -23,6 +23,8 @@ from PyTango import AttrQuality, DispLevel, DevState
 from PyTango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(PfeifferHiscroll.additionnal_import) ENABLED START #
+import os
+import sys
 import serial
 # PROTECTED REGION END #    //  PfeifferHiscroll.additionnal_import
 
@@ -239,6 +241,9 @@ class PfeifferHiscroll(Device, metaclass=DeviceMeta):
 
 def main(args=None, **kwargs):
     # PROTECTED REGION ID(PfeifferHiscroll.main) ENABLED START #
+    # pip install -e leaves an absolute path in argv[0], and PyTango 10 uses
+    # argv[0] as the server name, which the database registers as the bare name.
+    sys.argv[0] = os.path.basename(sys.argv[0])
     return run((PfeifferHiscroll,), args=args, **kwargs)
     # PROTECTED REGION END #    //  PfeifferHiscroll.main
 

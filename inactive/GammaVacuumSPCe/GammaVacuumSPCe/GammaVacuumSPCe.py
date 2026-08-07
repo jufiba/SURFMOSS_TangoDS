@@ -25,6 +25,8 @@ from PyTango import DispLevel, DevState
 
 # Additional imports
 import socket
+import os
+import sys
 
 __all__ = ["GammaVacuumSPCe", "main"]
 
@@ -275,6 +277,9 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
 # ----------
 
 def main(args=None, **kwargs):
+    # pip install -e leaves an absolute path in argv[0], and PyTango 10 uses
+    # argv[0] as the server name, which the database registers as the bare name.
+    sys.argv[0] = os.path.basename(sys.argv[0])
     return run((GammaVacuumSPCe,), args=args, **kwargs)
 
 if __name__ == '__main__':

@@ -46,6 +46,7 @@ import PyTango
 import sys
 # Add additional import
 #----- PROTECTED REGION ID(PIDController.additionnal_import) ENABLED START -----#
+import os
 
 from threading import Thread
 import time
@@ -388,6 +389,9 @@ class PIDControllerClass(PyTango.DeviceClass):
 
 
 def main():
+    # pip install -e leaves an absolute path in argv[0], and PyTango 10 uses
+    # argv[0] as the server name, which the database registers as the bare name.
+    sys.argv[0] = os.path.basename(sys.argv[0])
     try:
         py = PyTango.Util(sys.argv)
         py.add_class(PIDControllerClass, PIDController, 'PIDController')

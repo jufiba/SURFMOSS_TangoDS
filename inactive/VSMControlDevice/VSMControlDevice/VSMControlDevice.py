@@ -23,6 +23,7 @@ from PyTango import AttrQuality, DispLevel, DevState
 from PyTango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(VSMControlDevice.additionnal_import) ENABLED START #
+import sys
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -472,6 +473,9 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
 
 def main(args=None, **kwargs):
     # PROTECTED REGION ID(VSMControlDevice.main) ENABLED START #
+    # pip install -e leaves an absolute path in argv[0], and PyTango 10 uses
+    # argv[0] as the server name, which the database registers as the bare name.
+    sys.argv[0] = os.path.basename(sys.argv[0])
     return run((VSMControlDevice,), args=args, **kwargs)
     # PROTECTED REGION END #    //  VSMControlDevice.main
 
