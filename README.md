@@ -164,3 +164,4 @@ The `docs/` directory holds the longer-form documentation:
 | `LEEMmacros.md` | LEEM acquisition macros: versioning, change history with reasoning, invariants to preserve |
 | `LEEMgui.md` | Acquisition GUI: architecture, layout decisions, how to add an acquisition, testing |
 | `surfmoss-device-server-migration-reference.md` | Device server restructuring and Trixie migration reference |
+| `panic-python3-qt-port-estimate.md` | What porting PANIC to Python 3 and current Qt would cost, and the alternatives |
