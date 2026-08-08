@@ -4,9 +4,16 @@ pytango
 # Serial communication — required by most active servers
 pyserial
 
-# Scientific computing — inactive servers only
-numpy        # inactive/VSMControlDevice, inactive/WisselMCA
-matplotlib   # inactive/VSMControlDevice, scripts/
+# Scientific computing
+numpy        # WisselMCA, scripts/, inactive/VSMControlDevice
+matplotlib   # scripts/, inactive/VSMControlDevice
+
+# USB HID — required by WisselMCA.
+# Must be cython-hidapi (PyPI "hidapi"), which provides hid.device().
+# The PyPI package called "hid" is a different project: it exposes hid.Device()
+# and would fail with AttributeError here.
+# Needs the libhidapi shared library at runtime (Debian: libhidapi-hidraw0).
+hidapi
 
 # Qt GUI — only needed for scripts/LEEMgui.py (LEEMmacros.gui())
 PySide6

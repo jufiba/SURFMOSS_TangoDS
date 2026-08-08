@@ -70,6 +70,8 @@ TempSensorDS18B20 = "TempSensorDS18B20:main"
 VarianTV301nav = "VarianTV301nav:main"
 # WaterSwitch
 WaterSwitch = "WaterSwitch:main"
+# WisselMCA
+WisselMCA = "WisselMCA:main"
 # tti604
 Tti604 = "Tti604:main"
 
@@ -106,6 +108,7 @@ packages = [
     "Tti604",
     "VarianTV301nav",
     "WaterSwitch",
+    "WisselMCA",
 ]
 
 [tool.setuptools.package-dir]
@@ -140,6 +143,7 @@ TempSensorDS18B20 = "TempSensorDS18B20/TempSensorDS18B20"
 Tti604            = "Tti604/Tti604"
 VarianTV301nav    = "VarianTV301nav/VarianTV301nav"
 WaterSwitch       = "WaterSwitch/WaterSwitch"
+WisselMCA         = "WisselMCA/WisselMCA"
 
 [tool.setuptools.package-data]
 "*" = ["*.xmi", "*.rst", "*.md"]

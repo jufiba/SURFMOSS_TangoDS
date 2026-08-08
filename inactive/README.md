@@ -21,7 +21,6 @@ the relevant Starter — and complete the work noted below first.
 | V4L2Camera | Camera not in use now | Re-add `python3-opencv` (apt, NOT pip on ARM). |
 | VSMControlDevice | Not in use now | Needs `python3-numpy`; confirm which host runs it. |
 | WebCam | Camera not in use now | (camera stack) |
-| WisselMCA | Still using the Wissel Windows software for the MCAs | Encoding fix already done (UTF-8). Test against a real MCA before deploying. |
 
 ## Separate case: PANIC (PyAlarm)
 
