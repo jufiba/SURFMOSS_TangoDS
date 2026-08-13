@@ -5,7 +5,7 @@ the new Trixie NFS root (`/nfs/pi-trixie` on wolframite) and reconciling them at
 the clean-DB cutover. Built from the Python-3 audit, the entry-point inventory,
 and the dependency map._
 
-_Last updated: 08-ago-2026_
+_Last updated: 13-ago-2026_
 
 ---
 
@@ -106,9 +106,10 @@ ExecStart=/usr/lib/tango/Databaseds 2 -ORBendPoint giop:tcp:0.0.0.0:10000 -ORBen
 
 - Devolverla al laboratorio y validar LeyboldIG3 (puerto serie) y TempSensorDS18B20
   (sensor 1-Wire). Ambos fallan ahora solo por hardware ausente.
-- **WisselMCA/1** está en su lista de servidores controlados pero vive en
-  `inactive/` → el Starter avisa de que no lo encuentra. Decidir si se revive
-  (necesita `hid` y `numpy`) o se quita de su lista.
+- **WisselMCA/1** ✅ reactivado (13-ago-2026): devuelto a la raíz del repositorio y
+  dado de alta en las tres listas del `pyproject.toml`, así que ya se instala y el
+  Starter lo encontrará. Falta instalar sus dependencias en la raíz Trixie y
+  probarlo contra un MCA real (ver _Dependencias de WisselMCA_ más abajo).
 - La ruta serie de LeyboldIG3 (`/dev/serial/by-path/platform-3f980000.usb-...`)
   codifica el puerto USB físico: si se cambia de conector, hay que actualizar la
   propiedad.
@@ -179,14 +180,18 @@ import fails at launch.
 
 **The live-server list below is what all three must agree on.**
 
-Tally: **31 live · 9 inactive · 3 deprecated** (= 43 entry-point servers), plus
+Tally: **32 live · 8 inactive · 3 deprecated** (= 43 entry-point servers), plus
 RaspberryButton_old (dead duplicate, remove) and PANIC (third-party, separate).
+
+_(Era 31 · 9 hasta el 13-ago-2026, cuando WisselMCA pasó de inactivo a vivo. El
+recuento del chroot de arriba, con fecha 30-jun-2026, es anterior a ese cambio: al
+reinstalar deben salir 32 wrappers, no 31.)_
 
 ---
 
 ## Server inventory
 
-### LIVE — install on the Trixie root (31)
+### LIVE — install on the Trixie root (32)
 
 Entry point in `[project.scripts]`, installed, registered in the new DB.
 
@@ -195,16 +200,19 @@ AGPolaritySwitch, AMLPGC1, ArduinoDAC, ArduinoMotor, ArduinoPt, MFC
 HuttingerPFGRF, Hygrometer, Itech6000C, CenterOneGauge (LeyboldCenterOne),
 LeyboldIG3, MKSGauge, Motor, NetworkUPSTool, PfeifferHiscroll, PfeifferTC100,
 PfeifferTU400, RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, SRIlockin830,
-TempSensorDS18B20, VarianTV301nav, WaterSwitch, Tti604, **PIDController**.
+TempSensorDS18B20, VarianTV301nav, WaterSwitch, Tti604, **PIDController**,
+**WisselMCA**.
 
-### INACTIVE — keep in repo, do NOT install (9)
+### INACTIVE — keep in repo, do NOT install (8)
 
 Move to `inactive/`. Code present but hardware idle or work remains. Not in
 `[project.scripts]`, not registered in the new DB until revived. See
 `inactive/README.md` for per-server revival notes.
 
 GammaIonPump, GammaVacuumSPCe, Keithley2100, MCC1208LS, PfeifferDCU002,
-V4L2Camera, VSMControlDevice, WebCam, WisselMCA.
+V4L2Camera, VSMControlDevice, WebCam.
+
+_(WisselMCA salió de esta lista el 13-ago-2026 — reactivado, ver más abajo.)_
 
 ### DEPRECATED — dead hardware, remove from install set permanently (3)
 
@@ -265,7 +273,8 @@ pip install --break-system-packages simple-pid w1thermsensor
   import was removed. No live server imports numpy (grep-verified). Re-add
   `python3-numpy` if/when ElmitecUview's ImageData attribute is implemented.
 - **matplotlib** — ElmitecUview corrected to need neither numpy nor matplotlib; the
-  other users (VSMControlDevice, WisselMCA) are inactive.
+  other user (VSMControlDevice) is inactive. ⚠️ El «no live server imports numpy»
+  de arriba dejó de ser cierto al reactivar WisselMCA, que sí lo usa.
 - **opencv / python3-opencv** — only V4L2Camera (inactive).
 - **usb_1208LS / Linux_Drivers source build** — only MCC1208LS (inactive). The
   single nastiest install, gone.
@@ -301,9 +310,10 @@ Removed at clean import: **VarianMultiGauge/1** (deprecated — was red in Astor
 
 `LeyboldIG3/1`, `TempSensorDS18B20/1`, `WisselMCA/1`.
 
-WisselMCA está en `inactive/` → no instalado. El Starter lo reporta como
-no encontrado en `StartDsPath`. Decidir: revivirlo (necesita `hid`, `numpy`) o
-quitarlo de la lista de servidores controlados de esta Pi.
+WisselMCA ✅ reactivado (13-ago-2026): ya está en la raíz del repositorio y en el
+`pyproject.toml`, así que se instala y el Starter lo encontrará en `StartDsPath`.
+Pendiente: sus dependencias en la raíz Trixie y la prueba contra un MCA real (ver
+_Dependencias de WisselMCA_ más abajo).
 
 Ya migrada a `/nfs/pi-trixie` (Debian 13). Los otros dos servidores arrancan y
 fallan solo por hardware ausente.
@@ -330,18 +340,96 @@ cuanto el instrumento cambiaba de VLAN el DS dejaba de encontrarlo.
 
 **Actualizadas en la Fase 2** (los tres instrumentos están en el LEEM / VSM).
 
-Pendiente de comprobar que no queda ninguna más:
-```bash
-grep -rn '10\.10\.99' /opt/tango/SURFMOSS_TangoDS/*/*/*.py
-```
+**Externalizadas a propiedades de device el 13-ago-2026** (commits `2d749c8` y
+`eba613b`). Los tres DS ya declaraban las propiedades y tenían la línea correcta
+escrita justo encima de la literal, comentada — es decir, lo que hubiera en la
+base de datos se estaba ignorando. Ahora manda la BD:
 
-Mejora recomendada a futuro: sacar esas direcciones a **propiedades de device**
-(`device_property_list`), igual que ya hacen los DS de puerto serie con su ruta.
-Así se cambian desde Jive sin tocar código y sobreviven a futuros cambios de red.
+| DS | propiedad | valor por defecto | puerto |
+|---|---|---|---|
+| ElmitecLEEM2k | `IP` | `tvips.lab` | 5566 |
+| ElmitecUview | `UviewIP` | `tvips.lab` | 5570 |
+| Itech6000C | `IP` | `PWSItech6000VSM.lab` | 30000 |
+
+`tvips` es el ordenador del LEEM, que controla también la cámara TVIPS XFS216.
+
+Los defaults se pusieron a la dirección real, así que una propiedad sin poner en
+la BD da el comportamiento correcto. ⚠️ Al revés sí hay riesgo: si un dispositivo
+tiene ya `IP` o `UviewIP` escrita en la base de datos con un valor obsoleto, ahora
+manda esa y el DS fallará al reiniciar. Comprobar en Jive antes del arranque.
+
+Tres detalles que salieron al hacerlo:
+
+- **ElmitecUview tenía tres direcciones distintas apuntadas**: `leem.labo` en el
+  código, `leemPC.labo` como default del `.py` y `10.10.99.29` en el `.xmi`.
+  Unificadas.
+- **ElmitecLEEM2k no tenía default ninguno.** Con la propiedad sin poner,
+  `self.IP` habría salido cadena vacía y el `connect()` habría fallado en
+  silencio — el `except` desnudo se lo traga y deja el DS en FAULT.
+- No hay más DS de red: el resto es serie, USB o GPIB. El
+  `grep -rn '10\.10\.99'` sobre los device servers ya da vacío.
 
 Nota: los DS de puerto serie tienen un problema análogo pero distinto — la ruta
 `/dev/serial/by-path/...` codifica el conector USB físico. No cambia con la red,
 pero sí si se enchufa el conversor en otro puerto de la Pi.
+
+---
+
+## Dependencias de WisselMCA (reactivado 13-ago-2026)
+
+El servidor volvió a la raíz del repositorio y es la **32ª entrada** del
+`pyproject.toml` (`[project.scripts]`, `[tool.setuptools.packages]` y
+`[tool.setuptools.package-dir]`). El arreglo de `argv[0]` ya lo tenía, porque la
+pasada de los 41 servidores cubrió también los inactivos.
+
+Necesita **numpy** y un binding HID. Y ahí está la trampa: el código llama a
+
+```python
+dev = hid.device()          # minúscula
+```
+
+Esa API es la de **cython-hidapi**, que en PyPI se publica como **`hidapi`**. El
+paquete de PyPI llamado literalmente `hid` es otro proyecto distinto: expone
+`hid.Device()` con mayúscula y daría `AttributeError` al abrir el aparato. Los dos
+ocupan el mismo nombre de módulo al importar, así que el error solo se ve en
+ejecución, no al instalar.
+
+En la raíz Trixie:
+
+```bash
+apt install python3-numpy libhidapi-hidraw0
+apt install python3-hid        # comprobar cuál es, ver abajo
+```
+
+Comprobación que zanja la duda:
+
+```bash
+python3 -c "import hid; print(hid.__file__, hasattr(hid,'device'), hasattr(hid,'Device'))"
+```
+
+Tiene que salir `device=True`. Si sale `Device=True`, es el paquete equivocado y
+hay que usar `pip install hidapi --break-system-packages`.
+
+`libhidapi-hidraw0` es la biblioteca C que el binding carga en ejecución; sin ella
+el `import` falla aunque el paquete Python esté instalado.
+
+⚠️ Esto rompe el «net pip footprint: two pure-Python packages» de la sección de
+dependencias: cython-hidapi es una extensión compilada. En ARM64 hay rueda o se
+compila contra `libhidapi-dev`, por eso conviene el paquete de apt si sirve.
+
+**Permisos**: el DS abre el dispositivo por VID/PID `0x0925:0x0035` a través de
+`/dev/hidraw*`, accesible solo por root por defecto. Si el servidor corre como
+usuario normal bajo el Starter hace falta una regla udev:
+
+```
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0925", ATTRS{idProduct}=="0035", MODE="0660", GROUP="plugdev"
+```
+
+y el usuario en `plugdev`. Es la causa más habitual de que uno de estos arranque
+bien y falle al abrir el aparato.
+
+Sigue **sin probar contra un MCA real** — era la advertencia de
+`inactive/README.md` y continúa vigente.
 
 ---
 
@@ -374,26 +462,30 @@ ls /usr/local/bin/ | grep -iE 'Mitutoyo|Specs|VarianMultiGauge|Gamma|Keithley|MC
 ## Cutover checklist
 
 1. **Repo**
-   - [ ] Top-level `pyproject.toml` lists exactly the **31** live entry points
+   - [ ] Top-level `pyproject.toml` lists exactly the **32** live entry points
          (build-backend = `setuptools.build_meta`).
    - [ ] PIDController added as a live entry; its Makefile removed.
-   - [ ] 3 dead → `deprecated/`, 9 paused → `inactive/`, both excluded in
+   - [ ] 3 dead → `deprecated/`, 8 paused → `inactive/`, both excluded in
          `packages.find`.
    - [ ] RaspberryButton_old removed.
-   - [ ] WisselMCA encoding fix committed (done) — note it lives in `inactive/`.
+   - [x] WisselMCA encoding fix committed, y el servidor reactivado el
+         13-ago-2026: vive en la raíz y está en el `pyproject.toml` (32ª entrada).
 2. **Trixie root install (in chroot, binds mounted)**
-   - [ ] apt deps: `python3-tango python3-serial python3-rpi.gpio`.
-   - [ ] pip deps: `simple-pid w1thermsensor` (`--break-system-packages`).
+   - [ ] apt deps: `python3-tango python3-serial python3-rpi.gpio`,
+         más `python3-numpy libhidapi-hidraw0` para WisselMCA.
+   - [ ] pip deps: `simple-pid w1thermsensor` (`--break-system-packages`),
+         más el binding HID de WisselMCA (ver sección de dependencias).
    - [ ] `pip install -e --no-deps --break-system-packages .` from repo root.
-   - [ ] All 31 live wrappers present in `/usr/local/bin`; no parked ones.
+   - [ ] All 32 live wrappers present in `/usr/local/bin`; no parked ones.
    - [ ] `/etc/tangorc` = `TANGO_HOST=tangodb.lab:10000`.
    - [ ] **Unmount binds** (`/dev`, `/proc`, `/sys`) before any exportfs/rsync.
 3. **Clean DB**
-   - [ ] Build fresh DB with the 31 live servers only — parked ones never entered.
+   - [ ] Build fresh DB with the 32 live servers only — parked ones never entered.
    - [ ] Each Pi's Starter control list matches its live-server set.
    - [ ] Disable wolframite's own Starter (DB host, runs no instrument servers).
-   - [ ] **IPs hardcodeadas** externalizadas a propiedades y registradas con la
-         dirección de la red nueva (ver sección arriba).
+   - [x] **IPs hardcodeadas** externalizadas a propiedades (13-ago-2026). Queda
+         verificar en Jive que ningún dispositivo arrastra un valor obsoleto en
+         `IP` / `UviewIP`, que ahora sí manda (ver sección arriba).
 4. **Per-server validation (on a test Pi booted off Trixie root)**
    - [ ] Bring servers up **one at a time** under the Starter.
    - [ ] Hardware/serial servers last, when the instrument is free.
