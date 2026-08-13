@@ -92,7 +92,7 @@ class Itech6000C(Device, metaclass=DeviceMeta):
     # -----------------
 
     IP = device_property(
-        dtype='str', default_value="10.10.99.41"
+        dtype='str', default_value="PWSItech6000VSM.lab"
     )
 
     Port = device_property(

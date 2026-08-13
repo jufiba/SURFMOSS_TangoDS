@@ -93,7 +93,7 @@ class ElmitecLEEM2k(Device, metaclass=DeviceMeta):
     # -----------------
 
     IP = device_property(
-        dtype='str', default_value="leem.labo"
+        dtype='str', default_value="tvips.lab"
     )
 
     Port = device_property(

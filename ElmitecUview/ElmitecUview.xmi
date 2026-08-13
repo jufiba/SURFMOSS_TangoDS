@@ -8,7 +8,7 @@
     <deviceProperties name="UviewIP" description="">
       <type xsi:type="pogoDsl:StringType"/>
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
-      <DefaultPropValue>leem.labo</DefaultPropValue>
+      <DefaultPropValue>tvips.lab</DefaultPropValue>
     </deviceProperties>
     <deviceProperties name="UviewPort" description="">
       <type xsi:type="pogoDsl:UIntType"/>

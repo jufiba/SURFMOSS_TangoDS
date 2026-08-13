@@ -117,7 +117,7 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
     # -----------------
 
     UviewIP = device_property(
-        dtype='str', default_value="leem.labo"
+        dtype='str', default_value="tvips.lab"
     )
 
     UviewPort = device_property(

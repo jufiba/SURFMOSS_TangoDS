@@ -8,7 +8,7 @@
     <deviceProperties name="IP" description="">
       <type xsi:type="pogoDsl:StringType"/>
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
-      <DefaultPropValue>10.10.99.41</DefaultPropValue>
+      <DefaultPropValue>PWSItech6000VSM.lab</DefaultPropValue>
     </deviceProperties>
     <deviceProperties name="Port" description="">
       <type xsi:type="pogoDsl:UIntType"/>
