@@ -64,8 +64,7 @@ class ElmitecLEEM2k(Device, metaclass=DeviceMeta):
         else:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                #self.s.connect((self.IP, self.Port))
-                self.s.connect(("leem.labo",5566))
+                self.s.connect((self.IP, self.Port))
             except:
                 self.ElmitecLEEM2kConnected = False
                 self.set_state(PyTango.DevState.FAULT)
@@ -94,11 +93,11 @@ class ElmitecLEEM2k(Device, metaclass=DeviceMeta):
     # -----------------
 
     IP = device_property(
-        dtype='str',
+        dtype='str', default_value="leem.labo"
     )
 
     Port = device_property(
-        dtype='uint16',
+        dtype='uint16', default_value=5566
     )
 
     # ----------

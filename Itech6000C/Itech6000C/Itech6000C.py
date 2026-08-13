@@ -68,8 +68,7 @@ class Itech6000C(Device, metaclass=DeviceMeta):
         else:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                #self.s.connect((self.IP, self.Port))
-                self.s.connect(("10.10.99.41",30000))
+                self.s.connect((self.IP, self.Port))
             except:
                 self.ItechConnected = False
                 self.set_state(PyTango.DevState.FAULT)
