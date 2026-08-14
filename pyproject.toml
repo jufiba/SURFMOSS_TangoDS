@@ -30,6 +30,8 @@ ElmitecLEEM2k = "ElmitecLEEM2k:main"
 ElmitecUview = "ElmitecUview:main"
 # FUGMCP
 FUGMCP = "FUGMCP:main"
+# GammaVacuumSPCe
+GammaVacuumSPCe = "GammaVacuumSPCe:main"
 # HuttingerPFG-DC
 HuttingerPFGDC = "HuttingerPFGDC:main"
 # HuttingerPFG-RF
@@ -87,6 +89,7 @@ packages = [
     "ElmitecLEEM2k",
     "ElmitecUview",
     "FUGMCP",
+    "GammaVacuumSPCe",
     "HuttingerPFGDC",
     "HuttingerPFGRF",
     "Hygrometer",
@@ -122,6 +125,7 @@ CryoCon32         = "CryoCon32/CryoCon32"
 ElmitecLEEM2k     = "ElmitecLEEM2k/ElmitecLEEM2k"
 ElmitecUview      = "ElmitecUview/ElmitecUview"
 FUGMCP            = "FUGMCP/FUGMCP"
+GammaVacuumSPCe   = "GammaVacuumSPCe/GammaVacuumSPCe"
 HuttingerPFGDC    = "HuttingerPFGDC/HuttingerPFGDC"
 HuttingerPFGRF    = "HuttingerPFGRF/HuttingerPFGRF"
 Hygrometer        = "Hygrometer/Hygrometer"

@@ -180,18 +180,18 @@ import fails at launch.
 
 **The live-server list below is what all three must agree on.**
 
-Tally: **32 live · 8 inactive · 3 deprecated** (= 43 entry-point servers), plus
+Tally: **33 live · 7 inactive · 3 deprecated** (= 43 entry-point servers), plus
 RaspberryButton_old (dead duplicate, remove) and PANIC (third-party, separate).
 
-_(Era 31 · 9 hasta el 13-ago-2026, cuando WisselMCA pasó de inactivo a vivo. El
-recuento del chroot de arriba, con fecha 30-jun-2026, es anterior a ese cambio: al
-reinstalar deben salir 32 wrappers, no 31.)_
+_(Era 31 · 9 hasta el 13-ago-2026, cuando WisselMCA y GammaVacuumSPCe pasaron de
+inactivos a vivos. El recuento del chroot de arriba, con fecha 30-jun-2026, es
+anterior a ese cambio: al reinstalar deben salir 33 wrappers, no 31.)_
 
 ---
 
 ## Server inventory
 
-### LIVE — install on the Trixie root (32)
+### LIVE — install on the Trixie root (33)
 
 Entry point in `[project.scripts]`, installed, registered in the new DB.
 
@@ -201,18 +201,19 @@ HuttingerPFGRF, Hygrometer, Itech6000C, CenterOneGauge (LeyboldCenterOne),
 LeyboldIG3, MKSGauge, Motor, NetworkUPSTool, PfeifferHiscroll, PfeifferTC100,
 PfeifferTU400, RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, SRIlockin830,
 TempSensorDS18B20, VarianTV301nav, WaterSwitch, Tti604, **PIDController**,
-**WisselMCA**.
+**WisselMCA**, **GammaVacuumSPCe**.
 
-### INACTIVE — keep in repo, do NOT install (8)
+### INACTIVE — keep in repo, do NOT install (7)
 
 Move to `inactive/`. Code present but hardware idle or work remains. Not in
 `[project.scripts]`, not registered in the new DB until revived. See
 `inactive/README.md` for per-server revival notes.
 
-GammaIonPump, GammaVacuumSPCe, Keithley2100, MCC1208LS, PfeifferDCU002,
+GammaIonPump, Keithley2100, MCC1208LS, PfeifferDCU002,
 V4L2Camera, VSMControlDevice, WebCam.
 
-_(WisselMCA salió de esta lista el 13-ago-2026 — reactivado, ver más abajo.)_
+_(WisselMCA y GammaVacuumSPCe salieron de esta lista el 13-ago-2026 —
+reactivados, ver más abajo.)_
 
 ### DEPRECATED — dead hardware, remove from install set permanently (3)
 
@@ -345,13 +346,22 @@ cuanto el instrumento cambiaba de VLAN el DS dejaba de encontrarlo.
 escrita justo encima de la literal, comentada — es decir, lo que hubiera en la
 base de datos se estaba ignorando. Ahora manda la BD:
 
-| DS | propiedad | valor por defecto | puerto |
+**Nombres unificados el 13-ago-2026**: los cuatro DS de red usan ahora `IP` y
+`Port`. ElmitecUview los tenía como `UviewIP` / `UviewPort` y GammaVacuumSPCe
+llamaba `Host` al suyo.
+
+| DS | propiedad | valor por defecto | `Port` |
 |---|---|---|---|
 | ElmitecLEEM2k | `IP` | `tvips.lab` | 5566 |
-| ElmitecUview | `UviewIP` | `tvips.lab` | 5570 |
+| ElmitecUview | `IP` | `tvips.lab` | 5570 |
 | Itech6000C | `IP` | `PWSItech6000VSM.lab` | 30000 |
+| GammaVacuumSPCe | `IP` | **sin default — hay que ponerlo en la BD** | 23 |
 
 `tvips` es el ordenador del LEEM, que controla también la cámara TVIPS XFS216.
+
+⚠️ El renombrado tiene un efecto en la base de datos: un valor guardado bajo
+`UviewIP`, `UviewPort` o `Host` queda huérfano y el DS no lo verá. Si algún
+dispositivo los tenía puestos, hay que reescribirlos con el nombre nuevo.
 
 Los defaults se pusieron a la dirección real, así que una propiedad sin poner en
 la BD da el comportamiento correcto. ⚠️ Al revés sí hay riesgo: si un dispositivo
@@ -433,6 +443,30 @@ Sigue **sin probar contra un MCA real** — era la advertencia de
 
 ---
 
+## GammaVacuumSPCe (reactivado 13-ago-2026)
+
+Fuente de la bomba iónica DIGITEL SPCe de Gamma Vacuum, por Telnet sobre TCP
+(puerto 23 por defecto). Devuelto a la raíz y dado de alta como **33ª entrada** del
+`pyproject.toml`. El arreglo de `argv[0]` ya lo tenía.
+
+Sin dependencias nuevas: solo `socket` y `struct`, de la biblioteca estándar.
+
+Dos cosas que lo distinguen del resto:
+
+- **No tiene `.xmi`.** Es el único device server del repositorio en esa situación
+  — se escribió a mano, no con POGO. Consecuencia práctica: **POGO no puede
+  regenerarlo ni editarlo**. POGO trabaja desde el `.xmi`, no desde el `.py`, así
+  que añadir regiones protegidas al código no basta; habría que reconstruir el
+  modelo declarando atributos, comandos y propiedades, y volver a generar.
+- **Nunca se ha probado contra el controlador real.** Era la nota de
+  `inactive/README.md`. Que ahora se instale no cambia eso.
+
+La propiedad `IP` **no tiene valor por defecto** a propósito: no hay una dirección
+conocida que poner. Hay que fijarla en la base de datos al registrar el
+dispositivo, o el `connect()` fallará con cadena vacía.
+
+---
+
 ## Handling deprecated/inactive servers in the repo
 
 A server installs only if it is **both** discovered by `packages.find` **and**
@@ -462,25 +496,30 @@ ls /usr/local/bin/ | grep -iE 'Mitutoyo|Specs|VarianMultiGauge|Gamma|Keithley|MC
 ## Cutover checklist
 
 1. **Repo**
-   - [ ] Top-level `pyproject.toml` lists exactly the **32** live entry points
+   - [ ] Top-level `pyproject.toml` lists exactly the **33** live entry points
          (build-backend = `setuptools.build_meta`).
    - [ ] PIDController added as a live entry; its Makefile removed.
-   - [ ] 3 dead → `deprecated/`, 8 paused → `inactive/`, both excluded in
+   - [ ] 3 dead → `deprecated/`, 7 paused → `inactive/`, both excluded in
          `packages.find`.
    - [ ] RaspberryButton_old removed.
    - [x] WisselMCA encoding fix committed, y el servidor reactivado el
          13-ago-2026: vive en la raíz y está en el `pyproject.toml` (32ª entrada).
+   - [x] GammaVacuumSPCe reactivado el 13-ago-2026 (33ª entrada). Sin `.xmi` y
+         sin probar contra el controlador; su propiedad `IP` no tiene default y
+         hay que fijarla en la BD al registrar el dispositivo.
+   - [x] Los cuatro DS de red usan `IP` / `Port` con el mismo nombre. Ojo a los
+         valores huérfanos en la BD bajo `UviewIP`, `UviewPort` y `Host`.
 2. **Trixie root install (in chroot, binds mounted)**
    - [ ] apt deps: `python3-tango python3-serial python3-rpi.gpio`,
          más `python3-numpy libhidapi-hidraw0` para WisselMCA.
    - [ ] pip deps: `simple-pid w1thermsensor` (`--break-system-packages`),
          más el binding HID de WisselMCA (ver sección de dependencias).
    - [ ] `pip install -e --no-deps --break-system-packages .` from repo root.
-   - [ ] All 32 live wrappers present in `/usr/local/bin`; no parked ones.
+   - [ ] All 33 live wrappers present in `/usr/local/bin`; no parked ones.
    - [ ] `/etc/tangorc` = `TANGO_HOST=tangodb.lab:10000`.
    - [ ] **Unmount binds** (`/dev`, `/proc`, `/sys`) before any exportfs/rsync.
 3. **Clean DB**
-   - [ ] Build fresh DB with the 32 live servers only — parked ones never entered.
+   - [ ] Build fresh DB with the 33 live servers only — parked ones never entered.
    - [ ] Each Pi's Starter control list matches its live-server set.
    - [ ] Disable wolframite's own Starter (DB host, runs no instrument servers).
    - [x] **IPs hardcodeadas** externalizadas a propiedades (13-ago-2026). Queda

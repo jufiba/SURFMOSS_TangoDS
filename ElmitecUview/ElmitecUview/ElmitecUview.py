@@ -65,7 +65,7 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
         else:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                self.s.connect((self.UviewIP, self.UviewPort))
+                self.s.connect((self.IP, self.Port))
             except:
                 self.ElmitecUviewConnected = False
                 self.set_state(PyTango.DevState.FAULT)
@@ -116,11 +116,11 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
     # Device Properties
     # -----------------
 
-    UviewIP = device_property(
+    IP = device_property(
         dtype='str', default_value="tvips.lab"
     )
 
-    UviewPort = device_property(
+    Port = device_property(
         dtype='uint', default_value=5570
     )
 

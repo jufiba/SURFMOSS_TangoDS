@@ -14,7 +14,6 @@ the relevant Starter — and complete the work noted below first.
 | Server | Why inactive | What reviving needs |
 |---|---|---|
 | GammaIonPump | Written for a previous version of the electronics | Likely needs updating to current electronics; test against the pump. |
-| GammaVacuumSPCe | Written from scratch, never tested | Test against the SPCe controller. |
 | Keithley2100 | Not in use now | Re-add `usbtmc` (pip) + `python3-usb`/libusb; verify import on the Pi. |
 | MCC1208LS | DAQ not in use | Build `usb_1208LS` from source (wjasper/Linux_Drivers) against libusb — the only from-source dependency. |
 | PfeifferDCU002 | Not finished | Complete the implementation; test. |

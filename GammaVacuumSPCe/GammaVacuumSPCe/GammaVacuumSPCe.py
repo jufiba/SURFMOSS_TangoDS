@@ -54,9 +54,10 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
     # Device Properties
     # -----------------
 
-    Host = device_property(
+    IP = device_property(
         dtype='str',
-        doc='IP address or hostname of the SPCe controller',
+        doc='IP address or hostname of the SPCe controller. No default: it '
+            'must be set in the Tango database when the device is registered.',
     )
 
     Port = device_property(
@@ -125,7 +126,7 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
         try:
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._sock.settimeout(5.0)
-            self._sock.connect((self.Host, self.Port))
+            self._sock.connect((self.IP, self.Port))
             # Discard any Telnet negotiation bytes or welcome banner
             self._sock.settimeout(1.0)
             try:
@@ -140,7 +141,7 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
                 self.set_state(DevState.ON)
             else:
                 self.set_state(DevState.OFF)
-            self.set_status("Connected to SPCe at %s:%d" % (self.Host, self.Port))
+            self.set_status("Connected to SPCe at %s:%d" % (self.IP, self.Port))
         except Exception as e:
             self._sock = None
             self.set_state(DevState.FAULT)
