@@ -224,6 +224,21 @@ class cmca:
             data[i-l0] = val
         return (True, data)
 
+def phachannels(setup):
+    """ Number of PHA channels implied by a General Setup word.
+
+    Res[1:0] is bits 2-3 of setup byte 1, i.e. bits 10-11 of the word
+    readgeneral() returns, and selects the ADC resolution: 13 bit = 8k
+    channels, 12 bit = 4k, 11 bit = 2k, 10 bit = 1k (manual, page 3).
+
+    The PHA window limits say nothing about this. Per page 4 they are 14-bit
+    *input voltages* (16383 = 10 V), so the discriminator levels and the
+    channel count are unrelated quantities and one cannot be derived from the
+    other.
+    """
+    res=(setup>>10)&0b11
+    return 8192>>res
+
 def checked(result,what):
     """ Unwrap a (ok,value) reply from cmca, raising a Tango error if it failed.
 
@@ -360,12 +375,11 @@ class WisselMCA(Device, metaclass=DeviceMeta):
             mode = modebyte & 0b11
             if mode == 3:  # PHA mode
                 self.firstchannel = 0
-                (ok2, w) = self.c.readPHA()
+                # Not `checked()` here: a comms error must not escape
+                # init_device, or PyTango exits the whole server.
+                (ok2, setup) = self.c.readgeneral()
                 if ok2:
-                    # ULD1 already comes in the 14-bit units setPHAmode calls
-                    # channels, so it must not be scaled again — and the uint16
-                    # multiply overflowed anyway.
-                    self.lastchannel = int(w[2])
+                    self.lastchannel = phachannels(setup)
             elif mode == 2:  # MCS analog
                 self.firstchannel = 0
                 self.lastchannel = 512
@@ -510,9 +524,13 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         self.c.setmode(3)
         self.set_state(PyTango.DevState.OFF)
         self.firstchannel = 0
+        # The spectrum length is the ADC resolution, not the window: the limits
+        # are input voltages in volts, not channel numbers.
+        self.lastchannel = phachannels(checked(self.c.readgeneral(), "readgeneral"))
+        lower_mV = self.read_Lower_Window_Limit()
         upper_mV = self.read_Upper_Window_Limit()
-        self.lastchannel = int(round(upper_mV * 16383 / 10000))
-        self.set_status("PHA mode, window 0 - %d channels (0 - %d mV)" % (self.lastchannel, int(upper_mV)))
+        self.set_status("PHA mode, %d channels, window %d - %d mV"
+                        % (self.lastchannel, int(lower_mV), int(upper_mV)))
         # PROTECTED REGION END #    //  WisselMCA.setPHAmode
 
     @command(
