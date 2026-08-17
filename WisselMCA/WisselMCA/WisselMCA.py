@@ -109,7 +109,7 @@ class cmca:
         self.dev.write(self.code(bytes([0x84]))) # Read mode
         r=self.dev.read(4)
         if (r[0]!=3):
-            return(False)
+            return(False,"wrong count in response %d"%r[0])
         self.dev.write(self.code(bytes([0x04,r[2]&0b11101111]))) # Reset bit4 (Start)
         self.dev.read(4)
         if (r[0]!=3):
@@ -255,11 +255,19 @@ def phalastchannel(setup,uld):
     return min(int(uld)>>(1+res),n-1)+1
 
 def checked(result,what):
-    """ Unwrap a (ok,value) reply from cmca, raising a Tango error if it failed.
+    """ Unwrap a reply from cmca, raising a Tango error if it failed.
 
     Without this the error message travels on as if it were data and blows up
     somewhere else entirely, e.g. as a TypeError in an unrelated arithmetic.
+
+    cmca is not consistent about its replies: the readers return (ok, value)
+    but the writers return a bare True on success and (False, message) on
+    failure, so both shapes have to be accepted.
     """
+    if result is True:
+        return None
+    if result is False:
+        result=(False,"no reply")
     (ok,value)=result
     if not ok:
         PyTango.Except.throw_exception("WisselMCA_CommError",
@@ -431,7 +439,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         r = checked(self.c.readPHA(), "readPHA")
         rc = r.copy()
         rc[1] = numpy.uint16(round(16383 * value / 10000))  # LLD1
-        self.c.writePHA(rc)
+        checked(self.c.writePHA(rc), "writePHA")
         # PROTECTED REGION END #    //  WisselMCA.Lower_Window_Limit_write
 
     def read_Upper_Window_Limit(self):
@@ -465,7 +473,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         r = checked(self.c.readPHA(), "readPHA")
         rc = r.copy()
         rc[0] = numpy.uint16(round(value * 16383 / 10000))
-        self.c.writePHA(rc)
+        checked(self.c.writePHA(rc), "writePHA")
         # PROTECTED REGION END #    //  WisselMCA.Hysteresis_write
 
     def read_Model(self):
@@ -482,7 +490,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
 
     def write_Configuration(self, value):
         # PROTECTED REGION ID(WisselMCA.Configuration_write) ENABLED START #
-        self.c.writegeneral(value)
+        checked(self.c.writegeneral(value), "writegeneral")
         # PROTECTED REGION END #    //  WisselMCA.Configuration_write
 
     def read_LastChannel(self):
@@ -524,7 +532,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     @DebugIt()
     def Start(self):
         # PROTECTED REGION ID(WisselMCA.Start) ENABLED START #
-        self.c.start()
+        checked(self.c.start(), "start")
         self.set_state(PyTango.DevState.ON)
         # PROTECTED REGION END #    //  WisselMCA.Start
 
@@ -533,7 +541,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     @DebugIt()
     def Stop(self):
         # PROTECTED REGION ID(WisselMCA.Stop) ENABLED START #
-        self.c.stop()
+        checked(self.c.stop(), "stop")
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  WisselMCA.Stop
 
@@ -542,7 +550,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     @DebugIt()
     def setPHAmode(self):
         # PROTECTED REGION ID(WisselMCA.setPHAmode) ENABLED START #
-        self.c.setmode(3)
+        checked(self.c.setmode(3), "setmode")
         self.set_state(PyTango.DevState.OFF)
         self.firstchannel = 0
         setup = checked(self.c.readgeneral(), "readgeneral")
@@ -560,7 +568,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     @DebugIt()
     def setMCAmode(self):
         # PROTECTED REGION ID(WisselMCA.setMCAmode) ENABLED START #
-        self.c.setmode(2)
+        checked(self.c.setmode(2), "setmode")
         self.firstchannel = 0
         self.lastchannel = 512
         self.set_state(PyTango.DevState.OFF)
@@ -582,7 +590,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     @DebugIt()
     def ClearMem(self):
         # PROTECTED REGION ID(WisselMCA.ClearMem) ENABLED START #
-        self.c.cleardata()
+        checked(self.c.cleardata(), "cleardata")
         # PROTECTED REGION END #    //  WisselMCA.ClearMem
 
     @command(
