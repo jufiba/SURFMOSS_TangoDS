@@ -231,13 +231,28 @@ def phachannels(setup):
     readgeneral() returns, and selects the ADC resolution: 13 bit = 8k
     channels, 12 bit = 4k, 11 bit = 2k, 10 bit = 1k (manual, page 3).
 
-    The PHA window limits say nothing about this. Per page 4 they are 14-bit
-    *input voltages* (16383 = 10 V), so the discriminator levels and the
-    channel count are unrelated quantities and one cannot be derived from the
-    other.
+    Per page 4 the window limits are 14-bit *input voltages* (16383 = 10 V),
+    not channel numbers, so the channel count cannot be read off them.
     """
     res=(setup>>10)&0b11
     return 8192>>res
+
+def phalastchannel(setup,uld):
+    """ How many channels are worth reading, given the upper window limit.
+
+    The 14-bit window value spans the same 0-10 V input range as the channels,
+    so channel = uld * channels / 16384, i.e. uld >> (1 + Res). Measured on the
+    card: with Res=0 and ULD1 = 1310 (800 mV), the last channel holding counts
+    is exactly 655 = 1310 >> 1.
+
+    Pulses above the upper level are rejected, so stopping there loses nothing
+    -- the total is identical whether 656 or all 8192 channels are read -- and
+    it matters for speed: 8192 channels take 2.0 s against 0.17 s, and the
+    former is uncomfortably close to the 3 s default client timeout in Tango.
+    """
+    n=phachannels(setup)
+    res=(setup>>10)&0b11
+    return min(int(uld)>>(1+res),n-1)+1
 
 def checked(result,what):
     """ Unwrap a (ok,value) reply from cmca, raising a Tango error if it failed.
@@ -378,8 +393,9 @@ class WisselMCA(Device, metaclass=DeviceMeta):
                 # Not `checked()` here: a comms error must not escape
                 # init_device, or PyTango exits the whole server.
                 (ok2, setup) = self.c.readgeneral()
-                if ok2:
-                    self.lastchannel = phachannels(setup)
+                (ok3, w) = self.c.readPHA()
+                if ok2 and ok3:
+                    self.lastchannel = phalastchannel(setup, w[2])
             elif mode == 2:  # MCS analog
                 self.firstchannel = 0
                 self.lastchannel = 512
@@ -430,7 +446,12 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         rc = r.copy()
         ch = numpy.uint16(round(value * 16383 / 10000))
         rc[2] = rc[3] = rc[4] = ch  # ULD1=LLD2=ULD2 (single window mode per protocol)
-        self.c.writePHA(rc)
+        checked(self.c.writePHA(rc), "writePHA")
+        # Moving the upper level moves where the counts stop, so the useful
+        # length of the spectrum follows it.
+        (ok, setup) = self.c.readgeneral()
+        if ok:
+            self.lastchannel = phalastchannel(setup, ch)
         # PROTECTED REGION END #    //  WisselMCA.Upper_Window_Limit_write
 
     def read_Hysteresis(self):
@@ -524,13 +545,14 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         self.c.setmode(3)
         self.set_state(PyTango.DevState.OFF)
         self.firstchannel = 0
-        # The spectrum length is the ADC resolution, not the window: the limits
-        # are input voltages in volts, not channel numbers.
-        self.lastchannel = phachannels(checked(self.c.readgeneral(), "readgeneral"))
+        setup = checked(self.c.readgeneral(), "readgeneral")
+        w = checked(self.c.readPHA(), "readPHA")
+        self.lastchannel = phalastchannel(setup, w[2])
         lower_mV = self.read_Lower_Window_Limit()
         upper_mV = self.read_Upper_Window_Limit()
-        self.set_status("PHA mode, %d channels, window %d - %d mV"
-                        % (self.lastchannel, int(lower_mV), int(upper_mV)))
+        self.set_status("PHA mode, %d of %d channels, window %d - %d mV"
+                        % (self.lastchannel, phachannels(setup),
+                           int(lower_mV), int(upper_mV)))
         # PROTECTED REGION END #    //  WisselMCA.setPHAmode
 
     @command(
