@@ -25,6 +25,7 @@ from PyTango import AttrWriteType, PipeWriteType
 # PROTECTED REGION ID(WisselMCA.additionnal_import) ENABLED START #
 import os
 import sys
+import time
 import hid
 import struct
 import numpy
@@ -254,6 +255,18 @@ def phalastchannel(setup,uld):
     res=(setup>>10)&0b11
     return min(int(uld)>>(1+res),n-1)+1
 
+def channelwidth(setup):
+    """ Width of one channel in mV, from a General Setup word.
+
+    The window limits are 14-bit values over 0-10 V while the channels split
+    the same range into 8192 >> Res, so one channel spans
+    2**(1+Res) * 10000/16383 mV -- 1.2208 mV at the 13-bit default. Channel c
+    starts at c * this; its centre is half a width further, a difference too
+    small to matter next to the window settings but worth pinning down.
+    """
+    res=(setup>>10)&0b11
+    return (1<<(1+res))*10000.0/16383
+
 def checked(result,what):
     """ Unwrap a reply from cmca, raising a Tango error if it failed.
 
@@ -366,6 +379,17 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         max_dim_x=8192,
         label="Spectrum",
         standard_unit="counts",
+    )
+
+    ChannelWidth = attribute(
+        dtype='float',
+        label="Channel Width",
+        unit="mV",
+        format="%6.4f",
+        doc="Width of one Spectrum channel in mV, so that the spectrum can be "
+            "plotted against the same scale the window limits use: channel c "
+            "starts at c * ChannelWidth mV. PHA mode only — in MCS the "
+            "channels are time bins and this reads INVALID.",
     )
 
     # ---------------
@@ -522,6 +546,21 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         return d
         # PROTECTED REGION END #    //  WisselMCA.Spectrum_read
 
+    def read_ChannelWidth(self):
+        # PROTECTED REGION ID(WisselMCA.ChannelWidth_read) ENABLED START #
+        # Read live: the setup word is a 3-byte command, and this way nothing
+        # goes stale if the resolution is changed by some other route. Do not
+        # put this attribute on polling — it does not change on its own.
+        setup = checked(self.c.readgeneral(), "readgeneral")
+        w = channelwidth(setup)
+        mode = checked(self.c.readmode(), "readmode") & 0b11
+        if mode != 3:
+            # MCS channels are time bins, so mV per channel is meaningless
+            # there; say so rather than let a client label a time axis in mV.
+            return (w, time.time(), PyTango.AttrQuality.ATTR_INVALID)
+        return w
+        # PROTECTED REGION END #    //  WisselMCA.ChannelWidth_read
+
 
     # --------
     # Commands
@@ -558,9 +597,10 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         self.lastchannel = phalastchannel(setup, w[2])
         lower_mV = self.read_Lower_Window_Limit()
         upper_mV = self.read_Upper_Window_Limit()
-        self.set_status("PHA mode, %d of %d channels, window %d - %d mV"
+        self.set_status("PHA mode, %d of %d channels, window %d - %d mV, "
+                        "%.4f mV/channel"
                         % (self.lastchannel, phachannels(setup),
-                           int(lower_mV), int(upper_mV)))
+                           int(lower_mV), int(upper_mV), channelwidth(setup)))
         # PROTECTED REGION END #    //  WisselMCA.setPHAmode
 
     @command(
