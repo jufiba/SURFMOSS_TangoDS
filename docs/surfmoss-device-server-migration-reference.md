@@ -486,19 +486,51 @@ en un chroot:
    esto — los demás `uint16` son declaraciones de atributos Tango, no escalares numpy.
 
 **Y una inconsistencia de diseño**, también corregida: `setPHAmode` e `init_device`
-derivaban la longitud del espectro del límite superior de la ventana
-(`lastchannel = round(upper_mV * 16383 / 10000)`). Los límites son **tensiones de
-entrada** de 14 bits (página 4: "16383 = 0x3FFF = 10 Volts"), no números de canal; el
-número de canales sale de `Res[1:0]`, bits 2-3 del byte 1 del General Setup (página
-3): 13 bit = 8k, 12 bit = 4k, 11 bit = 2k, 10 bit = 1k. Con lo viejo, una ventana de
-10 V daba 16383 "canales" en una tarjeta de 8192 como máximo, así que `Spectrum` leía
+derivaban la longitud del espectro del límite superior de la ventana con
+`lastchannel = round(upper_mV * 16383 / 10000)`, que es la conversión mV → **valor
+crudo de 14 bits**, no a canales. Los límites son tensiones de entrada (página 4:
+"16383 = 0x3FFF = 10 Volts"), y el resultado excedía el hardware: una ventana de 10 V
+daba 16383 "canales" en una tarjeta de 8192 como máximo, con lo que `Spectrum` leía
 más allá del final de los datos, en las páginas 256-1023 que el manual reserva para
 DFG.
 
-Falta aún **arrancarlo bajo el Starter con el código corregido** y confirmar el valor
-real de `Res` en esta tarjeta (el Pi se fue de la red antes de poder leerlo). Escribir
-y volver a leer los límites sí está verificado: 2000/5000/8000 mV → crudo
-3277/8192/13106 → 2000.24/5000.31/7999.76 mV.
+**El mapeo correcto, medido en la tarjeta:** con `Res=0` y `ULD1 = 1310` (800 mV), el
+último canal con cuentas es **655 = 1310 >> 1, exacto**. Es decir, el valor de 14 bits
+de la ventana cubre el mismo margen 0-10 V que los canales, así que
+
+```
+canal = ULD >> (1 + Res)          # la mitad del crudo con 13 bit
+canales totales = 8192 >> Res     # Res[1:0], bits 2-3 del byte 1 del General Setup
+```
+
+Era justo lo que buscaba el autor original: su expresión daba el crudo, que es **el
+doble** del canal. `phalastchannel()` lo calcula, acotado a la resolución, y lo usan
+`init_device`, `setPHAmode` y `write_Upper_Window_Limit` — mover el nivel superior
+mueve dónde se acaban las cuentas, así que la longitud lo sigue.
+
+Leer los 8192 canales enteros no aporta nada y cuesta: la suma es idéntica (216013
+cuentas en ambos casos, porque los pulsos por encima del nivel superior se rechazan),
+pero tarda **2.05 s frente a 0.17 s**. Y 2 s está incómodamente cerca del timeout de
+cliente por defecto de Tango (3 s), lo que habría hecho `Spectrum` inestable para quien
+no lo suba.
+
+### Estado verificado a través del device server (17-ago-2026)
+
+```
+Configuration : 0x0000  -> OS=0  Res=0  -> 13 bit -> 8192 canales
+Model         : 2007 61 122
+Mode          : 3 (PHA)   ModeByte 0x03 (parado)
+ventana       : 200.21 - 800.22 mV
+Spectrum      : 672 canales en 0.17 s, suma 216013, 491 canales no vacíos
+```
+
+Escribir y volver a leer los límites: 2000/5000/8000 mV → crudo 3277/8192/13106 →
+2000.24/5000.31/7999.76 mV. Los valores originales quedaron restaurados.
+
+Nota: `ReadLastChannel` es un comando **sin `dtype_out`** — no devuelve nada, actualiza
+`lastchannel` con lo que diga la tarjeta (último canal no nulo + 1). Devolver `None` es
+su comportamiento correcto, no un fallo. Y la tarjeta redondea ese valor al final de la
+página: con datos hasta el canal 655 informa 671 (página 20 = canales 640-671).
 
 ---
 
