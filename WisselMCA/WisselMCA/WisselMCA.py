@@ -32,11 +32,40 @@ import numpy
 class cmca:
     VendorID=0x0925
     InstrumentID=0x0035
-    dev=hid.device()
+    # The CMCA-550 talks in fixed 64-byte HID reports. A reply longer than
+    # that arrives split across several of them.
+    REPORT_SIZE=64
+
+    def __init__(self):
+        self.dev=hid.device()
+
+    def read_response(self,nbytes,timeout=1000):
+        """ Read a reply of nbytes, reassembling it from 64-byte HID reports.
+
+        Asking hid for more than one report's worth returns only the first
+        one and leaves the rest queued, which desynchronises every command
+        that follows: each one then reads the previous reply's leftovers and
+        reports a wrong count. Keep reading until the reply is complete.
+        """
+        buf=bytearray()
+        while len(buf)<nbytes:
+            r=self.dev.read(self.REPORT_SIZE,timeout)
+            if not r:
+                break
+            buf.extend(r)
+        return buf
+
+    def drain(self):
+        """ Discard reports left queued by an earlier desynchronised session. """
+        n=0
+        while self.dev.read(self.REPORT_SIZE,50):
+            n+=1
+        return n
 
     def open(self):
         self.dev.open(self.VendorID,self.InstrumentID)
         self.dev.set_nonblocking(False)
+        self.drain()
         return(True)
 
     def close(self):
@@ -162,8 +191,11 @@ class cmca:
     def readpage(self,page):
         # Each page = 32 channels x 4 bytes = 128 bytes
         # pageH always 0 for pages 0-255
+        # The 131-byte reply spans three HID reports, so it has to be reassembled
         self.dev.write(self.code(bytes([0x90,0,page])))
-        r=self.dev.read(131)
+        r=self.read_response(131)
+        if (len(r)<130):
+            return(False,"short response, %d bytes"%len(r))
         if (r[0]!=130):
             return(False,"wrong count in response %d"%r[0])
         return(True,bytes(r[2:130]))
@@ -191,6 +223,19 @@ class cmca:
                 return (False, "problem reading channel %d" % i)
             data[i-l0] = val
         return (True, data)
+
+def checked(result,what):
+    """ Unwrap a (ok,value) reply from cmca, raising a Tango error if it failed.
+
+    Without this the error message travels on as if it were data and blows up
+    somewhere else entirely, e.g. as a TypeError in an unrelated arithmetic.
+    """
+    (ok,value)=result
+    if not ok:
+        PyTango.Except.throw_exception("WisselMCA_CommError",
+                                       "%s: %s"%(what,value),
+                                       "WisselMCA."+what)
+    return value
 
 # PROTECTED REGION END #    //  WisselMCA.additionnal_import
 
@@ -299,10 +344,12 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         self.c.InstrumentID = self.InstrumentID
         try:
             self.c.open()
-        except:
+        except Exception as e:
             self.set_state(PyTango.DevState.FAULT)
-            self.set_status("Can't connect to Wissel MCA %x" % self.InstrumentID)
-            self.debug_stream("Can't connect to Wissel MCA %x" % self.InstrumentID)
+            self.set_status("Can't connect to Wissel MCA %x: %s"
+                            % (self.InstrumentID, e))
+            self.error_stream("Can't connect to Wissel MCA %x: %s"
+                              % (self.InstrumentID, e))
             return
         (ok, modebyte) = self.c.readmode()
         if ok:
@@ -342,13 +389,13 @@ class WisselMCA(Device, metaclass=DeviceMeta):
 
     def read_Lower_Window_Limit(self):
         # PROTECTED REGION ID(WisselMCA.Lower_Window_Limit_read) ENABLED START #
-        (t, r) = self.c.readPHA()
+        r = checked(self.c.readPHA(), "readPHA")
         return float(r[1] * 10000 / 16383)  # LLD1 in mV
         # PROTECTED REGION END #    //  WisselMCA.Lower_Window_Limit_read
 
     def write_Lower_Window_Limit(self, value):
         # PROTECTED REGION ID(WisselMCA.Lower_Window_Limit_write) ENABLED START #
-        (t, r) = self.c.readPHA()
+        r = checked(self.c.readPHA(), "readPHA")
         rc = r.copy()
         rc[1] = numpy.uint16(round(16383 * value / 10000))  # LLD1
         self.c.writePHA(rc)
@@ -356,13 +403,13 @@ class WisselMCA(Device, metaclass=DeviceMeta):
 
     def read_Upper_Window_Limit(self):
         # PROTECTED REGION ID(WisselMCA.Upper_Window_Limit_read) ENABLED START #
-        (t, r) = self.c.readPHA()
+        r = checked(self.c.readPHA(), "readPHA")
         return float(r[2] * 10000 / 16383)  # ULD1 in mV
         # PROTECTED REGION END #    //  WisselMCA.Upper_Window_Limit_read
 
     def write_Upper_Window_Limit(self, value):
         # PROTECTED REGION ID(WisselMCA.Upper_Window_Limit_write) ENABLED START #
-        (t, r) = self.c.readPHA()
+        r = checked(self.c.readPHA(), "readPHA")
         rc = r.copy()
         ch = numpy.uint16(round(value * 16383 / 10000))
         rc[2] = rc[3] = rc[4] = ch  # ULD1=LLD2=ULD2 (single window mode per protocol)
@@ -371,13 +418,13 @@ class WisselMCA(Device, metaclass=DeviceMeta):
 
     def read_Hysteresis(self):
         # PROTECTED REGION ID(WisselMCA.Hysteresis_read) ENABLED START #
-        (t, r) = self.c.readPHA()
+        r = checked(self.c.readPHA(), "readPHA")
         return float(r[0] * 10000 / 16383)
         # PROTECTED REGION END #    //  WisselMCA.Hysteresis_read
 
     def write_Hysteresis(self, value):
         # PROTECTED REGION ID(WisselMCA.Hysteresis_write) ENABLED START #
-        (t, r) = self.c.readPHA()
+        r = checked(self.c.readPHA(), "readPHA")
         rc = r.copy()
         rc[0] = numpy.uint16(round(value * 16383 / 10000))
         self.c.writePHA(rc)
@@ -385,13 +432,13 @@ class WisselMCA(Device, metaclass=DeviceMeta):
 
     def read_Model(self):
         # PROTECTED REGION ID(WisselMCA.Model_read) ENABLED START #
-        (t, r) = self.c.model()
+        r = checked(self.c.model(), "model")
         return r
         # PROTECTED REGION END #    //  WisselMCA.Model_read
 
     def read_Configuration(self):
         # PROTECTED REGION ID(WisselMCA.Configuration_read) ENABLED START #
-        (t, r) = self.c.readgeneral()
+        r = checked(self.c.readgeneral(), "readgeneral")
         return r
         # PROTECTED REGION END #    //  WisselMCA.Configuration_read
 
@@ -412,20 +459,20 @@ class WisselMCA(Device, metaclass=DeviceMeta):
 
     def read_ModeByte(self):
         # PROTECTED REGION ID(WisselMCA.ModeByte_read) ENABLED START #
-        (t, r) = self.c.readmode()
+        r = checked(self.c.readmode(), "readmode")
         return r
         # PROTECTED REGION END #    //  WisselMCA.ModeByte_read
 
     def read_Mode(self):
         # PROTECTED REGION ID(WisselMCA.Mode_read) ENABLED START #
-        (t, r) = self.c.readmode()
+        r = checked(self.c.readmode(), "readmode")
         return int(r & 0b11)
         # PROTECTED REGION END #    //  WisselMCA.Mode_read
 
     def read_Spectrum(self):
         # PROTECTED REGION ID(WisselMCA.Spectrum_read) ENABLED START #
         n_channels = self.lastchannel - self.firstchannel
-        (t, d) = self.c.readspectrum_pages(self.firstchannel, n_channels)
+        d = checked(self.c.readspectrum_pages(self.firstchannel, n_channels), "readspectrum_pages")
         return d
         # PROTECTED REGION END #    //  WisselMCA.Spectrum_read
 
@@ -511,7 +558,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     @DebugIt()
     def ReadLastChannel(self):
         # PROTECTED REGION ID(WisselMCA.ReadLastChannel) ENABLED START #
-        (t, r) = self.c.readlastchannel()
+        r = checked(self.c.readlastchannel(), "readlastchannel")
         self.lastchannel = int(r) + 1  # lastchannel+1 = number of channels (first channel is 0)
         # PROTECTED REGION END #    //  WisselMCA.ReadLastChannel
 
