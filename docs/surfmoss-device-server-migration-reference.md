@@ -140,9 +140,9 @@ On `/nfs/pi-trixie` (ARM64 chroot on wolframite):
   (editable wheel built clean).
 - **31 live wrappers** present in `/usr/local/bin`; **zero parked servers** present
   (deprecated/inactive exclusion confirmed via grep).
-- Import test: **31/31 live servers import** with deps present. 6 GPIO servers
-  (RaspberryButton, RaspberrySwitch, TempSensorDS18B20, Motor, SEAWaterflowmeter,
-  WaterSwitch) only import on a real Pi — `RPi.GPIO` refuses to load on x86; this
+- Import test: **31/31 live servers import** with deps present. 5 GPIO servers
+  (RaspberryButton, RaspberrySwitch, Motor, SEAWaterflowmeter, WaterSwitch) only
+  import on a real Pi — `RPi.GPIO` refuses to load on x86; this
   is expected, validate on hardware.
 - Package structure fixed: explicit `[tool.setuptools.packages]` +
   `[tool.setuptools.package-dir]` mapping each name → inner `Name/Name` dir
@@ -246,7 +246,7 @@ NOT pull PyPI versions over the system packages.
 |---|---|---|
 | python3-tango | pytango | ALL (already installed, 10.0.2-1) |
 | python3-serial | pyserial | most serial-instrument servers |
-| python3-rpi.gpio | RPi.GPIO | RaspberryButton, RaspberrySwitch, TempSensorDS18B20, Motor, SEAWaterflowmeter, WaterSwitch |
+| python3-rpi.gpio | RPi.GPIO | RaspberryButton, RaspberrySwitch, Motor, SEAWaterflowmeter, WaterSwitch |
 | python3-nut | PyNUT | NetworkUPSTool |
 
 ```bash
@@ -287,9 +287,10 @@ dependency set has been eliminated by omission.
 
 - **GPIO library**: `python3-rpi.gpio` exists, but RPi.GPIO has had Trixie-kernel
   compatibility issues; the ecosystem has moved toward `rpi-lgpio` (drop-in).
-  Confirm RaspberryButton / RaspberrySwitch / TempSensorDS18B20 actually drive GPIO
-  on a Pi booted off the Trixie root. **Validate this first** — three live servers
-  depend on it.
+  Confirm RaspberryButton / RaspberrySwitch / Motor actually drive GPIO on a Pi
+  booted off the Trixie root. **Validate this first.** TempSensorDS18B20 no longer
+  belongs on this list: it dropped the RPi.GPIO import on 17-ago-2026, since the
+  pin is driven by the kernel w1-gpio overlay, not by the server.
 - **w1thermsensor**: the kernel one-wire modules + overlay must be enabled on the
   Pi, independent of the pip package.
 

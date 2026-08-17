@@ -30,7 +30,6 @@ from PyTango import AttrWriteType, PipeWriteType
 # PROTECTED REGION ID(TempSensorDS18B20.additionnal_import) ENABLED START #
 import os
 import sys
-import RPi.GPIO as GPIO
 import w1thermsensor
 
 from threading import Thread, Event
@@ -88,7 +87,10 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
     # -----------------
 
     GPIOPin = device_property(
-        dtype='int16', default_value=4
+        dtype='int16', default_value=4,
+        doc='Which GPIO pin the sensor is wired to. Informational only: the '
+            'pin is driven by the kernel w1-gpio overlay, configured in '
+            'config.txt, not by this server.',
     )
 
     # ----------
@@ -109,9 +111,6 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(TempSensorDS18B20.init_device) ENABLED START #
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.GPIOPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        #GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         # An Init on a running device must not leave the old loop behind,
         # writing self.temp underneath the new one.
         old=getattr(self,"ctrlloop",None)
