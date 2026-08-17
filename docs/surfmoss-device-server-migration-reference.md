@@ -5,7 +5,7 @@ the new Trixie NFS root (`/nfs/pi-trixie` on wolframite) and reconciling them at
 the clean-DB cutover. Built from the Python-3 audit, the entry-point inventory,
 and the dependency map._
 
-_Last updated: 13-ago-2026_
+_Last updated: 17-ago-2026_
 
 ---
 
@@ -14,6 +14,11 @@ _Last updated: 13-ago-2026_
 **pi-rackmossbauer arranca Debian 13 por netboot desde `/nfs/pi-trixie`, con
 Tango 10, y el Starter lanza sus device servers.** Los únicos fallos restantes son
 por hardware ausente (la Pi está en el despacho, no en el laboratorio).
+
+> Corrección del 17-ago-2026: eso no era del todo cierto. Con el hardware presente,
+> TempSensorDS18B20 y WisselMCA seguían fallando por defectos del propio código
+> (ver sus secciones más abajo). «Falla solo por hardware ausente» era una hipótesis,
+> no una comprobación.
 
 Cadena validada de punta a punta: DHCP → TFTP → NFS → sistema → DNS `.lab` → NTP
 → Tango DB → Starter → device servers.
@@ -106,10 +111,13 @@ ExecStart=/usr/lib/tango/Databaseds 2 -ORBendPoint giop:tcp:0.0.0.0:10000 -ORBen
 
 - Devolverla al laboratorio y validar LeyboldIG3 (puerto serie) y TempSensorDS18B20
   (sensor 1-Wire). Ambos fallan ahora solo por hardware ausente.
-- **WisselMCA/1** ✅ reactivado (13-ago-2026): devuelto a la raíz del repositorio y
-  dado de alta en las tres listas del `pyproject.toml`, así que ya se instala y el
-  Starter lo encontrará. Falta instalar sus dependencias en la raíz Trixie y
-  probarlo contra un MCA real (ver _Dependencias de WisselMCA_ más abajo).
+- **WisselMCA/1** ✅ reactivado (13-ago-2026) y **probado contra el MCA real**
+  (17-ago-2026): protocolo HID verificado, cuatro defectos corregidos. Falta
+  arrancarlo bajo el Starter con el código corregido (ver
+  _Dependencias de WisselMCA_ más abajo).
+- **TempSensorDS18B20/1** ya no falla por hardware ausente: el sensor
+  `28-3cd5f649fc87` responde. Moría al arrancar por un defecto del servidor,
+  corregido el 17-ago-2026 (ver _TempSensorDS18B20_ más abajo).
 - La ruta serie de LeyboldIG3 (`/dev/serial/by-path/platform-3f980000.usb-...`)
   codifica el puerto USB físico: si se cambia de conector, hay que actualizar la
   propiedad.
@@ -292,7 +300,9 @@ dependency set has been eliminated by omission.
   belongs on this list: it dropped the RPi.GPIO import on 17-ago-2026, since the
   pin is driven by the kernel w1-gpio overlay, not by the server.
 - **w1thermsensor**: the kernel one-wire modules + overlay must be enabled on the
-  Pi, independent of the pip package.
+  Pi, independent of the pip package. ✅ Verificado el 17-ago-2026 en
+  pi-rackmossbauer: `w1_gpio`/`w1_therm` cargados y el sensor enumera, aunque el bus
+  va ruidoso (ver _TempSensorDS18B20_).
 
 ---
 
@@ -312,10 +322,10 @@ Removed at clean import: **VarianMultiGauge/1** (deprecated — was red in Astor
 
 `LeyboldIG3/1`, `TempSensorDS18B20/1`, `WisselMCA/1`.
 
-WisselMCA ✅ reactivado (13-ago-2026): ya está en la raíz del repositorio y en el
-`pyproject.toml`, así que se instala y el Starter lo encontrará en `StartDsPath`.
-Pendiente: sus dependencias en la raíz Trixie y la prueba contra un MCA real (ver
-_Dependencias de WisselMCA_ más abajo).
+WisselMCA ✅ reactivado (13-ago-2026) y probado contra el MCA real (17-ago-2026):
+ya está en la raíz del repositorio y en el `pyproject.toml`, así que se instala y el
+Starter lo encontrará en `StartDsPath`. Pendiente: arrancarlo bajo el Starter con el
+código corregido (ver _Dependencias de WisselMCA_ más abajo).
 
 Ya migrada a `/nfs/pi-trixie` (Debian 13). Los otros dos servidores arrancan y
 fallan solo por hardware ausente.
@@ -428,19 +438,133 @@ el `import` falla aunque el paquete Python esté instalado.
 dependencias: cython-hidapi es una extensión compilada. En ARM64 hay rueda o se
 compila contra `libhidapi-dev`, por eso conviene el paquete de apt si sirve.
 
-**Permisos**: el DS abre el dispositivo por VID/PID `0x0925:0x0035` a través de
-`/dev/hidraw*`, accesible solo por root por defecto. Si el servidor corre como
-usuario normal bajo el Starter hace falta una regla udev:
+**Permisos: hacen falta DOS reglas udev, no una.** El DS abre el aparato por
+VID/PID `0x0925:0x0035`. Con `hidraw` sola no basta:
 
 ```
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0925", ATTRS{idProduct}=="0035", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb",    ATTR{idVendor}=="0925",  ATTR{idProduct}=="0035",  MODE="0660", GROUP="plugdev"
 ```
 
-y el usuario en `plugdev`. Es la causa más habitual de que uno de estos arranque
-bien y falle al abrir el aparato.
+Ojo a la diferencia `ATTRS` (atributos del padre, para hidraw) frente a `ATTR`
+(atributos propios, para usb). El binding instalado usa el **backend libusb**, que
+accede por `/dev/bus/usb/BBB/DDD` (`crw-rw-r-- root root`) y **desconecta el driver
+hidraw del kernel al abrir**, con lo que el nodo `/dev/hidraw*` desaparece. Sin la
+segunda regla el `open()` sigue dando `OSError: open failed` aunque la primera esté
+puesta y el usuario esté en `plugdev`. Diagnosticado así en pi-rackmossbauer el
+17-ago-2026.
 
-Sigue **sin probar contra un MCA real** — era la advertencia de
-`inactive/README.md` y continúa vigente.
+El usuario que corre el DS (`tango`) tiene que estar en `plugdev`. Los grupos se
+heredan al crear el proceso, así que **hay que reiniciar el Starter**, no solo el
+device server, tras un `usermod -aG`.
+
+### Probado contra el MCA real (17-ago-2026)
+
+Ya no está sin probar: el protocolo se ha ejercitado contra la tarjeta (número de
+serie `2007 61 122`). Tres defectos encontrados y corregidos, todos ellos invisibles
+en un chroot:
+
+1. **Reensamblado de reports HID.** `readpage` pedía `dev.read(131)`, pero el manual
+   (`WisselMCA/CMCA 550_Newprotokoll Remotr Control.pdf`, página 1) dice
+   "HID-Device, 64 bytes package". hidapi devolvía solo el primer report — 62 bytes
+   útiles de 128 — y dejaba los otros dos **encolados**, con lo que cada comando
+   posterior leía las sobras del anterior y respondía "wrong count". `read_response()`
+   acumula reports hasta completar la respuesta y `drain()`, llamado en `open()`,
+   descarta lo que dejara una sesión desincronizada previa.
+2. **Errores enmascarados.** Doce sitios hacían `(t, r) = self.c.X()` e ignoraban el
+   flag. Al fallar, `r` era la cadena de error; `r[2] * 10000` es repetición de
+   cadena (legal) y solo reventaba en la división, con un
+   `TypeError: unsupported operand type(s) for /: 'str' and 'int'` a cientos de
+   líneas del origen. Ahora pasan por `checked()`, que lanza una excepción Tango con
+   el mensaje real del aparato.
+3. **Desbordamiento uint16 con NumPy 2.** Los tres lectores de la ventana hacían
+   `float(r[n] * 10000 / 16383)` sobre un `numpy.uint16` de `frombuffer`. Con NumPy 2
+   (NEP 50) el escalar conserva su dtype, así que la multiplicación **desborda módulo
+   65536 antes de dividir**: ULD=819 se leía como 3.88 mV en vez de 499.91. Como el
+   wrap no es monótono, cambiar un límite parecía no afectar a la lectura. El `float()`
+   tiene que ir **antes** de la aritmética. Es el único DS del repositorio expuesto a
+   esto — los demás `uint16` son declaraciones de atributos Tango, no escalares numpy.
+
+**Y una inconsistencia de diseño**, también corregida: `setPHAmode` e `init_device`
+derivaban la longitud del espectro del límite superior de la ventana
+(`lastchannel = round(upper_mV * 16383 / 10000)`). Los límites son **tensiones de
+entrada** de 14 bits (página 4: "16383 = 0x3FFF = 10 Volts"), no números de canal; el
+número de canales sale de `Res[1:0]`, bits 2-3 del byte 1 del General Setup (página
+3): 13 bit = 8k, 12 bit = 4k, 11 bit = 2k, 10 bit = 1k. Con lo viejo, una ventana de
+10 V daba 16383 "canales" en una tarjeta de 8192 como máximo, así que `Spectrum` leía
+más allá del final de los datos, en las páginas 256-1023 que el manual reserva para
+DFG.
+
+Falta aún **arrancarlo bajo el Starter con el código corregido** y confirmar el valor
+real de `Res` en esta tarjeta (el Pi se fue de la red antes de poder leerlo). Escribir
+y volver a leer los límites sí está verificado: 2000/5000/8000 mV → crudo
+3277/8192/13106 → 2000.24/5000.31/7999.76 mV.
+
+---
+
+## TempSensorDS18B20 (corregido 17-ago-2026)
+
+Moría al arrancar, y **no era por hardware ausente**: el sensor
+`28-3cd5f649fc87` está conectado y lee. `init_device` llamaba a
+`w1thermsensor.W1ThermSensor()` sin protección, y al lanzar `NoSensorFoundError`
+PyTango **terminaba el proceso entero** — en `/var/tmp/ds.log/TempSensorDS18B20_1.log`:
+`Exiting: Server exited with tango.DevFailed … Exited`. El Starter lo marca FAULT y no
+lo vuelve a levantar.
+
+Corregido: FAULT con el mensaje real en vez de morir; el hilo de control reintenta
+adquirir el sensor y recupera a ON solo; ya no muere en un `get_temperature()` fallido
+(que antes dejaba `Temperature` congelada en el último valor **para siempre**); FAULT
+tras tres fallos seguidos y `ATTR_INVALID` cuando no hay sensor, para no servir un
+valor viejo como fresco. El hilo es daemon y espera en un `Event`, e `init_device` para
+el anterior, así un `Init` desde Astor no deja dos hilos escribiendo `self.temp`.
+
+⚠️ **El bus 1-Wire de esta Pi está ruidoso.** Reporta un esclavo fantasma en casi cada
+búsqueda:
+
+```
+w1_master_driver w1_bus_master1: Family 0 for 00.b3c800000000.12 is not registered.
+```
+
+153 de esos en el buffer de `dmesg`, uno cada ~45-60 s. Con ese ruido el esclavo real
+puede desaparecer de `/sys/bus/w1/devices` y volver — lo que el software ahora tolera,
+pero **no cura**. Merece una revisión del cableado (longitud, pull-up de 4.7 kΩ,
+apantallamiento).
+
+También **dejó de importar `RPi.GPIO`**: el pin lo maneja el overlay `w1-gpio` del
+kernel, configurado en `config.txt`, no el servidor. La propiedad `GPIOPin` se queda,
+documentada como informativa, para no dejar huérfanos los valores de la BD.
+
+---
+
+## Desplegar código en las Pis: la raíz NFS es de solo lectura desde el cliente
+
+Verificado el 17-ago-2026 en pi-rackmossbauer: **`git pull` en el propio Pi no
+funciona**. Su raíz es `10.43.88.3:/nfs/pi-trixie` por NFSv4 y, aunque el cliente la
+monta `rw`, toda escritura da `EROFS` — `/opt/tango/SURFMOSS_TangoDS`, e incluso
+`/home/pi`, también con `sudo`. Solo `/tmp` es escribible (tmpfs). `/var` sí lo es,
+por su propio export: `10.43.88.3:/nfs/clients/pi-rackmossbauer/var` (de ahí que los
+logs del Starter en `/var/tmp/ds.log/` sí se escriban).
+
+Antes de llegar al motivo real aparecen dos errores de git que despistan:
+`fatal: detected dubious ownership` (el repo es de `root`, uno entra como `pi`) y
+luego, con `sudo`, `cannot open '.git/FETCH_HEAD': Read-only file system`.
+
+El pull tiene que hacerse **donde `/nfs/pi-trixie` sea escribible** (wolframite), y
+luego reiniciar el DS en el Pi con el Starter.
+
+**Para probar un parche contra el hardware sin desplegar**: `scp` del módulo a `/tmp`
+y ejercitarlo con `importlib.util.spec_from_file_location`. Para un device server
+completo, `-nodb` evita tocar la base de datos:
+
+```bash
+python3 /tmp/mods.py test -nodb -dlist test/temp/1 -ORBendPoint giop:tcp:127.0.0.1:12988
+python3 -c 'import tango; print(tango.DeviceProxy("tango://127.0.0.1:12988/test/temp/1#dbase=no").state())'
+```
+
+Con `-nodb` las propiedades toman su `default_value`. Ojo: hay que fijar el endpoint a
+`127.0.0.1`, porque el nombre corto `pi-rackmossbauer` **no resuelve en el propio Pi**
+(se ve también como `sudo: unable to resolve host`) y el IOR publicado queda
+inalcanzable.
 
 ---
 
