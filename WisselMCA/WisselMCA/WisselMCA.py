@@ -362,7 +362,10 @@ class WisselMCA(Device, metaclass=DeviceMeta):
                 self.firstchannel = 0
                 (ok2, w) = self.c.readPHA()
                 if ok2:
-                    self.lastchannel = int(w[2] * 16383 / 10000)  # ULD1 in channels
+                    # ULD1 already comes in the 14-bit units setPHAmode calls
+                    # channels, so it must not be scaled again — and the uint16
+                    # multiply overflowed anyway.
+                    self.lastchannel = int(w[2])
             elif mode == 2:  # MCS analog
                 self.firstchannel = 0
                 self.lastchannel = 512
@@ -390,7 +393,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     def read_Lower_Window_Limit(self):
         # PROTECTED REGION ID(WisselMCA.Lower_Window_Limit_read) ENABLED START #
         r = checked(self.c.readPHA(), "readPHA")
-        return float(r[1] * 10000 / 16383)  # LLD1 in mV
+        return float(r[1]) * 10000 / 16383  # LLD1 in mV
         # PROTECTED REGION END #    //  WisselMCA.Lower_Window_Limit_read
 
     def write_Lower_Window_Limit(self, value):
@@ -404,7 +407,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     def read_Upper_Window_Limit(self):
         # PROTECTED REGION ID(WisselMCA.Upper_Window_Limit_read) ENABLED START #
         r = checked(self.c.readPHA(), "readPHA")
-        return float(r[2] * 10000 / 16383)  # ULD1 in mV
+        return float(r[2]) * 10000 / 16383  # ULD1 in mV
         # PROTECTED REGION END #    //  WisselMCA.Upper_Window_Limit_read
 
     def write_Upper_Window_Limit(self, value):
@@ -419,7 +422,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     def read_Hysteresis(self):
         # PROTECTED REGION ID(WisselMCA.Hysteresis_read) ENABLED START #
         r = checked(self.c.readPHA(), "readPHA")
-        return float(r[0] * 10000 / 16383)
+        return float(r[0]) * 10000 / 16383
         # PROTECTED REGION END #    //  WisselMCA.Hysteresis_read
 
     def write_Hysteresis(self, value):
