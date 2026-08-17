@@ -33,21 +33,38 @@ import sys
 import RPi.GPIO as GPIO
 import w1thermsensor
 
-from threading import Thread
+from threading import Thread, Event
 import time
 
 class ControlThread(Thread):
-    
+
     def __init__ (self, ds):
-        Thread.__init__(self)
+        Thread.__init__(self, daemon=True)
         self.ds = ds
- 
-    def run(self):        
-        while(self.ds.running):
-            temp=self.ds.sensor.get_temperature()
-            self.ds.temp=temp
-            time.sleep(5)
-        
+
+    def run(self):
+        failures=0
+        while not self.ds.stop.is_set():
+            try:
+                if self.ds.sensor is None:
+                    self.ds.sensor=w1thermsensor.W1ThermSensor()
+                self.ds.temp=self.ds.sensor.get_temperature()
+                failures=0
+                self.ds.set_state(PyTango.DevState.ON)
+                self.ds.set_status("Reading DS18B20 %s"%self.ds.sensor.id)
+            except Exception as e:
+                # The 1-wire bus is noisy: the slave can drop out of
+                # /sys/bus/w1/devices and reappear a few searches later. Retry
+                # from scratch rather than dying and leaving Temperature frozen
+                # on its last value.
+                self.ds.sensor=None
+                failures+=1
+                if failures>=3:
+                    self.ds.set_state(PyTango.DevState.FAULT)
+                    self.ds.set_status("Can't read the DS18B20 sensor: %s"%e)
+                    self.ds.error_stream("Can't read the DS18B20 sensor: %s"%e)
+            self.ds.stop.wait(5)
+
 # PROTECTED REGION END #    //  TempSensorDS18B20.additionnal_import
 
 __all__ = ["TempSensorDS18B20", "main"]
@@ -95,11 +112,28 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.GPIOPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         #GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        self.sensor=w1thermsensor.W1ThermSensor()
-        self.set_state(PyTango.DevState.ON)
-        self.running=True
-        ctrlloop = ControlThread(self)
-        ctrlloop.start()
+        # An Init on a running device must not leave the old loop behind,
+        # writing self.temp underneath the new one.
+        old=getattr(self,"ctrlloop",None)
+        if old is not None:
+            self.stop.set()
+            old.join()
+        self.stop=Event()
+        self.sensor=None
+        try:
+            self.sensor=w1thermsensor.W1ThermSensor()
+            self.set_state(PyTango.DevState.ON)
+            self.set_status("Reading DS18B20 %s"%self.sensor.id)
+        except Exception as e:
+            # Letting this propagate makes PyTango exit the whole server, and
+            # the Starter cannot then bring it back. Stay up in FAULT: the
+            # control thread retries and recovers on its own if the sensor is
+            # only temporarily missing.
+            self.set_state(PyTango.DevState.FAULT)
+            self.set_status("Can't find the DS18B20 sensor: %s"%e)
+            self.error_stream("Can't find the DS18B20 sensor: %s"%e)
+        self.ctrlloop = ControlThread(self)
+        self.ctrlloop.start()
         # PROTECTED REGION END #    //  TempSensorDS18B20.init_device
 
     def always_executed_hook(self):
@@ -109,7 +143,7 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
 
     def delete_device(self):
         # PROTECTED REGION ID(TempSensorDS18B20.delete_device) ENABLED START #
-        self.running=False
+        self.stop.set()
         self.set_state(PyTango.DevState.OFF)
         # PROTECTED REGION END #    //  TempSensorDS18B20.delete_device
 
@@ -119,6 +153,10 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
 
     def read_Temperature(self):
         # PROTECTED REGION ID(TempSensorDS18B20.Temperature_read) ENABLED START #
+        if self.sensor is None:
+            # No sensor right now, so self.temp is stale: say so instead of
+            # handing out an old number as if it were a fresh reading.
+            return (float(self.temp), time.time(), PyTango.AttrQuality.ATTR_INVALID)
         return float(self.temp)
         # PROTECTED REGION END #    //  TempSensorDS18B20.Temperature_read
 
