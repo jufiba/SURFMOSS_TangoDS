@@ -294,11 +294,13 @@ dependency set has been eliminated by omission.
 
 ### Verify on real hardware (cannot be tested in the x86 chroot)
 
-- **GPIO library**: confirmado el 18-ago-2026 — RPi.GPIO **no sirve** en Trixie.
-  Ver _GPIO en Trixie_ más abajo. Falta comprobar en hardware RaspberryButton,
-  RaspberrySwitch y WaterSwitch con el shim ya puesto. TempSensorDS18B20 salió de
-  esta lista el 17-ago-2026 (el pin lo lleva el overlay w1-gpio del kernel) y Motor
-  el 18-ago-2026 (a `deprecated/`).
+- **GPIO library**: ✅ resuelto el 18-ago-2026 — RPi.GPIO **no sirve** en Trixie, hay
+  que usar `python3-rpi-lgpio`, y hacen falta dos apaños más. Ver _GPIO en Trixie_ más
+  abajo, que ya recoge la verificación en hardware de `SEAWaterflowmeter/4` (pi-vsm) y
+  `RaspberrySwitch/2` (pi-leem). `RaspberryButton` solo corre en pi-xps, que sigue con
+  microSD, así que no le toca todavía; `WaterSwitch` no está dado de alta en ninguna
+  parte. TempSensorDS18B20 salió de esta lista el 17-ago-2026 (el pin lo lleva el
+  overlay w1-gpio del kernel) y Motor el 18-ago-2026 (a `deprecated/`).
 - **w1thermsensor**: the kernel one-wire modules + overlay must be enabled on the
   Pi, independent of the pip package. ✅ Verificado el 17-ago-2026 en
   pi-rackmossbauer: `w1_gpio`/`w1_therm` cargados y el sensor enumera, aunque el bus
@@ -330,14 +332,27 @@ código corregido (ver _Dependencias de WisselMCA_ más abajo).
 Ya migrada a `/nfs/pi-trixie` (Debian 13). Los otros dos servidores arrancan y
 fallan solo por hardware ausente.
 
-### pi-vsm (.12, /nfs/vsm) — TBD
+### pi-vsm (.12) — CONFIRMADO desde el Starter (18-ago-2026)
 
-_Populate from this Pi's Starter in Astor. Note VSMControlDevice is inactive —
-confirm whether this host still needs it before reviving._
+`AGPolaritySwitch/1`, `Itech6000C/1`, `SEAWaterflowmeter/4`, `SRIlockin830/1`,
+`Tti604/1`. Todos ON el 18-ago-2026.
 
-### Other Pis (pi-xps, pi-mossbauer, pi-hvleem, ender, …) — TBD
+Ya migrada a netboot desde `/nfs/pi-trixie`. VSMControlDevice sigue en `inactive/` y
+**no** está dado de alta aquí; confirmar si hace falta antes de revivirlo.
 
-_Populate per host from Astor as each is migrated._
+⚠️ **`pi-vsm.lab` no tiene registro en el DNS del laboratorio** (18-ago-2026), y es el
+único que falta: `pi-leem`, `pi-xps`, `pi-uleem`, `pi-mossbauer`, `sputtering` y
+`tangodb` sí resuelven. Hay que entrar por IP (`10.43.88.12`), y es la causa del
+`sudo: unable to resolve host` de esa Pi.
+
+### Other Pis (pi-xps, pi-mossbauer, pi-hvleem, ender, …) — parcialmente conocido
+
+De la BD, servidores de GPIO (18-ago-2026): pi-xps corre `RaspberryButton/1` y
+`SEAWaterflowmeter/3`; pi-uleem, `RaspberrySwitch/1` y `SEAWaterflowmeter/1`;
+pi-mossbauer, `SEAWaterflowmeter/2`; sputtering, `ArduinoMotor/1`. **Las tres primeras
+siguen arrancando de microSD**, no de netboot — ver _Netboot frente a microSD_.
+
+_Completar por host desde Astor a medida que se migren._
 
 ---
 
@@ -652,6 +667,98 @@ ese riesgo **ya no existe**.
 
 Nota: los `time` y `calibration` vacíos de `vsm/safety/water` en la BD no son un
 problema — tienen `default_value` en el código (1.0 y 7.5).
+
+### Tercera trampa: lgpio respeta las reservas del kernel, RPi.GPIO no (18-ago-2026)
+
+Con RPi.GPIO los pines **no eran exclusivos** — accedía por `/dev/mem`, saltándose al
+kernel. lgpio va por el dispositivo de caracteres y respeta quién tiene cada línea,
+así que **conflictos que llevaban años latentes salen a la luz al migrar**:
+
+```
+lgpio.error: 'GPIO busy'
+```
+
+Le pasó a `RaspberrySwitch/2` en pi-leem, configurado en el GPIO 4:
+
+```
+leem/power/xps    GPIOport = 4
+gpiochip0 line 4: "GPIO4"  output drive=open-drain  consumer="onewire@4"
+```
+
+Lo tenía tomado el overlay `w1-gpio` del kernel. Y en pi-leem **no hay ningún sensor
+1-Wire**: los dispositivos que enumeraba eran `00-77…`, `00-f7…`, de familia 0, o sea
+fantasmas de un bus vacío. Un DS18B20 real es `28-…`.
+
+**Los overlays son por Pi, no compartidos.** Esto importa y no era obvio:
+`/boot/firmware` sí está en la raíz NFS compartida, pero **no contiene `config.txt`** —
+el bootloader lo lee por TFTP de `/tftpboot/<serie>/` en wolframite. Así que se
+resuelve sin recablear ni tocar la BD, quitando el overlay solo donde no hace falta:
+
+| Pi | Serie | Sensor 1-Wire real | Overlay `w1-gpio` |
+|---|---|---|---|
+| pi-rackmossbauer | — | `28-3cd5f649fc87` ✅ | **mantener** (`TempSensorDS18B20/1`) |
+| pi-leem | `487100ad` | no (fantasmas) | quitado — desbloquea `RaspberrySwitch/2` |
+| pi-vsm | `88ec955a` | no (fantasmas) | quitado (pendiente de reiniciar) |
+
+Hecho el 18-ago-2026. Tras reiniciar pi-leem el GPIO 4 quedó libre
+(`line 4: "GPIO4" input`, sin consumidor) y `RaspberrySwitch/2` **arrancó solo**, sin
+intervención: `leem/power/xps -> Switch = True`. Su estado `UNKNOWN` es de siempre —
+ese servidor nunca llama a `set_state` — y no es una secuela.
+
+⚠️ Corrección de lo escrito el 17-ago sobre TempSensorDS18B20: allí se dijo que el
+ruido del bus 1-Wire "merece una revisión del cableado". **Es dudoso**: pi-leem y
+pi-vsm producen los mismos fantasmas de familia 0 sin tener nada conectado, así que
+esos mensajes son lo normal en cualquier Pi con el overlay puesto y el bus vacío o
+flojo, no prueba de mal cableado. Lo que sigue en pie es que el sensor real puede
+desaparecer y volver, y por eso el DS reintenta.
+
+### Pines configurados de cada servidor de GPIO (18-ago-2026)
+
+Para prever choques antes de reiniciar. Sacado de la BD; ojo con las propiedades,
+que **no se llaman igual** en todos: `RaspberrySwitch` y `WaterSwitch` usan
+`GPIOport`, `RaspberryButton` usa **`Pin`**, y `SEAWaterflowmeter` usa `channels`
+(lista separada por comas).
+
+| Servidor | Pi | Arranque | Pines |
+|---|---|---|---|
+| SEAWaterflowmeter/4 | pi-vsm | netboot | 6, 13 ✅ verificado con lgpio |
+| RaspberrySwitch/2 | pi-leem | netboot | 4 → resuelto quitando el overlay |
+| SEAWaterflowmeter/1 | pi-uleem | microSD | 26, 13, 6, 5 |
+| SEAWaterflowmeter/2 | pi-mossbauer | microSD | 26, 13 |
+| SEAWaterflowmeter/3 | pi-xps | microSD | 13 |
+| RaspberrySwitch/1 | pi-uleem | microSD | 12 |
+| RaspberryButton/1 | pi-xps | microSD | 26 |
+
+`WaterSwitch` no está dado de alta en ninguna parte.
+
+### Netboot frente a microSD: no todas las Pis comparten software
+
+**Solo pi-rackmossbauer, pi-leem y pi-vsm arrancan por netboot** desde
+`/nfs/pi-trixie`. pi-uleem, pi-xps y pi-mossbauer siguen con su **microSD propia**,
+con su propio software y sus propias contraseñas. Consecuencias:
+
+- El cambio a `rpi-lgpio` **no las afecta**: conservan RPi.GPIO y sus servidores no se
+  rompen al reiniciar. Los pines de la tabla de arriba solo importarán el día que
+  pasen a netboot.
+- Tampoco reciben el código del repositorio por el `git pull` de wolframite.
+- El apaño de `LG_WD` es inofensivo ahí: es una variable que el RPi.GPIO original ni
+  mira, así que el mismo código sirve para las dos clases de Pi.
+- **Las claves de host SSH solo las comparten las de netboot** (misma raíz, misma
+  clave). Verificar con `HostKeyAlias` contra la clave de otra Pi funciona entre
+  pi-rackmossbauer, pi-leem y pi-vsm, y **falla correctamente** con las de microSD.
+
+### Verificado en hardware (18-ago-2026)
+
+- **`SEAWaterflowmeter/4`** en pi-vsm: arranca desde el Starter
+  (`ON | Measurement thread is running`) y **mide bien con el agua abierta**
+  (confirmado por el usuario). Los ceros iniciales eran el grifo cerrado, no un fallo
+  de los *callbacks*. Cadena completa validada: `rpi-lgpio` + `LG_WD` privado +
+  detección de flancos.
+- **`RaspberrySwitch/2`** en pi-leem: entrada leída (`Switch = True`).
+- Un detalle práctico del cambio: con lgpio **no se puede sondear un pin desde fuera
+  mientras un DS lo tiene reclamado** (`lgpio.error: 'GPIO busy'`). Con RPi.GPIO sí se
+  podía. Si alguna herramienta o sesión de itango medía pines en caliente, dejará de
+  funcionar.
 
 ---
 
