@@ -25,10 +25,21 @@ from PyTango import AttrWriteType, PipeWriteType
 # PROTECTED REGION ID(SEAWaterflowmeter.additionnal_import) ENABLED START #
 import os
 import sys
+import atexit
+import shutil
+import tempfile
 
 from threading import Thread
 import time
-import RPi.GPIO as GPIO  
+# rpi-lgpio pulls in lgpio, which on import drops a notification FIFO into the
+# working directory. On these netbooted Pis that directory is the read-only NFS
+# root, so the import dies with FileNotFoundError on '.lgd-nfy-3' -- where -3 is
+# not a handle but the error code from failing to create the pipe. The name is
+# per-process, not per-server, so two GPIO servers sharing a directory would
+# also share the FIFO: give each process its own.
+os.environ.setdefault("LG_WD", tempfile.mkdtemp(prefix="lgpio-"))
+atexit.register(shutil.rmtree, os.environ["LG_WD"], True)
+import RPi.GPIO as GPIO
 from time import sleep
 
 count={} # Dictionary to keep counting the pulses from each flowmeter.

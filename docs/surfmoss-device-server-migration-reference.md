@@ -589,6 +589,53 @@ y con el servidor real (instancia 4, canales 6,13 según la BD):
 estado: ON | Measurement thread is running     channel0 = 0.0   channel1 = 0.0
 ```
 
+### Segunda trampa: lgpio y la raíz de solo lectura (18-ago-2026)
+
+Instalar el shim **no basta**. `rpi-lgpio` importa `lgpio`, y `lgpio` crea un FIFO
+de notificaciones **en el directorio de trabajo** nada más importarse. En estas Pis
+ese directorio está en la raíz NFS de solo lectura, así que el import muere:
+
+```
+File "/usr/lib/python3/dist-packages/lgpio.py", line 504, in __init__
+    self._file = open('.lgd-nfy{}'.format(self._notify), 'rb')
+FileNotFoundError: [Errno 2] No such file or directory: '.lgd-nfy-3'
+```
+
+El `-3` **no es un número de fichero**: es el código de error de no haber podido
+crear la tubería. Mensaje engañoso, del mismo estilo que el de las collations.
+
+No se arregla solo con el CWD del Starter. Ese CWD es `/var/tmp/ds.log`, que **sí**
+es escribible… pero es `pi:pi drwxrwxr-x`, y los DS corren como `tango`, que no está
+en el grupo `pi`:
+
+```
+xCreatePipe: Can't set permissions (436) for /var/tmp/ds.log/.lgd-nfy0, No such file or directory
+```
+
+Y tampoco vale apuntar todos a `/tmp` con un `LG_WD` común: el nombre del FIFO
+(`.lgd-nfy0`) es **por proceso, no por servidor**, y hay dos Pis que corren dos
+servidores de GPIO cada una — pi-uleem (`RaspberrySwitch/1` + `SEAWaterflowmeter/1`)
+y pi-xps (`RaspberryButton/1` + `SEAWaterflowmeter/3`) — que acabarían compartiendo
+el mismo FIFO. Con `/tmp` además entra el *sticky bit*: si el fichero ya existe de
+otro usuario, el segundo no puede tocarlo.
+
+**Solución aplicada en el código**, en los cuatro servidores de GPIO, justo antes del
+`import RPi.GPIO`:
+
+```python
+os.environ.setdefault("LG_WD", tempfile.mkdtemp(prefix="lgpio-"))
+atexit.register(shutil.rmtree, os.environ["LG_WD"], True)
+```
+
+Cada proceso se lleva su propio directorio privado en `/tmp` (tmpfs, escribible por
+cualquiera) y lo borra al salir. Va en el código y no en la unidad de systemd a
+propósito: así funciona lo lance quien lo lance —el Starter, una sesión de itango o
+a mano— y se despliega por el mismo `git pull` que todo lo demás, sin tocar la raíz
+compartida.
+
+Verificado en pi-vsm con el servidor real lanzado como `tango` desde el CWD del
+Starter: `ON | Measurement thread is running`.
+
 Qué usa cada servidor vivo de la API, para saber qué revisar tras el cambio:
 
 | Servidor | Usa | Riesgo |
