@@ -46,8 +46,6 @@ CenterOneGauge = "CenterOneGauge:main"
 LeyboldIG3 = "LeyboldIG3:main"
 # MKSGauge
 MKSGauge = "MKSGauge:main"
-# Motor
-Motor = "Motor:main"
 # NetworkUPSTools
 NetworkUPSTool = "NetworkUPSTool:main"
 # PIDController
@@ -97,7 +95,6 @@ packages = [
     "LeyboldIG3",
     "MFC",
     "MKSGauge",
-    "Motor",
     "NetworkUPSTool",
     "PIDController",
     "PfeifferHiscroll",
@@ -133,7 +130,6 @@ Itech6000C        = "Itech6000C/Itech6000C"
 LeyboldIG3        = "LeyboldIG3/LeyboldIG3"
 MFC               = "MFC/MFC"
 MKSGauge          = "MKSGauge/MKSGauge"
-Motor             = "Motor/Motor"
 NetworkUPSTool    = "NetworkUPSTool/NetworkUPSTool"
 PIDController     = "PIDController/PIDController"
 PfeifferHiscroll  = "PfeifferHiscroll/PfeifferHiscroll"

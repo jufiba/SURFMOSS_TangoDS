@@ -1,6 +1,7 @@
 # Deprecated device servers
 
-These device servers are retired because their **hardware is dead or gone**. They
+These device servers are retired because their **hardware is dead, gone, or
+superseded**. They
 are kept here for reference and git history only. They are:
 
 - **not** installed (excluded from `packages.find`, absent from `[project.scripts]`)
@@ -13,6 +14,7 @@ each would need testing against the new hardware first.
 | Server | Reason retired |
 |---|---|
 | MitutoyoPostable | Serial interface to the Mitutoyo/Elmitec manipulator micrometers died. |
+| Motor | Replaced (18-ago-2026) by an Arduino driving a DRV8825 for the stepper motors — see `ArduinoMotor`. |
 | SpecsXRC1000 | XRC1000 x-ray electronics are dead. |
 | VarianMultiGauge | The last Varian MultiGauge unit died. |
 

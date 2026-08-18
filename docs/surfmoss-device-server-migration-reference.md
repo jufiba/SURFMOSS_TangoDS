@@ -5,7 +5,7 @@ the new Trixie NFS root (`/nfs/pi-trixie` on wolframite) and reconciling them at
 the clean-DB cutover. Built from the Python-3 audit, the entry-point inventory,
 and the dependency map._
 
-_Last updated: 17-ago-2026_
+_Last updated: 18-ago-2026_
 
 ---
 
@@ -148,8 +148,8 @@ On `/nfs/pi-trixie` (ARM64 chroot on wolframite):
   (editable wheel built clean).
 - **31 live wrappers** present in `/usr/local/bin`; **zero parked servers** present
   (deprecated/inactive exclusion confirmed via grep).
-- Import test: **31/31 live servers import** with deps present. 5 GPIO servers
-  (RaspberryButton, RaspberrySwitch, Motor, SEAWaterflowmeter, WaterSwitch) only
+- Import test: **31/31 live servers import** with deps present. 4 GPIO servers
+  (RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, WaterSwitch) only
   import on a real Pi — `RPi.GPIO` refuses to load on x86; this
   is expected, validate on hardware.
 - Package structure fixed: explicit `[tool.setuptools.packages]` +
@@ -188,25 +188,26 @@ import fails at launch.
 
 **The live-server list below is what all three must agree on.**
 
-Tally: **33 live · 7 inactive · 3 deprecated** (= 43 entry-point servers), plus
+Tally: **32 live · 7 inactive · 4 deprecated** (= 43 entry-point servers), plus
 RaspberryButton_old (dead duplicate, remove) and PANIC (third-party, separate).
 
 _(Era 31 · 9 hasta el 13-ago-2026, cuando WisselMCA y GammaVacuumSPCe pasaron de
-inactivos a vivos. El recuento del chroot de arriba, con fecha 30-jun-2026, es
-anterior a ese cambio: al reinstalar deben salir 33 wrappers, no 31.)_
+inactivos a vivos, y 33 · 7 · 3 hasta el 18-ago-2026, cuando Motor pasó a
+deprecated. El recuento del chroot de arriba, con fecha 30-jun-2026, es anterior a
+ambos cambios: al reinstalar deben salir 32 wrappers, no 31.)_
 
 ---
 
 ## Server inventory
 
-### LIVE — install on the Trixie root (33)
+### LIVE — install on the Trixie root (32)
 
 Entry point in `[project.scripts]`, installed, registered in the new DB.
 
 AGPolaritySwitch, AMLPGC1, ArduinoDAC, ArduinoMotor, ArduinoPt, MFC
 (BronkhorstMFC), CryoCon32, ElmitecLEEM2k, ElmitecUview, FUGMCP, HuttingerPFGDC,
 HuttingerPFGRF, Hygrometer, Itech6000C, CenterOneGauge (LeyboldCenterOne),
-LeyboldIG3, MKSGauge, Motor, NetworkUPSTool, PfeifferHiscroll, PfeifferTC100,
+LeyboldIG3, MKSGauge, NetworkUPSTool, PfeifferHiscroll, PfeifferTC100,
 PfeifferTU400, RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, SRIlockin830,
 TempSensorDS18B20, VarianTV301nav, WaterSwitch, Tti604, **PIDController**,
 **WisselMCA**, **GammaVacuumSPCe**.
@@ -254,12 +255,12 @@ NOT pull PyPI versions over the system packages.
 |---|---|---|
 | python3-tango | pytango | ALL (already installed, 10.0.2-1) |
 | python3-serial | pyserial | most serial-instrument servers |
-| python3-rpi.gpio | RPi.GPIO | RaspberryButton, RaspberrySwitch, Motor, SEAWaterflowmeter, WaterSwitch |
+| python3-rpi-lgpio | RPi.GPIO (shim) | RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, WaterSwitch — ver _GPIO en Trixie_ |
 | python3-nut | PyNUT | NetworkUPSTool |
 
 ```bash
 apt update
-apt install -y python3-tango python3-serial python3-rpi.gpio python3-nut
+apt install -y python3-tango python3-serial python3-rpi-lgpio python3-nut
 ```
 
 ### pip (not packaged in Trixie)
@@ -293,12 +294,11 @@ dependency set has been eliminated by omission.
 
 ### Verify on real hardware (cannot be tested in the x86 chroot)
 
-- **GPIO library**: `python3-rpi.gpio` exists, but RPi.GPIO has had Trixie-kernel
-  compatibility issues; the ecosystem has moved toward `rpi-lgpio` (drop-in).
-  Confirm RaspberryButton / RaspberrySwitch / Motor actually drive GPIO on a Pi
-  booted off the Trixie root. **Validate this first.** TempSensorDS18B20 no longer
-  belongs on this list: it dropped the RPi.GPIO import on 17-ago-2026, since the
-  pin is driven by the kernel w1-gpio overlay, not by the server.
+- **GPIO library**: confirmado el 18-ago-2026 — RPi.GPIO **no sirve** en Trixie.
+  Ver _GPIO en Trixie_ más abajo. Falta comprobar en hardware RaspberryButton,
+  RaspberrySwitch y WaterSwitch con el shim ya puesto. TempSensorDS18B20 salió de
+  esta lista el 17-ago-2026 (el pin lo lleva el overlay w1-gpio del kernel) y Motor
+  el 18-ago-2026 (a `deprecated/`).
 - **w1thermsensor**: the kernel one-wire modules + overlay must be enabled on the
   Pi, independent of the pip package. ✅ Verificado el 17-ago-2026 en
   pi-rackmossbauer: `w1_gpio`/`w1_therm` cargados y el sensor enumera, aunque el bus
@@ -534,6 +534,80 @@ página: con datos hasta el canal 655 informa 671 (página 20 = canales 640-671)
 
 ---
 
+## GPIO en Trixie: RPi.GPIO no vale, hay que usar rpi-lgpio (18-ago-2026)
+
+La advertencia de _Verify on real hardware_ se ha confirmado, y de la peor manera:
+**falla en ejecución, no al importar**, así que el chroot no lo detecta y el
+servidor arranca hasta que toca el pin.
+
+`SEAWaterflowmeter/4` no arrancaba en pi-vsm:
+
+```
+File ".../SEAWaterflowmeter.py", line 154, in init_device
+    GPIO.add_event_detect(i, GPIO.RISING, callback=my_callback)
+RuntimeError: Failed to add edge detection
+```
+
+Reproducido en dos líneas como usuario `pi` (que está en `gpio`, así que **no es de
+permisos**), en una Pi 3B+ con kernel 6.18.39 y `python3-rpi.gpio` 0.7.1a4:
+
+```
+GPIO.setup(17, GPIO.IN)            -> OK, GPIO.input(17) -> 0
+GPIO.add_event_detect(17, RISING)  -> RuntimeError: Failed to add edge detection
+```
+
+`setup`, `input` y `output` **siguen funcionando**; lo que se rompe es solo la
+**detección de flancos**, que es lo único que RPi.GPIO hace todavía por el interfaz
+`sysfs` antiguo. Por eso SEAWaterflowmeter fue el primero en notarlo: es el único
+servidor del repositorio que usa `add_event_detect`.
+
+**Remedio: `python3-rpi-lgpio`**, un shim que reimplementa la API de RPi.GPIO sobre
+`lgpio`, que habla con `/dev/gpiochip*`. Está en el archivo de raspberrypi.com para
+Trixie (0.6) y su dependencia `python3-lgpio` ya venía instalada.
+
+```
+Package:   python3-rpi-lgpio
+Depends:   python3-lgpio, python3:any
+Conflicts: python3-rpi.gpio
+Provides:  python3-rpi.gpio
+```
+
+⚠️ **Sustituye a `python3-rpi.gpio`, y la raíz NFS es compartida**: se instala en el
+chroot de wolframite y afecta a **todas las Pis y a todos los DS de GPIO a la vez**.
+
+Verificado sin tocar la raíz, descargando el .deb y extrayéndolo en `/tmp` con
+`PYTHONPATH` por delante:
+
+```
+pin 6:  setup + add_event_detect OK, lectura 1
+pin 13: setup + add_event_detect OK, lectura 0
+```
+
+y con el servidor real (instancia 4, canales 6,13 según la BD):
+
+```
+estado: ON | Measurement thread is running     channel0 = 0.0   channel1 = 0.0
+```
+
+Qué usa cada servidor vivo de la API, para saber qué revisar tras el cambio:
+
+| Servidor | Usa | Riesgo |
+|---|---|---|
+| SEAWaterflowmeter | `add_event_detect` | Es el que se arregla |
+| RaspberrySwitch | `setup`, `input`, `PUD_UP/DOWN` | Bajo |
+| WaterSwitch | `setup`, `input`, `PUD_UP` | Bajo |
+| RaspberryButton | `setup`, `output` | Bajo |
+
+`rpi-lgpio` documenta diferencias de comportamiento en detalles como el *bouncetime*
+de los eventos y en **PWM**. El único servidor que usaba PWM era Motor, que pasó a
+`deprecated/` el 18-ago-2026 al sustituirlo por un Arduino con un DRV8825, así que
+ese riesgo **ya no existe**.
+
+Nota: los `time` y `calibration` vacíos de `vsm/safety/water` en la BD no son un
+problema — tienen `default_value` en el código (1.0 y 7.5).
+
+---
+
 ## TempSensorDS18B20 (corregido 17-ago-2026)
 
 Moría al arrancar, y **no era por hardware ausente**: el sensor
@@ -667,7 +741,7 @@ ls /usr/local/bin/ | grep -iE 'Mitutoyo|Specs|VarianMultiGauge|Gamma|Keithley|MC
    - [x] Los cuatro DS de red usan `IP` / `Port` con el mismo nombre. Ojo a los
          valores huérfanos en la BD bajo `UviewIP`, `UviewPort` y `Host`.
 2. **Trixie root install (in chroot, binds mounted)**
-   - [ ] apt deps: `python3-tango python3-serial python3-rpi.gpio`,
+   - [ ] apt deps: `python3-tango python3-serial python3-rpi-lgpio`,
          más `python3-numpy libhidapi-hidraw0` para WisselMCA.
    - [ ] pip deps: `simple-pid w1thermsensor` (`--break-system-packages`),
          más el binding HID de WisselMCA (ver sección de dependencias).
