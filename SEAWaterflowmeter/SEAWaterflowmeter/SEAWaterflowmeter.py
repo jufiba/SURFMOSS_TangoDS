@@ -104,6 +104,82 @@ class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
     Device server to interface a Raspberry PI using the GPIO to the SEA YF-S201 water flow sensor.
     """
     # PROTECTED REGION ID(SEAWaterflowmeter.class_variable) ENABLED START #
+    # The helper methods live here because this is the only region inside the
+    # class body that POGO emits for this template, and therefore the only one
+    # it will preserve when the code is regenerated from the .xmi. Regions
+    # invented by hand (protected_methods, dynamic_attributes) are not in the
+    # template and would be dropped, taking these methods with them.
+    def _configure(self):
+        """Parse the properties, claim the GPIO pins, publish named attributes."""
+        for token in self.channels.split(","):
+            token = token.strip()
+            if token:
+                self.pins.append(int(token))
+        if not self.pins:
+            raise ValueError("property 'channels' is empty")
+        if len(self.pins) > MAX_CHANNELS:
+            raise ValueError("at most %d channels are supported, got %d"
+                             % (MAX_CHANNELS, len(self.pins)))
+        if len(set(self.pins)) != len(self.pins):
+            raise ValueError("property 'channels' repeats a pin: %r" % (self.pins,))
+
+        names = [n.strip() for n in self.channelnames.split(",") if n.strip()]
+        while len(names) < len(self.pins):
+            names.append("channel%d" % len(names))
+        self.listofnames = names[:len(self.pins)]
+
+        self.counters = dict((pin, 0) for pin in self.pins)
+
+        GPIO.setmode(GPIO.BCM)
+        for pin in self.pins:
+            GPIO.setup(pin, GPIO.IN)
+        for pin in self.pins:
+            GPIO.add_event_detect(pin, GPIO.RISING, callback=self._pulse)
+
+        # Label the static channelN attributes from channelnames. The label is
+        # set in memory only (no device argument to set_properties), so
+        # channelnames stays the single source of truth and nothing is written
+        # back to the database.
+        for idx, name in enumerate(self.listofnames):
+            attr = self.get_device_attr().get_attr_by_name("channel%d" % idx)
+            props = attr.get_properties()
+            props.label = name
+            attr.set_properties(props)
+
+        # Publish one dynamic attribute per physical line, named after it, so a
+        # client can ask for "xraygun" instead of "channel0". If the channel
+        # order is ever changed, such a client faults loudly rather than
+        # silently watching the wrong line.
+        for idx, name in enumerate(self.listofnames):
+            if name.startswith("channel"):
+                continue
+            props = UserDefaultAttrProp()
+            props.set_label(name)
+            props.set_unit("l/min")
+            props.set_format("%3.1f")
+            attr = Attr(name, ArgType.DevDouble, AttrWriteType.READ)
+            attr.set_default_properties(props)
+            self.add_attribute(attr, r_meth=self.read_named_channel)
+            self.nameindex[name] = idx
+            self.dynamic_names.append(name)
+
+    def _pulse(self, channel):
+        """GPIO rising-edge callback. Runs in RPi.GPIO's own thread."""
+        self.counters[channel] += 1
+
+    def _read_indexed(self, idx):
+        """Unconfigured channels report INVALID, never 0.0.
+
+        Returning zero for a channel that does not exist is indistinguishable
+        from zero flow, which is exactly the wrong thing to hand an interlock.
+        """
+        if idx >= len(self.pins):
+            return (0.0, time.time(), PyTango.AttrQuality.ATTR_INVALID)
+        return self.channeldata[idx]
+
+    def read_named_channel(self, attr):
+        idx = self.nameindex[attr.get_name()]
+        attr.set_value(self.channeldata[idx])
     # PROTECTED REGION END #    //  SEAWaterflowmeter.class_variable
 
     # -----------------
@@ -201,75 +277,6 @@ class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
         self.set_status("Measurement thread is running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.init_device
 
-    # PROTECTED REGION ID(SEAWaterflowmeter.protected_methods) ENABLED START #
-    def _configure(self):
-        """Parse the properties, claim the GPIO pins, publish named attributes."""
-        for token in self.channels.split(","):
-            token = token.strip()
-            if token:
-                self.pins.append(int(token))
-        if not self.pins:
-            raise ValueError("property 'channels' is empty")
-        if len(self.pins) > MAX_CHANNELS:
-            raise ValueError("at most %d channels are supported, got %d"
-                             % (MAX_CHANNELS, len(self.pins)))
-        if len(set(self.pins)) != len(self.pins):
-            raise ValueError("property 'channels' repeats a pin: %r" % (self.pins,))
-
-        names = [n.strip() for n in self.channelnames.split(",") if n.strip()]
-        while len(names) < len(self.pins):
-            names.append("channel%d" % len(names))
-        self.listofnames = names[:len(self.pins)]
-
-        self.counters = dict((pin, 0) for pin in self.pins)
-
-        GPIO.setmode(GPIO.BCM)
-        for pin in self.pins:
-            GPIO.setup(pin, GPIO.IN)
-        for pin in self.pins:
-            GPIO.add_event_detect(pin, GPIO.RISING, callback=self._pulse)
-
-        # Label the static channelN attributes from channelnames. The label is
-        # set in memory only (no device argument to set_properties), so
-        # channelnames stays the single source of truth and nothing is written
-        # back to the database.
-        for idx, name in enumerate(self.listofnames):
-            attr = self.get_device_attr().get_attr_by_name("channel%d" % idx)
-            props = attr.get_properties()
-            props.label = name
-            attr.set_properties(props)
-
-        # Publish one dynamic attribute per physical line, named after it, so a
-        # client can ask for "xraygun" instead of "channel0". If the channel
-        # order is ever changed, such a client faults loudly rather than
-        # silently watching the wrong line.
-        for idx, name in enumerate(self.listofnames):
-            if name.startswith("channel"):
-                continue
-            props = UserDefaultAttrProp()
-            props.set_label(name)
-            props.set_unit("l/min")
-            props.set_format("%3.1f")
-            attr = Attr(name, ArgType.DevDouble, AttrWriteType.READ)
-            attr.set_default_properties(props)
-            self.add_attribute(attr, r_meth=self.read_named_channel)
-            self.nameindex[name] = idx
-            self.dynamic_names.append(name)
-
-    def _pulse(self, channel):
-        """GPIO rising-edge callback. Runs in RPi.GPIO's own thread."""
-        self.counters[channel] += 1
-
-    def _read_indexed(self, idx):
-        """Unconfigured channels report INVALID, never 0.0.
-
-        Returning zero for a channel that does not exist is indistinguishable
-        from zero flow, which is exactly the wrong thing to hand an interlock.
-        """
-        if idx >= len(self.pins):
-            return (0.0, time.time(), PyTango.AttrQuality.ATTR_INVALID)
-        return self.channeldata[idx]
-    # PROTECTED REGION END #    //  SEAWaterflowmeter.protected_methods
 
     def always_executed_hook(self):
         # PROTECTED REGION ID(SEAWaterflowmeter.always_executed_hook) ENABLED START #
@@ -335,11 +342,6 @@ class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
         return self._updates
         # PROTECTED REGION END #    //  SEAWaterflowmeter.UpdateCount_read
 
-    # PROTECTED REGION ID(SEAWaterflowmeter.dynamic_attributes) ENABLED START #
-    def read_named_channel(self, attr):
-        idx = self.nameindex[attr.get_name()]
-        attr.set_value(self.channeldata[idx])
-    # PROTECTED REGION END #    //  SEAWaterflowmeter.dynamic_attributes
 
     # --------
     # Commands
