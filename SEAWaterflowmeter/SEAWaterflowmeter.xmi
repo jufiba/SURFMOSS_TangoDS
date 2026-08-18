@@ -8,12 +8,12 @@
     <deviceProperties name="channels" description="List of GPIO pins to count, using the BOARD naming scheme.">
       <type xsi:type="pogoDsl:StringType"/>
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
-      <DefaultPropValue>6,13,19,26</DefaultPropValue>
+      <DefaultPropValue>6,13</DefaultPropValue>
     </deviceProperties>
     <deviceProperties name="channelnames" description="Names of each channel">
       <type xsi:type="pogoDsl:StringType"/>
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
-      <DefaultPropValue>turbo,xraygun,doser,p2lens</DefaultPropValue>
+      <DefaultPropValue>turbo,xraygun</DefaultPropValue>
     </deviceProperties>
     <deviceProperties name="calibration" description="Factor to divide the measured Hz to get liters/min">
       <type xsi:type="pogoDsl:DoubleType"/>
@@ -92,6 +92,14 @@
       <dataReadyEvent fire="false" libCheckCriteria="true"/>
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
       <properties description="" label="channel3" unit="l/min" standardUnit="" displayUnit="" format="%3.1f" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="UpdateCount" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:IntType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="Increments once per integration cycle. A client that sees this stop advancing knows the readings are stale, even though the flow attributes still return their last value." label="UpdateCount" unit="" standardUnit="" displayUnit="" format="%d" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
     </attributes>
     <states name="ON" description="">
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
