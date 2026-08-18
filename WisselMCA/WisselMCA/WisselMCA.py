@@ -30,6 +30,9 @@ import hid
 import struct
 import numpy
 
+# Seconds to wait before trying the USB device again while in FAULT.
+RETRY_PERIOD=10
+
 class cmca:
     VendorID=0x0925
     InstrumentID=0x0035
@@ -401,6 +404,25 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(WisselMCA.init_device) ENABLED START #
         self.lastchannel = 512
         self.firstchannel = 0
+        self.lastconnect = 0
+        self.connect()
+        # PROTECTED REGION END #    //  WisselMCA.init_device
+
+    def connect(self):
+        """ Open the MCA and pick up the mode it is in. True if it worked.
+
+        Kept out of init_device because that runs exactly once: if the USB
+        device was busy or not yet permitted at startup, the server used to
+        stay FAULT for good, even when the instrument freed up a second later,
+        and only an operator Init would recover it.
+        """
+        self.lastconnect = time.time()
+        old = getattr(self, "c", None)
+        if old is not None:
+            try:
+                old.close()   # or the stale handle keeps the USB to itself
+            except Exception:
+                pass
         self.c = cmca()
         self.c.VendorID = self.VendorID
         self.c.InstrumentID = self.InstrumentID
@@ -412,40 +434,51 @@ class WisselMCA(Device, metaclass=DeviceMeta):
                             % (self.InstrumentID, e))
             self.error_stream("Can't connect to Wissel MCA %x: %s"
                               % (self.InstrumentID, e))
-            return
+            return False
+        # Not `checked()` here: a comms error must not escape init_device, or
+        # PyTango exits the whole server.
         (ok, modebyte) = self.c.readmode()
-        if ok:
-            if modebyte & 0b00010000:
-                self.set_state(PyTango.DevState.ON)   # counting
-            else:
-                self.set_state(PyTango.DevState.OFF)  # stopped
-            mode = modebyte & 0b11
-            if mode == 3:  # PHA mode
-                self.firstchannel = 0
-                # Not `checked()` here: a comms error must not escape
-                # init_device, or PyTango exits the whole server.
-                (ok2, setup) = self.c.readgeneral()
-                (ok3, w) = self.c.readPHA()
-                if ok2 and ok3:
-                    self.lastchannel = phalastchannel(setup, w[2])
-            elif mode == 2:  # MCS analog
-                self.firstchannel = 0
-                self.lastchannel = 512
-            else:  # MCS digital or None
-                self.firstchannel = 0
-                self.lastchannel = 512
+        if not ok:
+            self.set_state(PyTango.DevState.FAULT)
+            self.set_status("Wissel MCA %x is open but does not answer: %s"
+                            % (self.InstrumentID, modebyte))
+            self.error_stream("Wissel MCA %x is open but does not answer: %s"
+                              % (self.InstrumentID, modebyte))
+            return False
+        if modebyte & 0b00010000:
+            self.set_state(PyTango.DevState.ON)   # counting
+        else:
+            self.set_state(PyTango.DevState.OFF)  # stopped
+        mode = modebyte & 0b11
+        self.firstchannel = 0
+        if mode == 3:  # PHA mode
+            (ok2, setup) = self.c.readgeneral()
+            (ok3, w) = self.c.readPHA()
+            if ok2 and ok3:
+                self.lastchannel = phalastchannel(setup, w[2])
+        else:  # MCS analog, MCS digital or None
+            self.lastchannel = 512
         self.set_status("Connected to Wissel MCA %x" % self.InstrumentID)
         self.debug_stream("Connected to Wissel MCA %x" % self.InstrumentID)
-        # PROTECTED REGION END #    //  WisselMCA.init_device
+        return True
 
     def always_executed_hook(self):
         # PROTECTED REGION ID(WisselMCA.always_executed_hook) ENABLED START #
-        pass
+        # Tango runs this before every attribute access and command, so it is
+        # where a device that was busy at startup gets picked up without an
+        # operator Init. Rate-limited: a failed USB open is not free, and
+        # callers should not pay for one on every single request.
+        if (self.get_state() == PyTango.DevState.FAULT
+                and time.time() - self.lastconnect > RETRY_PERIOD):
+            self.connect()
         # PROTECTED REGION END #    //  WisselMCA.always_executed_hook
 
     def delete_device(self):
         # PROTECTED REGION ID(WisselMCA.delete_device) ENABLED START #
-        self.c.close()
+        try:
+            self.c.close()
+        except Exception:
+            pass   # nothing to close if the open never succeeded
         # PROTECTED REGION END #    //  WisselMCA.delete_device
 
     # ------------------
