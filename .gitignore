@@ -17,3 +17,7 @@ LICENSE.txt
 README.rst
 release.py
 *.pdf
+
+# stray vim swap files (one had been committed as .txt.swp)
+*.swp
+*.swo
