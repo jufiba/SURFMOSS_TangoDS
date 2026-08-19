@@ -1,0 +1,142 @@
+JDFile v11 {
+  Global {
+  }
+  JDImage {
+    summit:84,345,405,755
+    origin:596,13
+    lineWidth:0
+    name:"Image"
+    file_name:"tap.jpg"
+  }
+  JDRoundRectangle {
+    summit:65,54,411,271
+    origin:238,163
+    name:"RoundRectangle"
+  }
+  JDLabel {
+    summit:87,88,370,113
+    origin:198,99
+    lineWidth:0
+    name:"Label"
+    font:"Dialog",0,18
+    text:"Preparation Chamber Pressure"
+  }
+  JDSwingObject {
+    summit:80,143,389,216
+    origin:114,151
+    fillStyle:1
+    lineWidth:0
+    name:"leem/vacuum/gaugePCH/Pressure"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,30
+  }
+  JDRoundRectangle {
+    summit:72,307,417,775
+    origin:245,390
+    name:"RoundRectangle"
+  }
+  JDRoundRectangle {
+    summit:813,372,1114,783
+    origin:964,578
+    name:"RoundRectangle"
+  }
+  JDLabel {
+    summit:830,398,1087,423
+    origin:931,409
+    lineWidth:0
+    name:"Label"
+    font:"Dialog",0,18
+    text:"Preparation Chamber Turbo"
+  }
+  JDLabel {
+    summit:125,320,373,345
+    origin:222,331
+    lineWidth:0
+    name:"Label"
+    font:"Dialog",0,18
+    text:"Water connection to Turbo"
+  }
+  JDSwingObject {
+    summit:848,455,1079,526
+    origin:882,463
+    fillStyle:1
+    lineWidth:0
+    name:"leem/vacuum/turboPCH/ActualSpeed"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,24
+  }
+  JDBar {
+    summit:105,531,387,628
+    origin:157,580
+    fillStyle:1
+    name:"leem/safety/water/State"
+  }
+  JDSwingObject {
+    summit:848,564,1079,634
+    origin:882,572
+    fillStyle:1
+    lineWidth:0
+    name:"leem/vacuum/turboPCH/TemperatureBearing"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,24
+  }
+  JDSwingObject {
+    summit:848,673,1078,742
+    origin:882,681
+    fillStyle:1
+    lineWidth:0
+    name:"leem/vacuum/turboPCH/Power"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,24
+  }
+  JDImage {
+    summit:446,135,785,667
+    origin:958,-90
+    lineWidth:0
+    name:"Image"
+    file_name:"pch.jpg"
+  }
+  JDImage {
+    summit:843,48,1055,347
+    origin:1355,-250
+    lineWidth:0
+    name:"Image"
+    file_name:"turbo.jpg"
+  }
+  JDLabel {
+    summit:296,0,906,56
+    origin:396,11
+    lineWidth:0
+    name:"Label"
+    font:"Dialog",0,44
+    text:"LEEM Preparation Chamber"
+  }
+}

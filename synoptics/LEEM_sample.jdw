@@ -82,8 +82,8 @@ JDFile v11 {
     font:"Dialog",0,12
   }
   JDSwingObject {
-    summit:83,36,299,56
-    origin:117,49
+    summit:105,36,321,56
+    origin:139,49
     fillStyle:1
     lineWidth:0
     name:"leem/measurement/PositionXY/Position"
@@ -96,6 +96,21 @@ JDFile v11 {
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
     font:"Dialog",0,12
+  }
+  JDSwingObject {
+    summit:6,37,94,55
+    origin:63,46
+    foreground:51,51,51
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"leem/measurement/positionXY/Reset"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Dialog",1,12
+    border:3
   }
   JDSwingObject {
     summit:141,103,256,126
@@ -150,12 +165,5 @@ JDFile v11 {
     lineWidth:0
     name:"Temperature"
     text:"Pressure MCH"
-  }
-  JDLabel {
-    summit:22,38,78,59
-    origin:73,49
-    lineWidth:0
-    name:"Temperature"
-    text:"Position"
   }
 }

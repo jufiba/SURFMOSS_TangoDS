@@ -1,22 +1,29 @@
 JDFile v11 {
   Global {
   }
+  JDImage {
+    summit:436,358,679,657
+    origin:948,-85
+    lineWidth:0
+    name:"Image"
+    file_name:"tap.jpg"
+  }
   JDRoundRectangle {
-    summit:23,68,343,212
+    summit:23,68,343,285
     origin:196,177
     name:"RoundRectangle"
   }
   JDLabel {
-    summit:45,84,309,116
-    origin:156,95
+    summit:45,92,328,117
+    origin:156,103
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,24
-    text:"Preparation Chamber"
+    font:"Dialog",0,18
+    text:"Preparation Chamber Pressure"
   }
   JDSwingObject {
-    summit:30,123,339,196
-    origin:64,131
+    summit:29,160,338,233
+    origin:63,168
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/gaugePCH/Pressure"
@@ -31,26 +38,34 @@ JDFile v11 {
     font:"Dialog",0,38
   }
   JDRoundRectangle {
-    summit:377,293,722,572
-    origin:550,376
+    summit:381,314,726,685
+    origin:554,397
     name:"RoundRectangle"
   }
   JDRoundRectangle {
-    summit:30,224,331,706
-    origin:181,430
+    summit:30,314,331,725
+    origin:181,520
     name:"RoundRectangle"
   }
   JDLabel {
-    summit:43,233,184,265
-    origin:144,244
+    summit:47,340,304,365
+    origin:148,351
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,24
-    text:"Main Turbo"
+    font:"Dialog",0,18
+    text:"Preparation Chamber Turbo"
+  }
+  JDLabel {
+    summit:434,327,682,352
+    origin:531,338
+    lineWidth:0
+    name:"Label"
+    font:"Dialog",0,18
+    text:"Water connection to Turbo"
   }
   JDSwingObject {
-    summit:65,283,296,354
-    origin:99,291
+    summit:65,397,296,468
+    origin:99,405
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/turboPCH/ActualSpeed"
@@ -60,17 +75,22 @@ JDFile v11 {
       alarmEnabled:"true"
       validBackground:"0,255,0"
       invalidText:"-----"
-      className:"atkpanel.MainPanel"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
     font:"Dialog",0,24
   }
+  JDBar {
+    summit:483,494,661,529
+    origin:535,481
+    fillStyle:1
+    name:"leem/safety/water/State"
+  }
   JDSwingObject {
-    summit:65,392,296,462
-    origin:99,400
+    summit:65,506,296,576
+    origin:99,514
     fillStyle:1
     lineWidth:0
-    name:"leem/vacuum/TurboPCH/TemperatureMotor"
+    name:"leem/vacuum/turboPCH/TemperatureBearing"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -82,8 +102,8 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDSwingObject {
-    summit:64,502,294,571
-    origin:98,510
+    summit:65,615,295,684
+    origin:99,623
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/turboPCH/Power"
@@ -98,15 +118,15 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:7,3,286,59
-    origin:107,14
+    summit:347,4,773,60
+    origin:447,15
     lineWidth:0
     name:"Label"
     font:"Dialog",0,44
-    text:"LEEM Status"
+    text:"LEEM Pressure Info"
   }
   JDRoundRectangle {
-    summit:386,68,719,213
+    summit:386,68,719,284
     origin:553,180
     name:"RoundRectangle"
   }
@@ -116,24 +136,24 @@ JDFile v11 {
     name:"RoundRectangle"
   }
   JDLabel {
-    summit:468,84,649,116
-    origin:554,95
+    summit:436,92,655,117
+    origin:522,103
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,24
-    text:"Main Chamber"
+    font:"Dialog",0,18
+    text:"Main chamber Pressure"
   }
   JDLabel {
-    summit:833,83,1018,115
-    origin:919,94
+    summit:811,92,1035,117
+    origin:897,103
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,24
-    text:"Electron optics"
+    font:"Dialog",0,18
+    text:"Electron optics Pressure"
   }
   JDSwingObject {
-    summit:399,124,708,197
-    origin:433,132
+    summit:399,160,708,233
+    origin:433,168
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/gaugeMCH/Pressure_IG1"
@@ -148,8 +168,8 @@ JDFile v11 {
     font:"Dialog",0,38
   }
   JDSwingObject {
-    summit:770,125,1079,198
-    origin:804,133
+    summit:768,160,1077,233
+    origin:802,168
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/gaugeMCH/Pressure_IG2"
@@ -163,597 +183,16 @@ JDFile v11 {
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
     font:"Dialog",0,38
   }
+  JDImage {
+    summit:775,310,1048,719
+    origin:1287,37
+    lineWidth:0
+    name:"Image"
+    file_name:"pch.jpg"
+  }
   JDLine {
     summit:425,68,425,68
     origin:425,68
     name:"Line"
-  }
-  JDLabel {
-    summit:779,393,833,425
-    origin:876,404
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,24
-    text:"UPS"
-  }
-  JDRoundRectangle {
-    summit:755,378,1100,735
-    origin:928,461
-    name:"RoundRectangle"
-  }
-  JDSwingObject {
-    summit:813,438,1044,509
-    origin:847,446
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/ups/charge"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDSwingObject {
-    summit:815,537,1046,608
-    origin:849,545
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/ups/load"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDSwingObject {
-    summit:816,640,1048,714
-    origin:894,651
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/ups/UpsStatus"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:998,513,1048,538
-    origin:1095,524
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Load"
-  }
-  JDLabel {
-    summit:905,414,1049,439
-    origin:1002,425
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Battery Charge"
-  }
-  JDLabel {
-    summit:987,618,1051,643
-    origin:1084,629
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Status"
-  }
-  JDBar {
-    summit:201,587,315,622
-    origin:253,574
-    fillStyle:1
-    name:"leem/vacuum/roughingvalve/State"
-  }
-  JDLabel {
-    summit:52,593,198,618
-    origin:149,604
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Roughing valve"
-  }
-  JDLabel {
-    summit:238,260,301,285
-    origin:335,271
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Speed"
-  }
-  JDLabel {
-    summit:177,369,301,394
-    origin:274,380
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Temperature"
-  }
-  JDLabel {
-    summit:238,478,300,503
-    origin:335,489
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Power"
-  }
-  JDBar {
-    summit:804,336,846,358
-    origin:856,323
-    fillStyle:1
-    name:"leem/power/xps/State"
-  }
-  JDLabel {
-    summit:774,311,876,336
-    origin:871,322
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"XPS power"
-  }
-  JDSwingObject {
-    summit:531,403,701,477
-    origin:547,414
-    fillStyle:1
-    lineWidth:0
-    name:"leem/power/hv1/Power"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:434,414,510,460
-    origin:531,425
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Doser1 ",
-         "power"
-  }
-  JDSwingObject {
-    summit:378,12,655,55
-    origin:490,23
-    fillStyle:1
-    lineWidth:0
-    name:"leem/measurement/positionXY/Position"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,18
-  }
-  JDSwingObject {
-    summit:797,11,907,56
-    origin:825,22
-    fillStyle:1
-    lineWidth:0
-    name:"leem/measurement/LEEM2k/SampleTemperature"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,18
-  }
-  JDSwingObject {
-    summit:967,10,1080,53
-    origin:951,21
-    fillStyle:1
-    lineWidth:0
-    name:"leem/measurement/LEEM2k/Objective"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,18
-  }
-  JDLabel {
-    summit:298,20,375,45
-    origin:395,31
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Position"
-  }
-  JDLabel {
-    summit:670,12,794,58
-    origin:767,23
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Sample ",
-         "Temperature"
-  }
-  JDLabel {
-    summit:917,21,954,46
-    origin:1014,32
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Obj"
-  }
-  JDSwingObject {
-    summit:531,483,701,557
-    origin:547,494
-    fillStyle:1
-    lineWidth:0
-    name:"leem/power/hv2/Power"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:436,492,507,538
-    origin:533,503
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Doser2",
-         "power"
-  }
-  JDSwingObject {
-    summit:165,637,315,685
-    origin:199,626
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/water/channel0"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:92,640,159,686
-    origin:189,651
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Water ",
-         "flow"
-  }
-  JDSwingObject {
-    summit:924,223,1074,271
-    origin:958,212
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/water/channel3"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:795,223,904,269
-    origin:892,234
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Water flow ",
-         "P2"
-  }
-  JDLabel {
-    summit:894,290,1078,315
-    origin:991,301
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"xray gun water flow"
-  }
-  JDSwingObject {
-    summit:909,320,1059,368
-    origin:943,309
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/water/channel1"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDSwingObject {
-    summit:531,308,701,382
-    origin:547,319
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/water/channel2"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:397,325,513,371
-    origin:494,336
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Doser water",
-         "flow"
-  }
-  JDRoundRectangle {
-    summit:374,586,719,808
-    origin:553,724
-    name:"RoundRectangle"
-  }
-  JDSwingObject {
-    summit:553,687,702,737
-    origin:548,698
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/scrollPump/TemperatureMotor"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDSwingObject {
-    summit:552,746,701,796
-    origin:547,757
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/scrollPump/Power"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:396,595,491,627
-    origin:493,606
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,24
-    text:"Hiscroll"
-  }
-  JDSwingObject {
-    summit:554,627,703,677
-    origin:549,638
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/scrollPump/ActualSpeed"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,24
-  }
-  JDLabel {
-    summit:416,696,540,721
-    origin:513,707
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Temperature"
-  }
-  JDLabel {
-    summit:444,755,506,780
-    origin:541,766
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Power"
-  }
-  JDImage {
-    summit:770,722,1055,803
-    origin:1130,823
-    lineWidth:0
-    name:"Image"
-    file_name:"logo.png"
-  }
-  JDLabel {
-    summit:445,645,508,670
-    origin:542,656
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Speed"
-  }
-  JDLine {
-    summit:1013,563,1013,563
-    origin:1013,563
-    name:"Line"
-  }
-  JDLabel {
-    summit:407,245,504,270
-    origin:504,256
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Doser line"
-  }
-  JDSwingObject {
-    summit:530,232,713,277
-    origin:595,243
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/gaugeEvap/Pressure"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,18
-  }
-  JDLabel {
-    summit:51,725,238,750
-    origin:148,736
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Room Temperature "
-  }
-  JDSwingObject {
-    summit:231,717,341,754
-    origin:259,728
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/roomtemperature/Temperature"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,18
-  }
-  JDLabel {
-    summit:68,776,214,801
-    origin:165,787
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Room Humidity"
-  }
-  JDSwingObject {
-    summit:229,770,339,806
-    origin:257,781
-    fillStyle:1
-    lineWidth:0
-    name:"leem/safety/Hygrometer/Humidity"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,18
-  }
-  JDSwingObject {
-    summit:507,601,581,619
-    origin:564,610
-    foreground:51,51,51
-    background:238,238,238
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/scrollPump/Start"
-    extensions:{
-      text:""
-    }
-    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,12
-    border:3
-  }
-  JDSwingObject {
-    summit:601,601,675,619
-    origin:658,610
-    foreground:51,51,51
-    background:238,238,238
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/scrollPump/Stop"
-    extensions:{
-      text:""
-    }
-    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,12
-    border:3
-  }
-  JDSwingObject {
-    summit:194,239,255,257
-    origin:251,248
-    foreground:51,51,51
-    background:238,238,238
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/turboPCH/Start"
-    extensions:{
-      text:""
-    }
-    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,12
-    border:3
-  }
-  JDSwingObject {
-    summit:260,239,321,257
-    origin:317,248
-    foreground:51,51,51
-    background:238,238,238
-    fillStyle:1
-    lineWidth:0
-    name:"leem/vacuum/turboPCH/Stop"
-    extensions:{
-      text:""
-    }
-    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,12
-    border:3
   }
 }
