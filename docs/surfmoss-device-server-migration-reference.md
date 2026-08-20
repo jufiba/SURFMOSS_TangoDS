@@ -5,7 +5,7 @@ the new Trixie NFS root (`/nfs/pi-trixie` on wolframite) and reconciling them at
 the clean-DB cutover. Built from the Python-3 audit, the entry-point inventory,
 and the dependency map._
 
-_Last updated: 18-ago-2026_
+_Last updated: 20-ago-2026_
 
 ---
 
@@ -165,6 +165,70 @@ hardware. Per-server bring-up on a test Pi remains the authoritative test (block
 behind the `enp6s0f1` VLAN port / IT).
 
 Repo restructure committed and pushed (Mac reference → GitHub → chroot pull).
+
+---
+
+## ⛔ No ejecutar *Generate* de POGO sobre un servidor existente (20-ago-2026)
+
+**POGO 9.10.6 no puede regenerar estos servidores.** Probado sobre
+SEAWaterflowmeter: el fichero que produjo **ni siquiera compila**. Tres tipos de
+daño, independientes entre sí:
+
+1. **SyntaxError — `label` repetido.** En cada atributo emite el `label` dos
+   veces, uno del nombre y otro del bloque `<properties>` del modelo:
+   ```python
+   @attribute(label='channel0', dtype='DevDouble', label="channel0", ...)
+   #                                               ^^^^^ keyword repetido
+   ```
+   `SyntaxError: keyword argument repeated: label`.
+
+2. **NameError — moderniza la cabecera pero no las regiones.** Cambia
+   `import PyTango` por `import tango`, y las regiones protegidas las copia
+   literalmente, con sus `PyTango.DevState`, `PyTango.Except.throw_exception` y
+   `PyTango.AttrQuality.ATTR_INVALID` dentro. Ocho referencias a un nombre que ya
+   no está enlazado. **40 ficheros del repositorio** tienen ese patrón.
+
+3. **Cambios silenciosos de comportamiento.** Aparece `polling_period=3000` en
+   los atributos, salido del `polledPeriod` que llevaba años en el modelo sin
+   efecto — el servidor se pone a sondear solo. Añade andamiaje que no encaja con
+   la implementación (`self._channel0 = 0.0` frente al `self.channeldata` real),
+   renombra los métodos de lectura, crea un `__main__.py`, y **borra los
+   comentarios que estén fuera de las regiones protegidas**.
+
+Además, al abrir un modelo le quita los `<states>` declarados. De los 107 del
+repositorio, 96 tienen descripción vacía y no se pierde nada; los **11 con
+descripción real** están en CryoCon32, ElmitecUview, NetworkUPSTool y
+VarianTV301nav, y ahí sí cuesta algo (`STANDBY = running on battery power`).
+
+### Lo que sí funcionó
+
+**Las regiones protegidas se conservan íntegras**, incluidos métodos auxiliares
+puestos en `class_variable`. Lo que no encaja es todo lo que POGO genera
+alrededor. Y POGO **sigue sirviendo para crear servidores nuevos desde cero**: el
+MFC generado limpio salió correcto.
+
+### La decisión (opción A′)
+
+El `.xmi` es **documentación del interfaz**: vale para Jive, para documentar y
+para revisar qué expone un servidor. **No** para generar. Se mantiene
+sincronizado a mano — está comprobado que POGO acepta sin protestar un `.xmi`
+editado a mano, incluso con bloques `<attributes>` añadidos enteros — y POGO se
+usa solo para leer el modelo.
+
+La red de seguridad es **`tools/check_xmi.py`**, que compara modelo y código en
+los 44 servidores y falla si divergen. Conviene pasarlo antes de commitear un
+cambio de interfaz:
+
+```bash
+python3 tools/check_xmi.py            # 0 si todo cuadra, 1 si hay divergencias
+```
+
+Estado al escribir esto: 41 en sincronía, 0 divergencias, 2 sin modelo
+(AnalogInterlock y GammaVacuumSPCe) y 1 no comparable (PIDController, plantilla
+antigua con `DeviceClass`).
+
+⚠️ Y si alguna vez se ejecuta *Generate* por error, el destrozo se ve enseguida:
+`python3 -m compileall` falla, porque el fichero no compila.
 
 ---
 
