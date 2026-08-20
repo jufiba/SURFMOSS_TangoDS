@@ -125,6 +125,66 @@ def called(node, name):
              (isinstance(node.func, ast.Attribute) and node.func.attr == name)))
 
 
+# A property default is written two different ways for the same value: POGO
+# stores lines of text, the code has a Python literal. "6,13" against ['6,13']
+# is not a divergence, and neither is 3 against "3". Everything is flattened to
+# a string here, and compared numerically as well where both sides look like
+# numbers, so that the check reports disagreements and not spelling.
+
+UNCOMPARABLE = object()      # multi-line default; do not force it to a verdict
+
+
+def default_from_py(node):
+    """default_value= as text, or None if absent, or UNCOMPARABLE."""
+    if node is None:
+        return None
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, bool):
+            return str(node.value).lower()
+        return str(node.value)
+    if isinstance(node, (ast.List, ast.Tuple)):
+        if len(node.elts) == 1:
+            return default_from_py(node.elts[0])
+        return UNCOMPARABLE
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        inner = default_from_py(node.operand)
+        return None if inner in (None, UNCOMPARABLE) else "-" + inner
+    return UNCOMPARABLE          # an expression; not worth guessing at
+
+
+def default_from_xmi(prop):
+    """<DefaultPropValue> as text, or None if absent, or UNCOMPARABLE."""
+    values = [(d.text or "").strip() for d in prop.findall("DefaultPropValue")]
+    values = [v for v in values if v]
+    if not values:
+        return None
+    if len(values) > 1:
+        return UNCOMPARABLE
+    return values[0]
+
+
+def same_default(a, b):
+    """True when two default spellings mean the same value."""
+    if a.strip() == b.strip():
+        return True
+
+    def number(text):
+        text = text.strip()
+        try:
+            return float(text)
+        except ValueError:
+            pass
+        try:
+            return float(int(text, 0))   # 0x0925 in the code, 2341 in the model
+        except ValueError:
+            return None
+
+    na, nb = number(a), number(b)
+    if na is not None and nb is not None:
+        return na == nb
+    return a.strip().lower() == b.strip().lower()   # True vs true
+
+
 def read_py(path):
     """Interface declared in a .py, or None if it is not the modern template."""
     tree = ast.parse(open(path, encoding="utf-8", errors="replace").read())
@@ -151,7 +211,8 @@ def read_py(path):
                                access_of(node.value),
                                const(kw(node.value, "polling_period")))
             elif called(node.value, "device_property"):
-                props[name] = norm_py(kw(node.value, "dtype"))
+                props[name] = (norm_py(kw(node.value, "dtype")),
+                               default_from_py(kw(node.value, "default_value")))
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for dec in node.decorator_list:
                 if called(dec, "attribute"):
@@ -186,7 +247,7 @@ def read_xmi(path):
         cmds[name] = (norm_xmi(argin.find("type") if argin is not None else None),
                       norm_xmi(argout.find("type") if argout is not None else None))
     for p in root.iter("deviceProperties"):
-        props[p.get("name")] = norm_xmi(p.find("type"))
+        props[p.get("name")] = (norm_xmi(p.find("type")), default_from_xmi(p))
     for s in root.iter("states"):
         states[s.get("name")] = (s.get("description") or "").strip()
     return attrs, cmds, props, states
@@ -236,6 +297,25 @@ def compare(name, xmi_path, py_path):
                     notes.append("attribute %s: polledPeriod=%s in the .xmi, "
                                  "polling_period=%s in the .py"
                                  % (k, xv[2], pv[2]))
+            elif label == "property":
+                if xv[0] != pv[0]:
+                    bad.append("property %s: %s in the .xmi, %s in the .py"
+                               % (k, xv[0], pv[0]))
+                xd, pd = xv[1], pv[1]
+                if xd is UNCOMPARABLE or pd is UNCOMPARABLE:
+                    notes.append("property %s: default spans several lines or "
+                                 "is an expression; not compared" % k)
+                elif xd is None and pd is None:
+                    pass
+                elif xd is None:
+                    notes.append("property %s: default_value=%r in the .py, "
+                                 "none in the .xmi" % (k, pd))
+                elif pd is None:
+                    notes.append("property %s: DefaultPropValue=%r in the .xmi, "
+                                 "no default_value in the .py" % (k, xd))
+                elif not same_default(xd, pd):
+                    bad.append("property %s: default %r in the .xmi, %r in the "
+                               ".py" % (k, xd, pd))
             elif xv != pv:
                 bad.append("%s %s: %s in the .xmi, %s in the .py"
                            % (label, k, xv, pv))
