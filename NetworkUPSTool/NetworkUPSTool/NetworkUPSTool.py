@@ -13,14 +13,14 @@ A wrapper for showing the more relevant information from NUT, the network UPS to
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(NetworkUPSTool.additionnal_import) ENABLED START #
 import os
@@ -81,11 +81,11 @@ class NetworkUPSTool(Device, metaclass=DeviceMeta):
         self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
         self.commUPS=self.client.GetUPSCommands(self.UPSunitName)
         if (self.varsUPS["ups.status"]=="OL"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         elif (self.varsUPS["ups.status"]=="OB"):
-            self.set_state(PyTango.DevState.STANDBY)
+            self.set_state(tango.DevState.STANDBY)
         else:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
         # PROTECTED REGION END #    //  NetworkUPSTool.init_device
 
     def always_executed_hook(self):
@@ -106,13 +106,13 @@ class NetworkUPSTool(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(NetworkUPSTool.UpsStatus_read) ENABLED START #
         self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
         if (self.varsUPS["ups.status"]=="OL"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
             status="OnLine"
         elif (self.varsUPS["ups.status"]=="OB"):
-            self.set_state(PyTango.DevState.STANDBY)
+            self.set_state(tango.DevState.STANDBY)
             status="OnBattery"
         else:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             status=self.varsUPS["ups.status"]
         return status
         # PROTECTED REGION END #    //  NetworkUPSTool.UpsStatus_read

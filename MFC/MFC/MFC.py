@@ -13,14 +13,14 @@ Simple driver for the Bronkhorst Mass Flow Controllers.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(MFC.additionnal_import) ENABLED START #
 import os
@@ -82,7 +82,7 @@ class MFC(Device, metaclass=DeviceMeta):
         Device.init_device(self)
         # PROTECTED REGION ID(MFC.init_device) ENABLED START #
         self.ser=serial.Serial(self.SerialPort,baudrate=38400,bytesize=8,parity="N",stopbits=1)
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  MFC.init_device
 
     def always_executed_hook(self):

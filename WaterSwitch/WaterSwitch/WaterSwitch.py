@@ -13,13 +13,13 @@ Simple device server to detect wheter water is flowing in a cooling water sensor
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(WaterSwitch.additionnal_import) ENABLED START #
 import os
@@ -85,10 +85,10 @@ class WaterSwitch(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(WaterSwitch.WaterFlowing_read) ENABLED START #
         reading=GPIO.input(21)
         if (reading):
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
             return False
         else:
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
             return True
         # PROTECTED REGION END #    //  WaterSwitch.WaterFlowing_read
 

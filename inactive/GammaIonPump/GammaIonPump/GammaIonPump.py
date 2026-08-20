@@ -13,14 +13,14 @@ Simple controller for running the Gamma Vacuum Ion Pump Controllers.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(GammaIonPump.additionnal_import) ENABLED START #
 import os
@@ -99,9 +99,9 @@ class GammaIonPump(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(GammaIonPump.init_device) ENABLED START #
         self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1)
         if (self.sendcommand(" 05 61 1 ")[9:-4])=="YES":
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  GammaIonPump.init_device
 
     def always_executed_hook(self):
@@ -153,7 +153,7 @@ class GammaIonPump(Device, metaclass=DeviceMeta):
     def On(self):
         # PROTECTED REGION ID(GammaIonPump.On) ENABLED START #
         self.sendcommand(" 05 37 1 ")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  GammaIonPump.On
 
     @command(
@@ -162,7 +162,7 @@ class GammaIonPump(Device, metaclass=DeviceMeta):
     def Off(self):
         # PROTECTED REGION ID(GammaIonPump.Off) ENABLED START #
         self.sendcommand(" 05 38 1 ")
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  GammaIonPump.Off
 
     @command(

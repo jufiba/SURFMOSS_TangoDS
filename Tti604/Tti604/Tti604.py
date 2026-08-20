@@ -13,14 +13,14 @@ Device to use the RS TTI 604 DVMM. It has a rather horrible interface.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(Tti604.additionnal_import) ENABLED START
 import os
@@ -76,7 +76,7 @@ class Tti604(Device, metaclass=DeviceMeta):
             if (self.ser.read(1)==ka):
                 return(True)
             i+=1
-        self.set_state(PyTango.DevState.FAULT)
+        self.set_state(tango.DevState.FAULT)
         return(False)
     
     def status_tti(self):
@@ -190,18 +190,18 @@ class Tti604(Device, metaclass=DeviceMeta):
         try:
             self.ser=serial.Serial(self.SerialPort,9600,dsrdtr=True,timeout=0.5)
         except IOError as Argument:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to AMLPGC1")
             self.debug_stream("Can't connect to AMLPGC1")
         self.ser.rts=False
         self.set_status("Connected to AMLPGC1")
         self.debug_stream("Connected to AMLPGC1")
         if (self.status_tti()=="LOGGING"):
-            self.set_state(PyTango.DevState.RUNNING)
+            self.set_state(tango.DevState.RUNNING)
         elif (self.status_tti()=="OFF"):
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         elif (self.status_tti()=="ON"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
             # PROTECTED REGION END #    //  Tti604.init_device
 
     def always_executed_hook(self):
@@ -211,7 +211,7 @@ class Tti604(Device, metaclass=DeviceMeta):
 
     def delete_device(self):
         # PROTECTED REGION ID(Tti604.delete_device) ENABLED START #
-        if (self.get_state()==PyTango.DevState.RUNNING):
+        if (self.get_state()==tango.DevState.RUNNING):
                 self.command_tti("u") #turn off loggin mode
         self.ser.close()
         # PROTECTED REGION END #    //  Tti604.delete_device
@@ -249,11 +249,11 @@ class Tti604(Device, metaclass=DeviceMeta):
     def read_Reading(self):
         # PROTECTED REGION ID(Tti604.Reading_read) ENABLED START #
             state=self.get_state()
-            if (state==PyTango.DevState.OFF):
+            if (state==tango.DevState.OFF):
                 reading=(0.0,"None","None","None","None")
-            elif (state==PyTango.DevState.ON):
+            elif (state==tango.DevState.ON):
                 reading=self.read_tti()
-            elif (state==PyTango.DevState.RUNNING):
+            elif (state==tango.DevState.RUNNING):
                 reading=self.fast_read_tti()
             self.value=reading[0]
             self.units=reading[1]
@@ -285,11 +285,11 @@ class Tti604(Device, metaclass=DeviceMeta):
     def On(self):
         # PROTECTED REGION ID(Tti604.On) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.OFF):
+        if (state==tango.DevState.OFF):
             self.command_tti("g")
-        if (state==PyTango.DevState.RUNNING):
+        if (state==tango.DevState.RUNNING):
             self.command_tti("v")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
             # PROTECTED REGION END #    //  Tti604.On
 
     @command(
@@ -298,12 +298,12 @@ class Tti604(Device, metaclass=DeviceMeta):
     def Off(self):
         # PROTECTED REGION ID(Tti604.Off) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.ON):
+        if (state==tango.DevState.ON):
             self.command_tti("g")
-        if (state==PyTango.DevState.RUNNING):
+        if (state==tango.DevState.RUNNING):
             self.command_tti("v")
             self.command_tti("g")
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  Tti604.Off
 
     @command(
@@ -347,12 +347,12 @@ class Tti604(Device, metaclass=DeviceMeta):
     def Run(self):
         # PROTECTED REGION ID(Tti604.Run) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.OFF):
+        if (state==tango.DevState.OFF):
             self.command_tti("g")
             self.command_tti("u")
-        if (state==PyTango.DevState.ON):
+        if (state==tango.DevState.ON):
             self.command_tti("u")
-        self.set_state(PyTango.DevState.RUNNING)
+        self.set_state(tango.DevState.RUNNING)
         # PROTECTED REGION END #    //  Tti604.Run
 
     @command(
@@ -361,11 +361,11 @@ class Tti604(Device, metaclass=DeviceMeta):
     def Stop(self):
         # PROTECTED REGION ID(Tti604.Stop) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.OFF):
+        if (state==tango.DevState.OFF):
             self.command_tti("g")
-        if (state==PyTango.DevState.RUNNING):
+        if (state==tango.DevState.RUNNING):
             self.command_tti("v")
-        self.set_state(PyTango.DevEnum.ON)
+        self.set_state(tango.DevEnum.ON)
         # PROTECTED REGION END #    //  Tti604.Stop
 
     @command(

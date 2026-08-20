@@ -13,14 +13,14 @@ This is a server that provides the same funcionality as the Pfeiffer DCU display
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(PfeifferTC100.additionnal_import) ENABLED START #
 import os
@@ -95,9 +95,9 @@ class PfeifferTC100(Device, metaclass=DeviceMeta):
         self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=1)
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","00","010","=?")
         if (rdata[0]=="1"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  PfeifferTC100.init_device
 
     def always_executed_hook(self):
@@ -169,7 +169,7 @@ class PfeifferTC100(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferTC100.Start) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","10","010","111111")
         if (rdata=="111111"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  PfeifferTC100.Start
 
     @command(
@@ -179,7 +179,7 @@ class PfeifferTC100(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferTC100.Stop) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","10","010","000000")
         if (rdata=="000000"):
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  PfeifferTC100.Stop
 
     @command(
@@ -189,7 +189,7 @@ class PfeifferTC100(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferTC100.Standby) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","10","002","111111")
         if (rdata=="111111"):
-            self.set_state(PyTango.DevState.STANDBY)
+            self.set_state(tango.DevState.STANDBY)
         # PROTECTED REGION END #    //  PfeifferTC100.Standby
 
     @command(
@@ -199,7 +199,7 @@ class PfeifferTC100(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferTC100.Normal) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","10","002","000000")
         if (rdata=="000000"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  PfeifferTC100.Normal
 
     @command(

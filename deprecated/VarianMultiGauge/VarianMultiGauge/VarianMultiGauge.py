@@ -13,14 +13,14 @@ Simple devicer server for the Varian Multigauge controller. Asumes it has a hot 
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(VarianMultiGauge.additionnal_import) ENABLED START #
 import serial
@@ -39,7 +39,7 @@ class ControlThread(Thread):
             self.ds.ser.inWaiting()
             resp=self.ds.ser.readline().decode("ascii")
             if (resp==">01\r"): # Only check first gauge to set device status
-                self.ds.set_state(PyTango.DevState.ON)
+                self.ds.set_state(tango.DevState.ON)
                 self.ds.ser.write(b"#0002I1\r")
                 self.ds.ser.inWaiting()
                 a=self.ds.ser.readline().decode("ascii")
@@ -49,7 +49,7 @@ class ControlThread(Thread):
                 a=self.ds.ser.readline().decode("ascii")
                 self.ds.ig2=float(a[1:])
             else:
-                self.ds.set_state(PyTango.DevState.OFF)
+                self.ds.set_state(tango.DevState.OFF)
                 self.ds.set_status("Either filament is off or gauge does not answer")
                 self.ds.debug_stream("Either filament is off or gauge does not answer")
             time.sleep(1)
@@ -114,7 +114,7 @@ class VarianMultiGauge(Device, metaclass=DeviceMeta):
             self.ser.inWaiting()
             resp=self.ser.readline().decode("ascii")
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to Varian MultiGauge")
             self.debug_stream("Can't connect to Varian MultiGauge")
             return
@@ -122,9 +122,9 @@ class VarianMultiGauge(Device, metaclass=DeviceMeta):
         self.debug_stream("Connected to Varian MultiGauge")
         
         if (resp==">01\r"): # Only check first gauge to set device status
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         self.running=True
         ctrlloop = ControlThread(self)
         ctrlloop.start()

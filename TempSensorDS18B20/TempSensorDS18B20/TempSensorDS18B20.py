@@ -18,14 +18,14 @@ It needs (if using GPIO pin 4):
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(TempSensorDS18B20.additionnal_import) ENABLED START #
 import os
@@ -49,7 +49,7 @@ class ControlThread(Thread):
                     self.ds.sensor=w1thermsensor.W1ThermSensor()
                 self.ds.temp=self.ds.sensor.get_temperature()
                 failures=0
-                self.ds.set_state(PyTango.DevState.ON)
+                self.ds.set_state(tango.DevState.ON)
                 self.ds.set_status("Reading DS18B20 %s"%self.ds.sensor.id)
             except Exception as e:
                 # The 1-wire bus is noisy: the slave can drop out of
@@ -59,7 +59,7 @@ class ControlThread(Thread):
                 self.ds.sensor=None
                 failures+=1
                 if failures>=3:
-                    self.ds.set_state(PyTango.DevState.FAULT)
+                    self.ds.set_state(tango.DevState.FAULT)
                     self.ds.set_status("Can't read the DS18B20 sensor: %s"%e)
                     self.ds.error_stream("Can't read the DS18B20 sensor: %s"%e)
             self.ds.stop.wait(5)
@@ -121,14 +121,14 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
         self.sensor=None
         try:
             self.sensor=w1thermsensor.W1ThermSensor()
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
             self.set_status("Reading DS18B20 %s"%self.sensor.id)
         except Exception as e:
             # Letting this propagate makes PyTango exit the whole server, and
             # the Starter cannot then bring it back. Stay up in FAULT: the
             # control thread retries and recovers on its own if the sensor is
             # only temporarily missing.
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't find the DS18B20 sensor: %s"%e)
             self.error_stream("Can't find the DS18B20 sensor: %s"%e)
         self.ctrlloop = ControlThread(self)
@@ -143,7 +143,7 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
     def delete_device(self):
         # PROTECTED REGION ID(TempSensorDS18B20.delete_device) ENABLED START #
         self.stop.set()
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  TempSensorDS18B20.delete_device
 
     # ------------------
@@ -155,7 +155,7 @@ class TempSensorDS18B20(Device, metaclass=DeviceMeta):
         if self.sensor is None:
             # No sensor right now, so self.temp is stale: say so instead of
             # handing out an old number as if it were a fresh reading.
-            return (float(self.temp), time.time(), PyTango.AttrQuality.ATTR_INVALID)
+            return (float(self.temp), time.time(), tango.AttrQuality.ATTR_INVALID)
         return float(self.temp)
         # PROTECTED REGION END #    //  TempSensorDS18B20.Temperature_read
 

@@ -13,14 +13,14 @@ This is a server that provides the same funcionality as the Pfeiffer DCU display
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(PfeifferHiscroll.additionnal_import) ENABLED START #
 import os
@@ -109,9 +109,9 @@ class PfeifferHiscroll(Device, metaclass=DeviceMeta):
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","10","060","2")
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","00","010","=?")
         if (rdata[0]=="1"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  PfeifferHiscroll.init_device
 
     def always_executed_hook(self):
@@ -201,7 +201,7 @@ class PfeifferHiscroll(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferHiscroll.Start) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","10","010","111111")
         if (rdata=="111111"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  PfeifferHiscroll.Start
 
     @command(
@@ -211,7 +211,7 @@ class PfeifferHiscroll(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferHiscroll.Stop) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","10","010","000000")
         if (rdata=="000000"):
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  PfeifferHiscroll.Stop
 
     @command(
@@ -221,7 +221,7 @@ class PfeifferHiscroll(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferHiscroll.Standby) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","10","002","111111")
         if (rdata=="111111"):
-            self.set_state(PyTango.DevState.STANDBY)
+            self.set_state(tango.DevState.STANDBY)
         # PROTECTED REGION END #    //  PfeifferHiscroll.Standby
 
     @command(
@@ -231,7 +231,7 @@ class PfeifferHiscroll(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(PfeifferHiscroll.Normal) ENABLED START #
         (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","10","002","000000")
         if (rdata=="000000"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  PfeifferHiscroll.Normal
 
 # ----------

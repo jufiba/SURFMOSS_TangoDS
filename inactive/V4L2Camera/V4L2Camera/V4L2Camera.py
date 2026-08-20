@@ -13,14 +13,14 @@ A simple driver to obtain frames from a V4L2 Camera.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(V4L2Camera.additionnal_import) ENABLED START #
 import os
@@ -76,9 +76,9 @@ class V4L2Camera(Device, metaclass=DeviceMeta):
         if not self.video_capture.isOpened():
             self.set_status("Cannnot connect to camera")
             self.debug_stream("Cannot connet to camera")
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
         self.set_status("Connected to camera")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         # PROTECTED REGION END #    //  V4L2Camera.init_device

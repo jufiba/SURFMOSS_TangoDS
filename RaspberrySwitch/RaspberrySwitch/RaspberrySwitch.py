@@ -13,14 +13,14 @@ Read a switch connected to one of the GPIO pins.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(RaspberrySwitch.additionnal_import) ENABLED START #
 import os
@@ -106,17 +106,17 @@ class RaspberrySwitch(Device, metaclass=DeviceMeta):
         reading=GPIO.input(self.GPIOport)
         if (reading):
             if (self.Sense):
-                self.set_state(PyTango.DevState.ON)
+                self.set_state(tango.DevState.ON)
                 return True
             else:
-                self.set_state(PyTango.DevState.OFF)
+                self.set_state(tango.DevState.OFF)
                 return False
         else:
             if (self.Sense):
-                self.set_state(PyTango.DevState.OFF)
+                self.set_state(tango.DevState.OFF)
                 return False
             else:
-                self.set_state(PyTango.DevState.ON)
+                self.set_state(tango.DevState.ON)
                 return True
         # PROTECTED REGION END #    //  RaspberrySwitch.Switch_read
 

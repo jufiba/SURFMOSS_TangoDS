@@ -13,14 +13,14 @@ Reading data and generation of images in hysteresis cycles
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(VSMControlDevice.additionnal_import) ENABLED START #
 import sys
@@ -160,7 +160,7 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
                 self.coilcurrent.Output=current
                 time.sleep(2)
 
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         self.set_status("Cycle finished and saved")
 
 
@@ -272,12 +272,12 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
 
         try:
             #self.DVMlockin      = PyTango.DeviceProxy(self.device_DVMlockin)
-            self.lockin         = PyTango.DeviceProxy(self.device_lockin)
-            self.DVMsondaHall   = PyTango.DeviceProxy(self.device_DVMsondaHall)
-            self.coilcurrent    = PyTango.DeviceProxy(self.device_coilcurrent)
-            self.polarity       = PyTango.DeviceProxy(self.device_polarity)
+            self.lockin         = tango.DeviceProxy(self.device_lockin)
+            self.DVMsondaHall   = tango.DeviceProxy(self.device_DVMsondaHall)
+            self.coilcurrent    = tango.DeviceProxy(self.device_coilcurrent)
+            self.polarity       = tango.DeviceProxy(self.device_polarity)
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Not able to connect to input devices ({}, {}, {}, {}, {})".format(self.device_DVMlockin,
                                                                                                self.device_lockin,
                                                                                                self.device_DVMsondaHall,
@@ -285,7 +285,7 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
                                                                                                self.device_polarity))
         
         else: 
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
 
 
         if True:
@@ -418,7 +418,7 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
         histeresis_thread.start()
 
         time.sleep(1)
-        self.set_state(PyTango.DevState.RUNNING)
+        self.set_state(tango.DevState.RUNNING)
         self.set_status("Empezando Ciclo con:\n\tFilename: {}\n\tComment: {}\nParametros:\n\tMax Current: {}\n\tA Steps: {}\n\tDelta Time: {}".format(self.Filename.get_write_value(),self.Comment.get_write_value(),self.Max_Current.get_write_value(),self.n,self.Delta_Time.get_write_value()))
 
 
@@ -430,7 +430,7 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
     def Stop(self):
         # PROTECTED REGION ID(VSMControlDevice.Stop) ENABLED START #
         self.do_stop = True
-        self.set_state(PyTango.DevState.STANDBY)
+        self.set_state(tango.DevState.STANDBY)
         # PROTECTED REGION END #    //  VSMControlDevice.Stop
 
     @command(
@@ -439,7 +439,7 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
     def Continue(self):
         # PROTECTED REGION ID(VSMControlDevice.Continue) ENABLED START #
         self.do_stop = False
-        self.set_state(PyTango.DevState.RUNNING)
+        self.set_state(tango.DevState.RUNNING)
         self.set_status("Continuando Ciclo con:\n\tFilename: {}\n\tComment: {}\nParametros:\n\tMax Current: {}\n\tA Steps: {}\n\tDelta Time: {}".format(self.Filename.get_write_value(),self.Comment.get_write_value(),self.Max_Current.get_write_value(),self.n,self.Delta_Time.get_write_value()))
 
         # PROTECTED REGION END #    //  VSMControlDevice.Continue
@@ -454,7 +454,7 @@ class VSMControlDevice(Device, metaclass=DeviceMeta):
         self.do_stop = False 
         ## Comprobar si realmente se ha cerrado el hilo antes de cambiar el estado 
         #TODO
-        self.set_state(PyTango.DevState.ON) 
+        self.set_state(tango.DevState.ON) 
 
         # PROTECTED REGION END #    //  VSMControlDevice.Cancel
 

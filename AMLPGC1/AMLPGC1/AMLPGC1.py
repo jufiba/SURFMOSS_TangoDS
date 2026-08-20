@@ -13,14 +13,14 @@ Device server for AML PGC1.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(AMLPGC1.additionnal_import) ENABLED START #
 import os
@@ -72,16 +72,16 @@ class AMLPGC1(Device, metaclass=DeviceMeta):
             self.ser.write(b"*S0\r\n")
             resp=self.ser.readline()
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to AMLPGC1")
             self.debug_stream("Can't connect to AMLPGC1")
             return
         self.set_status("Connected to AMLPGC1")
         self.debug_stream("Connected to AMLPGC1")
         if (resp[7]&0b0001==0b00001):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  AMLPGC1.init_device
 
     def always_executed_hook(self):
@@ -133,7 +133,7 @@ class AMLPGC1(Device, metaclass=DeviceMeta):
     def Start(self):
         # PROTECTED REGION ID(AMLPGC1.Start) ENABLED START #
         self.ser.write(b"*i03\r\n")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  AMLPGC1.Start
 
     @command(
@@ -142,7 +142,7 @@ class AMLPGC1(Device, metaclass=DeviceMeta):
     def Stop(self):
         # PROTECTED REGION ID(AMLPGC1.Stop) ENABLED START #
         self.ser.write(b"*o0\r\n")
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  AMLPGC1.Stop
 
     @command(
@@ -164,7 +164,7 @@ class AMLPGC1(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(AMLPGC1.SetLocal) ENABLED START #
         self.ser.write(b"*R0\r\n")
         resp=self.ser.readline()
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  AMLPGC1.SetLocal
 
     @command(
@@ -174,7 +174,7 @@ class AMLPGC1(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(AMLPGC1.SetRemote) ENABLED START #
         self.ser.write(b"*C0\r\n") # Set remote mode
         resp=self.ser.readline()
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  AMLPGC1.SetRemote
 
 # ----------

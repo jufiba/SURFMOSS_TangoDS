@@ -13,14 +13,14 @@ Device server for the HV power supply MCP 140-1250 (1250V, 100mA). It has a USB 
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(FUGMCP.additionnal_import) ENABLED START #
 import os
@@ -123,12 +123,12 @@ class FUGMCP(Device, metaclass=DeviceMeta):
             self.ser.write(bytes("*IDN?\n","ascii"))
             self.identification=self.ser.readline()
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to FUG MCP")
             self.debug_stream("Can't connect to FUG MCP")
             return
         if  (self.identification[0:16]!=bytes("FUG HCP 140-1250","ascii") and self.identification[0:15]!=bytes("FUG MCP140-1250","ascii")):
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("I do not find a FUG MCP on the serial port")
             self.debug_stream("I do not find a FUG MCP on the serial port")
             return
@@ -137,9 +137,9 @@ class FUGMCP(Device, metaclass=DeviceMeta):
         self.ser.write(bytes(">BON?\n","ascii"))
         resp=self.ser.readline()
         if (resp[:-1]==bytes("BON:1","ascii")):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)        
+            self.set_state(tango.DevState.OFF)        
         # PROTECTED REGION END #    //  FUGMCP.init_device
 
     def always_executed_hook(self):
@@ -196,7 +196,7 @@ class FUGMCP(Device, metaclass=DeviceMeta):
         self.ser.write(bytes(">S0 %f\n"%value,"ascii"))
         resp=self.ser.readline()
         if (resp[:-1]!=bytes("E0","ascii")):
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Error writing SetVoltage from FUG MCP %s"%resp[:-1])
             self.debug_stream("Error writing SetVoltage from FUG MCP %s"%resp[:-1])
         return
@@ -215,7 +215,7 @@ class FUGMCP(Device, metaclass=DeviceMeta):
         self.ser.write(bytes(">S1 %f\n"%value,"ascii"))
         resp=self.ser.readline()
         if (resp[:-1]!=bytes("E0","ascii")):
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Error writing SetCurret from FUG MCP %s"%resp[:-1])
             self.debug_stream("Error writing SetCurrent from FUG MCP %s"%resp[:-1])
         return
@@ -259,8 +259,8 @@ class FUGMCP(Device, metaclass=DeviceMeta):
         self.ser.write(bytes(">BON 1\n","ascii"))
         resp=self.ser.readline()
         if (resp[:-1]!=bytes("E0","ascii")):
-                self.set_state(PyTango.DevState.FAULT)
-        self.set_state(PyTango.DevState.ON)
+                self.set_state(tango.DevState.FAULT)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  FUGMCP.OutputOn
 
     @command(
@@ -271,8 +271,8 @@ class FUGMCP(Device, metaclass=DeviceMeta):
         self.ser.write(bytes(">BON 0\n","ascii"))
         resp=self.ser.readline()
         if (resp[:-1]!=bytes("E0","ascii")):
-            self.set_state(PyTango.DevState.FAULT)
-        self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.FAULT)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  FUGMCP.OutputOff
 
     @command(

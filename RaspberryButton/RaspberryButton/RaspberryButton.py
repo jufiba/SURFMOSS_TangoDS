@@ -13,14 +13,14 @@ Simple interface to turn on and off a GPIO pin in a Raspberry PI.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(RaspberryButton.additionnal_import) ENABLED START #
 import os
@@ -68,13 +68,13 @@ class DeadmanThread(threading.Thread):
         period = min(0.5, ds.DeadmanTimeout / 4.0)
         try:
             while not ds.stop_event.wait(period):
-                if ds.get_state() != PyTango.DevState.ON:
+                if ds.get_state() != tango.DevState.ON:
                     continue
                 idle = time.monotonic() - ds.last_keepalive
                 if idle > ds.DeadmanTimeout:
                     ds.drive(False)
                     ds.deadman_tripped = True
-                    ds.set_state(PyTango.DevState.ALARM)
+                    ds.set_state(tango.DevState.ALARM)
                     ds.set_status(
                         "Deadman expired: no Keepalive for %.1f s "
                         "(timeout %.1f s). Output de-asserted."
@@ -82,7 +82,7 @@ class DeadmanThread(threading.Thread):
         except Exception as exc:
             # A dead deadman must not look healthy.
             ds.drive(False)
-            ds.set_state(PyTango.DevState.FAULT)
+            ds.set_state(tango.DevState.FAULT)
             ds.set_status("Deadman thread died: %s" % exc)
 
 
@@ -179,7 +179,7 @@ class RaspberryButton(Device, metaclass=DeviceMeta):
         inactive = GPIO.LOW if self.TrueHigh else GPIO.HIGH
         GPIO.setup(self.Pin, GPIO.OUT, initial=inactive)
 
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         self.set_status("Output de-asserted")
 
         if self.DeadmanTimeout > 0.0:
@@ -249,7 +249,7 @@ class RaspberryButton(Device, metaclass=DeviceMeta):
         self.last_keepalive = time.monotonic()
         self.deadman_tripped = False
         self.drive(True)
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         self.set_status("Output asserted")
         # PROTECTED REGION END #    //  RaspberryButton.On
 
@@ -259,7 +259,7 @@ class RaspberryButton(Device, metaclass=DeviceMeta):
     def Off(self):
         # PROTECTED REGION ID(RaspberryButton.Off) ENABLED START #
         self.drive(False)
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         self.set_status("Output de-asserted")
         # PROTECTED REGION END #    //  RaspberryButton.Off
 

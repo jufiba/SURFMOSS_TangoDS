@@ -12,14 +12,14 @@
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(Motor.additionnal_import) ENABLED START #
 import os
@@ -56,7 +56,7 @@ class ControlThread(Thread):
                   #if GPIO.input == False:
                   GPIO.output(self.ds.StepPins, halfstep_left[j])
                   time.sleep(self.ds.Delay)
-        self.ds.set_state(PyTango.DevState.ON)
+        self.ds.set_state(tango.DevState.ON)
 # PROTECTED REGION END #    //  Motor.additionnal_import
 
 __all__ = ["Motor", "main"]
@@ -113,7 +113,7 @@ class Motor(Device,metaclass = DeviceMeta):
         self.steps = 10
         self.StepPins=[]
         GPIO.setmode(GPIO.BCM)
-        self.set_state(PyTango.DevState.ON) 
+        self.set_state(tango.DevState.ON) 
         for i in self.Pins.split(","):
             self.StepPins.append(int(i))
         for pin in self.StepPins:
@@ -172,13 +172,13 @@ class Motor(Device,metaclass = DeviceMeta):
     def Move(self):
         # PROTECTED REGION ID(Motor.Move) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.MOVING): 
+        if (state==tango.DevState.MOVING): 
             return
-        elif (state==PyTango.DevState.ON):
+        elif (state==tango.DevState.ON):
             self.RemainingSteps_count=self.steps
             ctrlloop = ControlThread(self)
             ctrlloop.start()
-            self.set_state(PyTango.DevState.MOVING)
+            self.set_state(tango.DevState.MOVING)
         return
         # PROTECTED REGION END #    //  Motor.Move
 
@@ -188,10 +188,10 @@ class Motor(Device,metaclass = DeviceMeta):
     def Stop(self):
         # PROTECTED REGION ID(Motor.Stop) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.MOVING):
+        if (state==tango.DevState.MOVING):
             self.RemainingSteps_count=0
             return
-        elif (state==PyTango.DevState.ON):
+        elif (state==tango.DevState.ON):
             return
         # PROTECTED REGION END #    //  Motor.Stop
 
@@ -205,7 +205,7 @@ def main(args=None, **kwargs):
     # pip install -e leaves an absolute path in argv[0], and PyTango 10 uses
     # argv[0] as the server name, which the database registers as the bare name.
     sys.argv[0] = os.path.basename(sys.argv[0])
-    from PyTango.server import run
+    from tango.server import run
     return run((Motor,), args=args, **kwargs)
     # PROTECTED REGION END #    //  Motor.main
 

@@ -13,14 +13,14 @@ Server to use remotely the Leybold IG3 Gauge Electronics.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(LeyboldIG3.additionnal_import) ENABLED START #
 import os
@@ -87,22 +87,22 @@ class LeyboldIG3(Device,metaclass=DeviceMeta):
             self.cmd("H")
             r=self.response()
             if (r[0]=="NAK"):
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("IG3 is saying it does not understand me")
                 self.debug_stream("IG3 is saying it does not understand me")
                 return
             elif (r[0]=="CHK"):
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("IG3 is having checksum errors")
                 self.debug_stream("IG3 is having checksum errors")
                 return
             elif (str(r[1][0:3],"ascii")!="IG3"):
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("This is not an IG3")
                 self.debug_stream("This is not an IG3")
                 return
         except serial.SerialTimeoutException:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to IG3")
             self.debug_stream("Can't connect to IG3")
             return
@@ -111,9 +111,9 @@ class LeyboldIG3(Device,metaclass=DeviceMeta):
         self.cmd("S14")
         r=self.response()
         if (str(r[1],"ascii")=="1"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  LeyboldIG3.init_device
 
     def always_executed_hook(self):
@@ -133,7 +133,7 @@ class LeyboldIG3(Device,metaclass=DeviceMeta):
     def read_Pressure(self):
         # PROTECTED REGION ID(LeyboldIG3.Pressure_read) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.OFF):
+        if (state==tango.DevState.OFF):
             return 0.0
         self.cmd("S00")
         r=self.response()
@@ -141,7 +141,7 @@ class LeyboldIG3(Device,metaclass=DeviceMeta):
         if (r[0]=="ACK"):
             return float(r[1])
         else:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status(r[0]+r[1])
             self.debug_stream(r[0]+r[1])
             return(0.0)
@@ -159,17 +159,17 @@ class LeyboldIG3(Device,metaclass=DeviceMeta):
     def Start(self):
         # PROTECTED REGION ID(LeyboldIG3.Start) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.ON):
+        if (state==tango.DevState.ON):
             return
-        elif (state==PyTango.DevState.OFF):
+        elif (state==tango.DevState.OFF):
             self.cmd("R09")
             r=self.response()
             if (r[0]=="ACK"):
-                self.set_state(PyTango.DevState.ON)
+                self.set_state(tango.DevState.ON)
             else:
                 self.set_status(r[0]+" "+str(r[1],"ascii"))
                 self.debug_stream(r[0]+" "+str(r[1],"ascii"))
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
         # PROTECTED REGION END #    //  LeyboldIG3.Start
 
     @command(
@@ -179,17 +179,17 @@ class LeyboldIG3(Device,metaclass=DeviceMeta):
     def Stop(self):
         # PROTECTED REGION ID(LeyboldIG3.Stop) ENABLED START #
         state=self.get_state()
-        if (state==PyTango.DevState.OFF):
+        if (state==tango.DevState.OFF):
             return
         else:
             self.cmd("R10")
             r=self.response()
             if (r[0]=="ACK"):
-                self.set_state(PyTango.DevState.OFF)
+                self.set_state(tango.DevState.OFF)
             else:
                 self.set_status(r[0]+" "+str(r[1],"ascii"))
                 self.debug_stream(r[0]+" "+str(r[1],"ascii"))
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
         # PROTECTED REGION END #    //  LeyboldIG3.Stop
 
     @command(

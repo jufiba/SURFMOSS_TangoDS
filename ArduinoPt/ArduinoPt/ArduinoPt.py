@@ -13,14 +13,14 @@ An Arduino connected to a Pt module.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(ArduinoPt.additionnal_import) ENABLED START #
 import os
@@ -66,15 +66,15 @@ class ArduinoPt(Device, metaclass=DeviceMeta):
             self.ser.write(b"*PT\n")
             pt=self.ser.readline().decode("ascii").strip()
             if (pt=="Fault"):
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("No Pt resistor connected")
                 self.debug_stream("No Pt resistor connected to Arduino")
             else:
-                self.set_state(PyTango.DevState.ON)
+                self.set_state(tango.DevState.ON)
                 self.set_status("Pt resistor connected")
                 self.debug_stream("Pt resistor connected to Arduino")
         except:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
             self.set_status("No response from Arduino")
             self.debug_stream("No response from Arduino")
         # PROTECTED REGION END #    //  ArduinoPt.init_device
@@ -99,14 +99,14 @@ class ArduinoPt(Device, metaclass=DeviceMeta):
             self.ser.write(b"*PT\n")
             pt=self.ser.readline().decode("ascii").strip()
             if (pt=="Fault"):
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("No Pt1000 resistor connected")
                 self.debug_stream("No Pt1000 resistor connected to Arduino")
                 return(0.0)
             else:
                 return(float(pt))
         except:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
             self.set_status("No response from Arduino")
             self.debug_stream("No response from Arduino")
             return(0.0)

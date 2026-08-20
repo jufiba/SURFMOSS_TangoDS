@@ -13,14 +13,14 @@ Single-Channel Vacuum Gauge
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(CenterOneGauge.additionnal_import) ENABLED START #
 import os
@@ -79,7 +79,7 @@ class CenterOneGauge(Device, metaclass=DeviceMeta):
         Device.init_device(self)
         # PROTECTED REGION ID(CenterOneGauge.init_device) ENABLED START #
         self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1)
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  CenterOneGauge.init_device
 
     def always_executed_hook(self):
@@ -104,7 +104,7 @@ class CenterOneGauge(Device, metaclass=DeviceMeta):
             rdata = self.sendcommand("\x05")
             status, data = self.formatdata(rdata)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
             data = 0.0
 
         return data
@@ -120,13 +120,13 @@ class CenterOneGauge(Device, metaclass=DeviceMeta):
     @DebugIt()
     def Reset(self):
         # PROTECTED REGION ID(CenterOneGauge.Reset) ENABLED START #
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
 
         rcontrol = self.sendcommand("RES [,1] \r")
         if rcontrol[0] == "\x06":
             rdata = self.sendcommand("\x05")
             if rdata[0] == "0":
-                self.set_state(PyTango.DevState.ON)
+                self.set_state(tango.DevState.ON)
             else:
                 return rdata
 

@@ -12,14 +12,14 @@
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(MitutoyoPostable.additionnal_import) ENABLED START #
 import serial
@@ -85,13 +85,13 @@ class MitutoyoPostable(Device, metaclass=DeviceMeta):
             idn=self.ser.readline().decode("ascii")
             self.debug_stream(idn)
         except:
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("Can't connect to Mitutoyo")
                 self.debug_stream("Can't connect to Mitutoyo")
                 return
         self.set_status("Connected to Mitutoyo")
         self.debug_stream("Connected to Mitutoyo")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         self.running=True
         ctrlloop = ControlThread(self)
         ctrlloop.start()
@@ -106,7 +106,7 @@ class MitutoyoPostable(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(MitutoyoPostable.delete_device) ENABLED START #
         self.ser.close()
         self.running=False
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  MitutoyoPostable.delete_device
 
     # ------------------

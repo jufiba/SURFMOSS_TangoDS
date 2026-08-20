@@ -13,14 +13,14 @@ Driver for the Huttinger DC generators, such as the PFG-DC1500, a 1500W 1KV powe
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(HuttingerPFGDC.additionnal_import) ENABLED START #
 import os
@@ -263,9 +263,9 @@ class HuttingerPFGDC(Device, metaclass=DeviceMeta):
         self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
         (address,command,data)=self.parse_response(self.sendcommand(0,"4E",4))
         (address,command,data)=self.parse_response(self.sendcommand(0,"4F",0))
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         if (command!="ACK"):
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
         # PROTECTED REGION END #    //  HuttingerPFGDC.init_device
 
     def always_executed_hook(self):
@@ -467,7 +467,7 @@ class HuttingerPFGDC(Device, metaclass=DeviceMeta):
     def On(self):
         # PROTECTED REGION ID(HuttingerPFGDC.On) ENABLED START #
         (address,command,data)=self.parse_response(self.sendcommand(0,"4F",2))
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  HuttingerPFGDC.On
 
     @command(
@@ -476,7 +476,7 @@ class HuttingerPFGDC(Device, metaclass=DeviceMeta):
     def Off(self):
         # PROTECTED REGION ID(HuttingerPFGDC.Off) ENABLED START #
         (address,command,data)=self.parse_response(self.sendcommand(0,"4F",0))
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  HuttingerPFGDC.Off
 
     @command(
@@ -506,7 +506,7 @@ class HuttingerPFGDC(Device, metaclass=DeviceMeta):
     def On_with_ramp(self):
         # PROTECTED REGION ID(HuttingerPFGDC.On_with_ramp) ENABLED START #
         (address,command,data)=self.parse_response(self.sendcommand(0,"4F",1))
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  HuttingerPFGDC.On_with_ramp
 
 # ----------

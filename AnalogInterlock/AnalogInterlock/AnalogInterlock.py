@@ -36,14 +36,14 @@ Failure modes and what this server does about each:
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(AnalogInterlock.additionnal_import) ENABLED START #
 import os
@@ -69,9 +69,9 @@ class ControlThread(threading.Thread):
                 except Exception as exc:
                     # A cycle must never kill the loop; the loop stopping is
                     # itself the dangerous condition.
-                    ds.trip("internal error: %s" % exc, PyTango.DevState.FAULT)
+                    ds.trip("internal error: %s" % exc, tango.DevState.FAULT)
         except Exception as exc:
-            ds.trip("control thread died: %s" % exc, PyTango.DevState.FAULT)
+            ds.trip("control thread died: %s" % exc, tango.DevState.FAULT)
 
 
 # PROTECTED REGION END #    //  AnalogInterlock.additionnal_import
@@ -222,7 +222,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         self.outputproxy = None
 
         if self.ThresholdOff >= self.ThresholdOn:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("ThresholdOff (%g) must be below ThresholdOn (%g)"
                             % (self.ThresholdOff, self.ThresholdOn))
             return
@@ -232,7 +232,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         # whatever state it had, and the first cycle a fraction of a second
         # later decides on the basis of a real reading. If this server stays
         # down, the output device's deadman is what de-asserts the permissive.
-        self.set_state(PyTango.DevState.INIT)
+        self.set_state(tango.DevState.INIT)
         self.set_status("Waiting for first reading")
 
         self.stop_event.clear()
@@ -246,11 +246,11 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         yet delays the interlock rather than killing it at start-up."""
         if which == "input":
             if self.inputproxy is None:
-                self.inputproxy = PyTango.DeviceProxy(self.InputDevice)
+                self.inputproxy = tango.DeviceProxy(self.InputDevice)
                 self.inputproxy.set_timeout_millis(self.ProxyTimeout)
             return self.inputproxy
         if self.outputproxy is None:
-            self.outputproxy = PyTango.DeviceProxy(self.OutputDevice)
+            self.outputproxy = tango.DeviceProxy(self.OutputDevice)
             self.outputproxy.set_timeout_millis(self.ProxyTimeout)
         return self.outputproxy
 
@@ -260,12 +260,12 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
             return True
         except Exception as exc:
             self.outputproxy = None
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Cannot command %s on %s: %s"
                             % (cmd, self.OutputDevice, exc))
             return False
 
-    def trip(self, reason, state=PyTango.DevState.ALARM):
+    def trip(self, reason, state=tango.DevState.ALARM):
         """De-assert the permissive and record why. Idempotent."""
         waspermit = self.permit
         wastripped = self.tripped
@@ -281,7 +281,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
             self.lasttripvalue = self.inputvalue
             self.lasttripreason = reason
         self.send(self.OffCommand)
-        if self.get_state() != PyTango.DevState.FAULT or state == PyTango.DevState.FAULT:
+        if self.get_state() != tango.DevState.FAULT or state == tango.DevState.FAULT:
             self.set_state(state)
             self.set_status(reason)
 
@@ -291,7 +291,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         self.permit = True
         self.tripped = False
         self.cyclessincereassert = 0
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         self.set_status("Permit granted (%s = %.2f)"
                         % (self.InputAttribute, self.inputvalue))
 
@@ -300,7 +300,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         # --- read the input -------------------------------------------------
         try:
             reading = self.proxy("input").read_attribute(self.InputAttribute)
-            if reading.quality == PyTango.AttrQuality.ATTR_INVALID:
+            if reading.quality == tango.AttrQuality.ATTR_INVALID:
                 raise ValueError("attribute quality is INVALID")
             value = float(reading.value)
         except Exception as exc:
@@ -310,7 +310,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
                 self.trip("Cannot read %s/%s (%d consecutive failures): %s"
                           % (self.InputDevice, self.InputAttribute,
                              self.readfailures, exc),
-                          PyTango.DevState.FAULT)
+                          tango.DevState.FAULT)
             return
         self.readfailures = 0
         self.inputvalue = value
@@ -337,7 +337,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
                               "the reading of %.2f cannot be trusted"
                               % (self.InputDevice, self.HeartbeatAttribute,
                                  self.beatfailures, exc, value),
-                              PyTango.DevState.FAULT)
+                              tango.DevState.FAULT)
                 return
             if beat == self.lastheartbeat:
                 self.stalecount += 1
@@ -377,7 +377,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         # still inside the hysteresis band. Report that explicitly, rather than
         # leaving whatever state an earlier failure set, which would otherwise
         # leave the device stuck in FAULT while reading perfectly well.
-        self.set_state(PyTango.DevState.ALARM)
+        self.set_state(tango.DevState.ALARM)
         if latched:
             self.set_status("No permit: latched off, Reset to clear (%s = %.2f)"
                             % (self.InputAttribute, value))
@@ -411,7 +411,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(AnalogInterlock.InputValue_read) ENABLED START #
         if self.readfailures > 0:
             return (self.inputvalue, time.time(),
-                    PyTango.AttrQuality.ATTR_INVALID)
+                    tango.AttrQuality.ATTR_INVALID)
         return self.inputvalue
         # PROTECTED REGION END #    //  AnalogInterlock.InputValue_read
 
@@ -467,7 +467,7 @@ class AnalogInterlock(Device, metaclass=DeviceMeta):
         self.beatfailures = 0
         self.stalecount = 0
         self.lastheartbeat = None
-        self.set_state(PyTango.DevState.INIT)
+        self.set_state(tango.DevState.INIT)
         self.set_status("Latch cleared, waiting for next reading")
         # PROTECTED REGION END #    //  AnalogInterlock.Reset
 

@@ -13,14 +13,14 @@ ITech6000C control through ethernet socket.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(Itech6000C.additionnal_import) ENABLED START #
 import os
@@ -71,7 +71,7 @@ class Itech6000C(Device, metaclass=DeviceMeta):
                 self.s.connect((self.IP, self.Port))
             except:
                 self.ItechConnected = False
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("Can't connect to Itech6000C")
                 self.debug_stream("Can't connect to Itech6000C")
                 return
@@ -145,9 +145,9 @@ class Itech6000C(Device, metaclass=DeviceMeta):
         data = self.TCPBlockingReceive()
         print(data)
         if (data[0]=="1"):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  Itech6000C.init_device
 
     def always_executed_hook(self):
@@ -238,7 +238,7 @@ class Itech6000C(Device, metaclass=DeviceMeta):
     def OutputOn(self):
         # PROTECTED REGION ID(Itech6000C.OutputOn) ENABLED START #
         self.s.send(b"OUTPUT ON\n")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  Itech6000C.OutputOn
 
     @command(
@@ -247,7 +247,7 @@ class Itech6000C(Device, metaclass=DeviceMeta):
     def OutputOff(self):
         # PROTECTED REGION ID(Itech6000C.OutputOff) ENABLED START #
         self.s.send(b"OUTPUT OFF\n")
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  Itech6000C.OutputOff
 
     @command(

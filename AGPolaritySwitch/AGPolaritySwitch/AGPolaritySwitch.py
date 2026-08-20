@@ -13,14 +13,14 @@ A devicer server for changing the polarity of the high current (up to 30A) power
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(AGPolaritySwitch.additionnal_import) ENABLED START #
 import os
@@ -71,7 +71,7 @@ class AGPolaritySwitch(Device, metaclass=DeviceMeta):
             resp=self.ser.readline().decode("ascii").strip()
             dummy=self.ser.readline()
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to AGPolaritySwitch")
             self.debug_stream("Can't connect to AGPolaritySwitch")
             return
@@ -79,9 +79,9 @@ class AGPolaritySwitch(Device, metaclass=DeviceMeta):
         self.debug_stream("Connected to AGPolaritySwitch")
         
         if (resp=="positive"): # Only check first gauge to set device status
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  AGPolaritySwitch.init_device
 
     def always_executed_hook(self):
@@ -117,7 +117,7 @@ class AGPolaritySwitch(Device, metaclass=DeviceMeta):
     def setPositive(self):
         # PROTECTED REGION ID(AGPolaritySwitch.setPositive) ENABLED START #
         self.ser.write(bytearray("*POS\n","ascii"))
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  AGPolaritySwitch.setPositive
 
     @command(
@@ -126,7 +126,7 @@ class AGPolaritySwitch(Device, metaclass=DeviceMeta):
     def SetNegative(self):
         # PROTECTED REGION ID(AGPolaritySwitch.SetNegative) ENABLED START #
         self.ser.write(bytearray("*NEG\n","ascii"))
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  AGPolaritySwitch.SetNegative
 
     @command(

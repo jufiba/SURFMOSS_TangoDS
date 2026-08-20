@@ -13,14 +13,14 @@ Driver for interfacing with the Varian/Agilent TV301 Navigator pump with integra
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(VarianTV301nav.additionnal_import) ENABLED START #
 import os
@@ -183,12 +183,12 @@ class VarianTV301nav(Device, metaclass=DeviceMeta):
         if (self.read_running()==True):
             self.setSerialMode() # Set comunicacion mode, not "remote"
             self.sendcommand("000","1")
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
             self.set_status("VarianTV301 connected and running")
         else:
             self.setSerialMode() # Set serial comunicacion mode, not "remote"
             self.sendcommand("000","0")
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
             self.set_status("VarianTV301 connected")
         # PROTECTED REGION END #    //  VarianTV301nav.init_device
 
@@ -334,7 +334,7 @@ class VarianTV301nav(Device, metaclass=DeviceMeta):
     def Start(self):
         # PROTECTED REGION ID(VarianTV301nav.Start) ENABLED START #
         self.sendcommand("000","1")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  VarianTV301nav.Start
 
     @command(
@@ -343,7 +343,7 @@ class VarianTV301nav(Device, metaclass=DeviceMeta):
     def Stop(self):
         # PROTECTED REGION ID(VarianTV301nav.Stop) ENABLED START #
         self.sendcommand("000","0")
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  VarianTV301nav.Stop
 
     @command(

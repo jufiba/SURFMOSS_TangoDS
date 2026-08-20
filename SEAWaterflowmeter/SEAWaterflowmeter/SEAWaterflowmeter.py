@@ -13,14 +13,14 @@ Device server to interface a Raspberry PI using the GPIO to the SEA YF-S201 wate
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(SEAWaterflowmeter.additionnal_import) ENABLED START #
 import os
@@ -42,7 +42,7 @@ os.environ.setdefault("LG_WD", tempfile.mkdtemp(prefix="lgpio-"))
 atexit.register(shutil.rmtree, os.environ["LG_WD"], True)
 import RPi.GPIO as GPIO
 
-from PyTango import Attr, ArgType, UserDefaultAttrProp
+from tango import Attr, ArgType, UserDefaultAttrProp
 
 # Number of static channelN attributes kept for backwards compatibility.
 MAX_CHANNELS = 4
@@ -87,10 +87,10 @@ class ControlThread(threading.Thread):
                 prev_t = now_t
                 ds._updates += 1
         except Exception as exc:
-            ds.set_state(PyTango.DevState.FAULT)
+            ds.set_state(tango.DevState.FAULT)
             ds.set_status("Measurement thread died: %s" % exc)
             return
-        ds.set_state(PyTango.DevState.OFF)
+        ds.set_state(tango.DevState.OFF)
         ds.set_status("Measurement thread is NOT running")
 
 
@@ -174,7 +174,7 @@ class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
         from zero flow, which is exactly the wrong thing to hand an interlock.
         """
         if idx >= len(self.pins):
-            return (0.0, time.time(), PyTango.AttrQuality.ATTR_INVALID)
+            return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
         return self.channeldata[idx]
 
     def read_named_channel(self, attr):
@@ -266,14 +266,14 @@ class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
         try:
             self._configure()
         except Exception as exc:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Configuration failed: %s" % exc)
             return
 
         self.stop_event.clear()
         self.ctrlloop = ControlThread(self)
         self.ctrlloop.start()
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         self.set_status("Measurement thread is running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.init_device
 
@@ -355,14 +355,14 @@ class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
         if self.ctrlloop is not None and self.ctrlloop.is_alive():
             return
         if not self.pins:
-            PyTango.Except.throw_exception(
+            tango.Except.throw_exception(
                 "SEAWaterflowmeter_NotConfigured",
                 "No GPIO channels configured; re-Init the device.",
                 "SEAWaterflowmeter.turnON")
         self.stop_event.clear()
         self.ctrlloop = ControlThread(self)
         self.ctrlloop.start()
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         self.set_status("Measurement thread is running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.turnON
 
@@ -375,7 +375,7 @@ class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
             return
         self.stop_event.set()
         self.ctrlloop.join(timeout=2.0 + self.time)
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         self.set_status("Measurement thread is NOT running")
         # PROTECTED REGION END #    //  SEAWaterflowmeter.turnOFF
 

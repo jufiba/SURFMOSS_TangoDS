@@ -13,14 +13,14 @@ Interface to the SRI 830 Lock in.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(SRIlockin830.additionnal_import) ENABLED START #
 import os
@@ -111,18 +111,18 @@ class SRIlockin830(Device, metaclass=DeviceMeta):
             self.ser.write(bytes("*IDN?\n","ascii"))
             identification=self.ser.read_until(bytes("\r","ascii"))
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to SRI 830")
             self.debug_stream("Can't connect to SRI 830")
             return
         if  (identification[0:31]!=bytes("Stanford_Research_Systems,SR830","ascii")):
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("I do not find an SRI 830 on the serial port")
             self.debug_stream("I do not find an SRI 830 on the serial port")
             return
         self.set_status("Connected to SRI 830")
         self.debug_stream("Connected to SRI 830")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  SRIlockin830.init_device
 
     def always_executed_hook(self):

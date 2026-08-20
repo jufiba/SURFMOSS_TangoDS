@@ -13,14 +13,14 @@ Server for a simple interface of an Arduino connected to a DAC
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(ArduinoDAC.additionnal_import) ENABLED START #
 import os
@@ -94,14 +94,14 @@ class ArduinoDAC(Device, metaclass=DeviceMeta):
         try:
             self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=1)
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to ArduinoDAC")
             self.debug_stream("Can't connect to ArduinoDAC")
             return
         self.set_status("Connected to ArduinoDAC")
         self.debug_stream("Connected to ArduinoDAC")
         
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  ArduinoDAC.init_device
 
     def always_executed_hook(self):

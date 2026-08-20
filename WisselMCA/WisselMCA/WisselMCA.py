@@ -13,14 +13,14 @@ Device server for the Wissel Multichannel Analyzer used for Mossbauer spectrosco
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(WisselMCA.additionnal_import) ENABLED START #
 import os
@@ -286,7 +286,7 @@ def checked(result,what):
         result=(False,"no reply")
     (ok,value)=result
     if not ok:
-        PyTango.Except.throw_exception("WisselMCA_CommError",
+        tango.Except.throw_exception("WisselMCA_CommError",
                                        "%s: %s"%(what,value),
                                        "WisselMCA."+what)
     return value
@@ -429,7 +429,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         try:
             self.c.open()
         except Exception as e:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to Wissel MCA %x: %s"
                             % (self.InstrumentID, e))
             self.error_stream("Can't connect to Wissel MCA %x: %s"
@@ -439,16 +439,16 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         # PyTango exits the whole server.
         (ok, modebyte) = self.c.readmode()
         if not ok:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Wissel MCA %x is open but does not answer: %s"
                             % (self.InstrumentID, modebyte))
             self.error_stream("Wissel MCA %x is open but does not answer: %s"
                               % (self.InstrumentID, modebyte))
             return False
         if modebyte & 0b00010000:
-            self.set_state(PyTango.DevState.ON)   # counting
+            self.set_state(tango.DevState.ON)   # counting
         else:
-            self.set_state(PyTango.DevState.OFF)  # stopped
+            self.set_state(tango.DevState.OFF)  # stopped
         mode = modebyte & 0b11
         self.firstchannel = 0
         if mode == 3:  # PHA mode
@@ -468,7 +468,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         # where a device that was busy at startup gets picked up without an
         # operator Init. Rate-limited: a failed USB open is not free, and
         # callers should not pay for one on every single request.
-        if (self.get_state() == PyTango.DevState.FAULT
+        if (self.get_state() == tango.DevState.FAULT
                 and time.time() - self.lastconnect > RETRY_PERIOD):
             self.connect()
         # PROTECTED REGION END #    //  WisselMCA.always_executed_hook
@@ -590,7 +590,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         if mode != 3:
             # MCS channels are time bins, so mV per channel is meaningless
             # there; say so rather than let a client label a time axis in mV.
-            return (w, time.time(), PyTango.AttrQuality.ATTR_INVALID)
+            return (w, time.time(), tango.AttrQuality.ATTR_INVALID)
         return w
         # PROTECTED REGION END #    //  WisselMCA.ChannelWidth_read
 
@@ -605,7 +605,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     def Start(self):
         # PROTECTED REGION ID(WisselMCA.Start) ENABLED START #
         checked(self.c.start(), "start")
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  WisselMCA.Start
 
     @command(
@@ -614,7 +614,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     def Stop(self):
         # PROTECTED REGION ID(WisselMCA.Stop) ENABLED START #
         checked(self.c.stop(), "stop")
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  WisselMCA.Stop
 
     @command(
@@ -623,7 +623,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
     def setPHAmode(self):
         # PROTECTED REGION ID(WisselMCA.setPHAmode) ENABLED START #
         checked(self.c.setmode(3), "setmode")
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         self.firstchannel = 0
         setup = checked(self.c.readgeneral(), "readgeneral")
         w = checked(self.c.readPHA(), "readPHA")
@@ -644,7 +644,7 @@ class WisselMCA(Device, metaclass=DeviceMeta):
         checked(self.c.setmode(2), "setmode")
         self.firstchannel = 0
         self.lastchannel = 512
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         self.set_status("MCS analog mode, 512 channels")
         # PROTECTED REGION END #    //  WisselMCA.setMCAmode
 

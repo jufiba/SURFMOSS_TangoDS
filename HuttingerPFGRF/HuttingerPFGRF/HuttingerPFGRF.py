@@ -13,14 +13,14 @@ Driver for the Huttinger RF generators, such as the PFG-RF300 a power supply for
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(HuttingerPFGRF.additionnal_import) ENABLED START #
 import os
@@ -46,7 +46,7 @@ class HuttingerPFGRF(Device, metaclass=DeviceMeta):
         try:
             self.ser.write(cmd_string)
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
         return(self.ser.read(5))
 
     def parse_response(self,resp):
@@ -211,7 +211,7 @@ class HuttingerPFGRF(Device, metaclass=DeviceMeta):
         # PROTECTED REGION ID(HuttingerPFGRF.init_device) ENABLED START #
         self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
         (address,command,data)=self.parse_response(self.sendcommand(0,"CE",0))
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  HuttingerPFGRF.init_device
 
     def always_executed_hook(self):
@@ -382,7 +382,7 @@ class HuttingerPFGRF(Device, metaclass=DeviceMeta):
     def On(self):
         # PROTECTED REGION ID(HuttingerPFGRF.On) ENABLED START #
         (address,command,data)=self.parse_response(self.sendcommand(0,"4F",1))
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  HuttingerPFGRF.On
 
     @command(
@@ -391,7 +391,7 @@ class HuttingerPFGRF(Device, metaclass=DeviceMeta):
     def Off(self):
         # PROTECTED REGION ID(HuttingerPFGRF.Off) ENABLED START #
         (address,command,data)=self.parse_response(self.sendcommand(0,"4F",0))
-        self.set_state(PyTango.DevState.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  HuttingerPFGRF.Off
 
     @command(

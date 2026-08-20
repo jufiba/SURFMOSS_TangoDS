@@ -13,14 +13,14 @@ Device server for reading the status of the XRC1000 X-ray gun electronics.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(SpecsXRC1000.additionnal_import) ENABLED START #
 import serial
@@ -73,7 +73,7 @@ class SpecsXRC1000(Device, metaclass=DeviceMeta):
                 self.set_status("Connected to our Specs XRC1000")
                 self.debug_stream("Connected to our Specs XRC1000")
         except:
-            self.set_state(PyTango.DevState.FAULT)
+            self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to Specs XRC1000")
             self.debug_stream("Can't connect to Specs XRC1000")
             return
@@ -81,11 +81,11 @@ class SpecsXRC1000(Device, metaclass=DeviceMeta):
         resp=self.ser.readline().decode("ascii")
         o=int(resp[10])
         if (o==0):
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         elif (o==4):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.MOVING)
+            self.set_state(tango.DevState.MOVING)
         # PROTECTED REGION END #    //  SpecsXRC1000.init_device
 
     def always_executed_hook(self):
@@ -115,11 +115,11 @@ class SpecsXRC1000(Device, metaclass=DeviceMeta):
         resp=self.ser.readline().decode("ascii")
         o=int(resp[10])
         if (o==0):
-            self.set_state(PyTango.DevState.OFF)
+            self.set_state(tango.DevState.OFF)
         elif (o==4):
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
         else:
-            self.set_state(PyTango.DevState.MOVING)
+            self.set_state(tango.DevState.MOVING)
         return o
         # PROTECTED REGION END #    //  SpecsXRC1000.Operation_read
 

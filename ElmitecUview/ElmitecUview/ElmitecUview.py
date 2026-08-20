@@ -13,14 +13,14 @@ Device server reads data from PEEM end station. UView must be running.
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import AttrQuality, DispLevel, DevState
-from PyTango import AttrWriteType, PipeWriteType
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import AttrQuality, DispLevel, DevState
+from tango import AttrWriteType, PipeWriteType
 # Additional import
 # PROTECTED REGION ID(ElmitecUview.additionnal_import) ENABLED START #
 import os
@@ -68,7 +68,7 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
                 self.s.connect((self.IP, self.Port))
             except:
                 self.ElmitecUviewConnected = False
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("Can't connect to ElmitecUview")
                 self.debug_stream("Can't connect to ElmitecUview")
                 return
@@ -77,7 +77,7 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
             self.s.send(TCPString)
             data = self.TCPBlockingReceive()
             self.ElmitecUviewConnected = True
-            self.set_state(PyTango.DevState.ON)
+            self.set_state(tango.DevState.ON)
             self.set_status("Connected to ElmitecUview")
             self.debug_stream("Connected to ElmitecUview")
 
@@ -97,7 +97,7 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
                 data = self.TCPBlockingReceive()
             except:
                 self.ElmitecUviewConnected = False
-                self.set_state(PyTango.DevState.FAULT)
+                self.set_state(tango.DevState.FAULT)
                 self.set_status("Can't read from ElmitecUview")
                 self.debug_stream("Can't read fom ElmitecUview")
                 return None
@@ -195,7 +195,7 @@ class ElmitecUview(Device, metaclass=DeviceMeta):
     def delete_device(self):
         # PROTECTED REGION ID(ElmitecUview.delete_device) ENABLED START #
         self.disconnect()
-        self.set_state(PyTango.DevState.OFF)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  ElmitecUview.delete_device
 
     # ------------------

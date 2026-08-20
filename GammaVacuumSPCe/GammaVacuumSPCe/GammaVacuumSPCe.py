@@ -15,13 +15,13 @@ Response format:          <ADDR> <OK|ER> <CODE> [data...] <CHECKSUM><CR>
 """
 
 # PyTango imports
-import PyTango
-from PyTango import DebugIt
-from PyTango.server import run
-from PyTango.server import Device, DeviceMeta
-from PyTango.server import attribute, command
-from PyTango.server import device_property
-from PyTango import DispLevel, DevState
+import tango
+from tango import DebugIt
+from tango.server import run
+from tango.server import Device, DeviceMeta
+from tango.server import attribute, command
+from tango.server import device_property
+from tango import DispLevel, DevState
 
 # Additional imports
 import socket
@@ -195,7 +195,7 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
             return response.decode('ascii').strip()
         except Exception as e:
             self._disconnect()
-            raise PyTango.DevFailed("Communication error: %s" % str(e))
+            raise tango.DevFailed("Communication error: %s" % str(e))
 
     # ------------------
     # Attributes methods
@@ -207,7 +207,7 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
         resp = self._send_command('0b')
         parts = resp.split()
         if len(parts) < 5 or parts[1] != 'OK':
-            raise PyTango.DevFailed("Unexpected pressure response: %s" % resp)
+            raise tango.DevFailed("Unexpected pressure response: %s" % resp)
         value = float(parts[3])
         unit = parts[4]
         factor = _UNIT_TO_MBAR.get(unit, 1.0)
@@ -219,7 +219,7 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
         resp = self._send_command('0a')
         parts = resp.split()
         if len(parts) < 4 or parts[1] != 'OK':
-            raise PyTango.DevFailed("Unexpected current response: %s" % resp)
+            raise tango.DevFailed("Unexpected current response: %s" % resp)
         return float(parts[3])
 
     def read_Voltage(self):
@@ -227,7 +227,7 @@ class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
         resp = self._send_command('0c')
         parts = resp.split()
         if len(parts) < 4 or parts[1] != 'OK':
-            raise PyTango.DevFailed("Unexpected voltage response: %s" % resp)
+            raise tango.DevFailed("Unexpected voltage response: %s" % resp)
         return float(parts[3])
 
     def read_SupplyStatus(self):
