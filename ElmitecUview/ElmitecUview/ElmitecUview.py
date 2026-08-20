@@ -16,11 +16,11 @@ Device server reads data from PEEM end station. UView must be running.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(ElmitecUview.additionnal_import) ENABLED START #
 import os
@@ -40,7 +40,7 @@ def is_number(s):
 __all__ = ["ElmitecUview", "main"]
 
 
-class ElmitecUview(Device, metaclass=DeviceMeta):
+class ElmitecUview(Device):
     """
     Device server reads data from PEEM end station. UView must be running.
     """

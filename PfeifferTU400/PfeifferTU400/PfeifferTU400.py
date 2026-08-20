@@ -16,11 +16,11 @@ This is a server that provides the same funcionality as the Pfeiffer DCU display
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(PfeifferTU400.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import serial
 __all__ = ["PfeifferTU400", "main"]
 
 
-class PfeifferTU400(Device, metaclass=DeviceMeta):
+class PfeifferTU400(Device):
     """
     This is a server that provides the same funcionality as the Pfeiffer DCU display unit.
     """

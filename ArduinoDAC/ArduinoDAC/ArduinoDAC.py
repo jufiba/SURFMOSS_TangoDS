@@ -16,11 +16,11 @@ Server for a simple interface of an Arduino connected to a DAC
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(ArduinoDAC.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import serial
 __all__ = ["ArduinoDAC", "main"]
 
 
-class ArduinoDAC(Device, metaclass=DeviceMeta):
+class ArduinoDAC(Device):
     """
     Server for a simple interface of an Arduino connected to a DAC
     """

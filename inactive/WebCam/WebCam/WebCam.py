@@ -16,11 +16,11 @@ A simple device server for a webcam conencted through v4l2, using pygame.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(WebCam.additionnal_import) ENABLED START #
 import os
@@ -32,7 +32,7 @@ import pygame.camera
 __all__ = ["WebCam", "main"]
 
 
-class WebCam(Device, metaclass=DeviceMeta):
+class WebCam(Device):
     """
     A simple device server for a webcam conencted through v4l2, using pygame.
     """

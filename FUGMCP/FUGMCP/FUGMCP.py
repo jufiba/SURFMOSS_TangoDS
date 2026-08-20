@@ -16,11 +16,11 @@ Device server for the HV power supply MCP 140-1250 (1250V, 100mA). It has a USB 
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(FUGMCP.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import serial
 __all__ = ["FUGMCP", "main"]
 
 
-class FUGMCP(Device, metaclass=DeviceMeta):
+class FUGMCP(Device):
     """
     Device server for the HV power supply MCP 140-1250 (1250V, 100mA). It has a USB module for digital interfacing, Probus V.
     """

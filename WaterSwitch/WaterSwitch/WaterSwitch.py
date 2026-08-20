@@ -16,10 +16,10 @@ Simple device server to detect wheter water is flowing in a cooling water sensor
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(WaterSwitch.additionnal_import) ENABLED START #
 import os
@@ -41,7 +41,7 @@ import RPi.GPIO as GPIO
 __all__ = ["WaterSwitch", "main"]
 
 
-class WaterSwitch(Device, metaclass=DeviceMeta):
+class WaterSwitch(Device):
     """
     Simple device server to detect wheter water is flowing in a cooling water sensor
     """

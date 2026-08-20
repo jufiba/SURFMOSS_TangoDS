@@ -18,7 +18,7 @@ Response format:          <ADDR> <OK|ER> <CODE> [data...] <CHECKSUM><CR>
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import DispLevel, DevState
@@ -44,7 +44,7 @@ _HV_OFF_CURRENT  = 0.1e-9   # "0.1E-09 AMPS" = HV off
 _HV_OFF_PRESSURE = 0.1e-10  # "0.1E-10 UUU"  = HV off
 
 
-class GammaVacuumSPCe(Device, metaclass=DeviceMeta):
+class GammaVacuumSPCe(Device):
     """
     Device server for the Gamma Vacuum DIGITEL SPCe ion pump power supply.
     Connects via the Ethernet Telnet interface (default TCP port 23).

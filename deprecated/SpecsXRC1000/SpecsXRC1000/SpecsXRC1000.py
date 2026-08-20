@@ -16,11 +16,11 @@ Device server for reading the status of the XRC1000 X-ray gun electronics.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(SpecsXRC1000.additionnal_import) ENABLED START #
 import serial
@@ -29,7 +29,7 @@ import serial
 __all__ = ["SpecsXRC1000", "main"]
 
 
-class SpecsXRC1000(Device, metaclass=DeviceMeta):
+class SpecsXRC1000(Device):
     """
     Device server for reading the status of the XRC1000 X-ray gun electronics.
     """

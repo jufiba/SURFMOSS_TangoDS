@@ -16,11 +16,11 @@ This is a very simple reader for the PDR9000 unit with a 972B transducer.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(MKSGauge.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import serial
 __all__ = ["MKSGauge", "main"]
 
 
-class MKSGauge(Device, metaclass=DeviceMeta):
+class MKSGauge(Device):
     """
     This is a very simple reader for the PDR9000 unit with a 972B transducer.
     """

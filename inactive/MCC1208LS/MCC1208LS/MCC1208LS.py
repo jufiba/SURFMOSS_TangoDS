@@ -16,11 +16,11 @@ Simple interface to the MCC 1208LS usb DAC/ADC box.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(MCC1208LS.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import usb_1208LS
 __all__ = ["MCC1208LS", "main"]
 
 
-class MCC1208LS(Device, metaclass=DeviceMeta):
+class MCC1208LS(Device):
     """
     Simple interface to the MCC 1208LS usb DAC/ADC box.
     """

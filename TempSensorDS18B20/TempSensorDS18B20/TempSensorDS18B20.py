@@ -21,11 +21,11 @@ It needs (if using GPIO pin 4):
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(TempSensorDS18B20.additionnal_import) ENABLED START #
 import os
@@ -69,7 +69,7 @@ class ControlThread(Thread):
 __all__ = ["TempSensorDS18B20", "main"]
 
 
-class TempSensorDS18B20(Device, metaclass=DeviceMeta):
+class TempSensorDS18B20(Device):
     """
     Device server to read the temperature in a Raspberry PI with a DS18B20 sensor.
 

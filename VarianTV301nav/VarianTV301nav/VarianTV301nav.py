@@ -16,11 +16,11 @@ Driver for interfacing with the Varian/Agilent TV301 Navigator pump with integra
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(VarianTV301nav.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import serial
 __all__ = ["VarianTV301nav", "main"]
 
 
-class VarianTV301nav(Device, metaclass=DeviceMeta):
+class VarianTV301nav(Device):
     """
     Driver for interfacing with the Varian/Agilent TV301 Navigator pump with integrated controller.
     """

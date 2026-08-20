@@ -16,11 +16,11 @@ Server for Keithley DVMM 61/2 digits
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(Keithley2100.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import usbtmc
 __all__ = ["Keithley2100", "main"]
 
 
-class Keithley2100(Device, metaclass=DeviceMeta):
+class Keithley2100(Device):
     """
     Server for Keithley DVMM 61/2 digits
     """

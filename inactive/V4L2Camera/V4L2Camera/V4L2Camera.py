@@ -16,11 +16,11 @@ A simple driver to obtain frames from a V4L2 Camera.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(V4L2Camera.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import cv2
 __all__ = ["V4L2Camera", "main"]
 
 
-class V4L2Camera(Device, metaclass=DeviceMeta):
+class V4L2Camera(Device):
     """
     A simple driver to obtain frames from a V4L2 Camera.
     """

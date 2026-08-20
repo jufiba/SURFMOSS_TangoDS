@@ -16,11 +16,11 @@ Device server for AML PGC1.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(AMLPGC1.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import serial
 __all__ = ["AMLPGC1", "main"]
 
 
-class AMLPGC1(Device, metaclass=DeviceMeta):
+class AMLPGC1(Device):
     """
     Device server for AML PGC1.
     """

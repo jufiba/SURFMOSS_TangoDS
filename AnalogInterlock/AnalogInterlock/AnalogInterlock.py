@@ -39,11 +39,11 @@ Failure modes and what this server does about each:
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(AnalogInterlock.additionnal_import) ENABLED START #
 import os
@@ -79,7 +79,7 @@ class ControlThread(threading.Thread):
 __all__ = ["AnalogInterlock", "main"]
 
 
-class AnalogInterlock(Device, metaclass=DeviceMeta):
+class AnalogInterlock(Device):
     """
     Generic threshold interlock between two Tango devices.
     """

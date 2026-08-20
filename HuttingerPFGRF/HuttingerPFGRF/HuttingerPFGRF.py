@@ -16,11 +16,11 @@ Driver for the Huttinger RF generators, such as the PFG-RF300 a power supply for
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(HuttingerPFGRF.additionnal_import) ENABLED START #
 import os
@@ -32,7 +32,7 @@ import struct
 __all__ = ["HuttingerPFGRF", "main"]
 
 
-class HuttingerPFGRF(Device, metaclass=DeviceMeta):
+class HuttingerPFGRF(Device):
     """
     Driver for the Huttinger RF generators, such as the PFG-RF300 a power supply for magnetron sputtering growth.
     """

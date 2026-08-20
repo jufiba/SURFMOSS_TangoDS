@@ -16,11 +16,11 @@ ITech6000C control through ethernet socket.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(Itech6000C.additionnal_import) ENABLED START #
 import os
@@ -39,7 +39,7 @@ def is_number(s):
 __all__ = ["Itech6000C", "main"]
 
 
-class Itech6000C(Device, metaclass=DeviceMeta):
+class Itech6000C(Device):
     """
     ITech6000C control through ethernet socket.
     """

@@ -16,11 +16,11 @@ Device server to interface a Raspberry PI using the GPIO to the SEA YF-S201 wate
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(SEAWaterflowmeter.additionnal_import) ENABLED START #
 import os
@@ -99,7 +99,7 @@ class ControlThread(threading.Thread):
 __all__ = ["SEAWaterflowmeter", "main"]
 
 
-class SEAWaterflowmeter(Device, metaclass=DeviceMeta):
+class SEAWaterflowmeter(Device):
     """
     Device server to interface a Raspberry PI using the GPIO to the SEA YF-S201 water flow sensor.
     """

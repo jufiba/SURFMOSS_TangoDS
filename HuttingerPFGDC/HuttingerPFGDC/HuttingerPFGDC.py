@@ -16,11 +16,11 @@ Driver for the Huttinger DC generators, such as the PFG-DC1500, a 1500W 1KV powe
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(HuttingerPFGDC.additionnal_import) ENABLED START #
 import os
@@ -32,7 +32,7 @@ import struct
 __all__ = ["HuttingerPFGDC", "main"]
 
 
-class HuttingerPFGDC(Device, metaclass=DeviceMeta):
+class HuttingerPFGDC(Device):
     """
     Driver for the Huttinger DC generators, such as the PFG-DC1500, a 1500W 1KV power supply for magnetron sputtering growth.
     """

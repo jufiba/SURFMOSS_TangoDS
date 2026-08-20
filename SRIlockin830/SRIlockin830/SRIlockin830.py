@@ -16,11 +16,11 @@ Interface to the SRI 830 Lock in.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(SRIlockin830.additionnal_import) ENABLED START #
 import os
@@ -31,7 +31,7 @@ import serial
 __all__ = ["SRIlockin830", "main"]
 
 
-class SRIlockin830(Device, metaclass=DeviceMeta):
+class SRIlockin830(Device):
     """
     Interface to the SRI 830 Lock in.
     """

@@ -16,11 +16,11 @@ Device to use the RS TTI 604 DVMM. It has a rather horrible interface.
 import tango
 from tango import DebugIt
 from tango.server import run
-from tango.server import Device, DeviceMeta
+from tango.server import Device
 from tango.server import attribute, command
 from tango.server import device_property
 from tango import AttrQuality, DispLevel, DevState
-from tango import AttrWriteType, PipeWriteType
+from tango import AttrWriteType
 # Additional import
 # PROTECTED REGION ID(Tti604.additionnal_import) ENABLED START
 import os
@@ -32,7 +32,7 @@ import time
 __all__ = ["Tti604", "main"]
 
 
-class Tti604(Device, metaclass=DeviceMeta):
+class Tti604(Device):
     """
     Device to use the RS TTI 604 DVMM. It has a rather horrible interface.
     """
