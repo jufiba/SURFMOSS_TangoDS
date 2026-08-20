@@ -13,7 +13,12 @@ Reports only. It never edits the .xmi or the .py.
 The .py is parsed with `ast`, never imported: most of these servers cannot be
 imported off the Pi at all (RPi.GPIO, lgpio, PyNUT, serial).
 
-Usage:  python3 tools/check_xmi.py [server ...]
+Usage:  python3 tools/check_xmi.py [--root PATH] [server ...]
+
+        --root  repository to check; defaults to the one this script lives in,
+                so it can be pointed at a worktree of an older commit to see
+                what it would have caught back then.
+
 Exit:   0 clean, 1 divergences found, 2 could not run.
 """
 
@@ -243,9 +248,10 @@ def compare(name, xmi_path, py_path):
     return bad, notes
 
 
-def servers(only):
+def servers(only, repo):
     found = []
-    for root in ROOTS:
+    for sub in ROOTS:
+        root = os.path.join(repo, sub)
         if not os.path.isdir(root):
             continue
         for entry in sorted(os.listdir(root)):
@@ -261,12 +267,28 @@ def servers(only):
     return found
 
 
+DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def main(argv):
-    only = set(argv[1:]) or None
-    found = servers(only)
+    args = argv[1:]
+    repo = DEFAULT_ROOT
+    if "--root" in args:
+        i = args.index("--root")
+        try:
+            repo = args[i + 1]
+        except IndexError:
+            print("--root needs a path")
+            return 2
+        del args[i:i + 2]
+    only = set(args) or None
+
+    found = servers(only, repo)
     if not found:
-        print("no servers found; run this from the repository root")
+        print("no servers found under %s" % repo)
         return 2
+    if repo != DEFAULT_ROOT:
+        print("checking %s\n" % repo)
 
     clean = withdrift = nomodel = uncomparable = 0
     for name, xmi, py in found:
