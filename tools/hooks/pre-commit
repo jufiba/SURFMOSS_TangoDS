@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+# Refuse a commit whose .xmi models no longer describe their .py.
+#
+# Only runs when the commit touches a .py or an .xmi, so commits to the docs
+# or the synoptics cost nothing.
+#
+# It checks what is *staged*, not what is lying in the working tree: the index
+# is materialised into a temporary directory and check_xmi.py is pointed at it
+# with --root. Otherwise a `git add` of half your changes would be judged
+# against the other half.
+#
+# Escape hatch, for a commit you know is mid-way:
+#     git commit --no-verify
+#
+# Installed per clone -- .git/hooks does not travel with a clone:
+#     git config core.hooksPath tools/hooks
+
+set -e
+
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    against=HEAD
+else
+    against=$(git hash-object -t tree /dev/null)   # first commit
+fi
+
+changed=$(git diff --cached --name-only --diff-filter=ACMR "$against" \
+          | grep -E '\.(py|xmi)$' || true)
+[ -n "$changed" ] || exit 0
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "pre-commit: no python3, skipping the .xmi check" >&2
+    exit 0
+fi
+
+root=$(git rev-parse --show-toplevel)
+[ -f "$root/tools/check_xmi.py" ] || exit 0
+
+staged=$(mktemp -d)
+trap 'rm -rf "$staged"' EXIT
+
+# The index as it would be committed. --prefix needs the trailing slash.
+git checkout-index --all --force --prefix="$staged/"
+
+report=$(python3 "$root/tools/check_xmi.py" --root "$staged") && status=0 || status=$?
+
+if [ "$status" -ne 0 ]; then
+    # Only the servers that failed and why. The full run also prints a note per
+    # polled attribute and per described state, which is right when you ask for
+    # a report and about ninety lines of noise when you are being stopped.
+    # Divergences are the XX headers and the lines indented under them.
+    printf '%s\n' "$report" | grep -E '^XX |^      ' >&2 || true
+    echo >&2
+    echo "pre-commit: a model and its code disagree." >&2
+    echo "  Bring the .xmi into step, or commit anyway:  git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0

@@ -151,6 +151,43 @@ The imported history begins at the `leemmacros-v1.7` commit. Because the snapsho
 
 Note: `leemmacros-v2.6` is the Python 3 port. Tags up to and including `leemmacros-v2.5` are Python 2 and will not run under Python 3. There is no `leemmacros-v2.4` tag — that version appears in the changelog but no copy of it survived.
 
+## Keeping the models honest
+
+Each device server has a `.xmi` next to its `.py` describing the interface it
+exposes. **POGO does not regenerate these servers** — doing so produces a file
+that will not compile, see
+[the migration reference](docs/surfmoss-device-server-migration-reference.md) —
+so the `.xmi` is documentation, kept in step by hand. Nothing enforces that by
+itself, and every case of drift found so far was found by accident.
+
+`tools/check_xmi.py` compares the two: attributes, commands, properties with
+their defaults, declared states, and polling periods.
+
+```bash
+python3 tools/check_xmi.py              # 0 if all agree, 1 if any diverge
+python3 tools/check_xmi.py WisselMCA    # one server
+```
+
+### Install the pre-commit hook, once per clone
+
+`tools/hooks/pre-commit` runs that check on whatever is staged and refuses the
+commit if a model and its code disagree. **Git hooks do not travel with a
+clone**, so a fresh checkout has no hook at all — which is exactly when it is
+most wanted. One command per clone:
+
+```bash
+git config core.hooksPath tools/hooks
+```
+
+It only runs when the commit touches a `.py` or an `.xmi`, and it judges the
+staged content rather than the working tree, so staging half your changes is
+not judged against the other half. To get past it on a commit you know is
+mid-way:
+
+```bash
+git commit --no-verify
+```
+
 ## Synoptics
 
 The `synoptics/` directory contains Tango synoptic panel definitions.
