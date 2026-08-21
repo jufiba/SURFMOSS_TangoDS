@@ -21,10 +21,10 @@ the relevant Starter — and complete the work noted below first.
 | VSMControlDevice | Not in use now | Needs `python3-numpy`; confirm which host runs it. |
 | WebCam | Camera not in use now | (camera stack) |
 
-## Separate case: PANIC (PyAlarm)
+## Separate case: PANIC (PyAlarm) — removed
 
-PANIC is the standard Alba Tango alarm system — **third-party**, not a SURFMOSS
-server. It is still **Python 2 + Qt5** and has not been converted. It is not
-installed from this repo and has no entry point in the pyproject. Reviving it is a
-significant py2→py3 + Qt task, and it would be installed separately (its own
-package), not via the SURFMOSS install. Kept on hand for that future work.
+PANIC was ALBA's Tango alarm system, **third-party** and not a SURFMOSS server.
+It was kept here against a future py2→py3 + Qt port; that port is not happening,
+and the tree has been removed. What it watched is written down in
+[`docs/alarmas-panic-legado.md`](../docs/alarmas-panic-legado.md), and the
+reasoning is in [`deprecated/README.md`](../deprecated/README.md).

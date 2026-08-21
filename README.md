@@ -118,7 +118,11 @@ pip install .
 | Directory | Description |
 |---|---|
 | `NetworkUPSTools` | Wrapper for NUT (Network UPS Tools) |
-| `PANIC` | PANIC alarm system device server (fork of [tango-controls/PANIC](https://github.com/tango-controls/PANIC)) |
+
+Alarms used to live here too, in a vendored copy of ALBA's PANIC. That tree has
+been removed — see [`deprecated/README.md`](deprecated/README.md) for why, and
+[`docs/alarmas-panic-legado.md`](docs/alarmas-panic-legado.md) for what it
+watched.
 
 ### Raspberry Pi
 
@@ -201,4 +205,5 @@ The `docs/` directory holds the longer-form documentation:
 | `LEEMmacros.md` | LEEM acquisition macros: versioning, change history with reasoning, invariants to preserve |
 | `LEEMgui.md` | Acquisition GUI: architecture, layout decisions, how to add an acquisition, testing |
 | `surfmoss-device-server-migration-reference.md` | Device server restructuring and Trixie migration reference |
+| `alarmas-panic-legado.md` | Every alarm the retired PANIC system carried, recovered from the old network's database — the reference for whatever replaces it |
 | `panic-python3-qt-port-estimate.md` | What porting PANIC to Python 3 and current Qt would cost, and the alternatives |
