@@ -35,7 +35,7 @@ be maintained here, not because an instrument stopped working.
 | Upstream | https://github.com/ALBA-Synchrotron/panic |
 | Its configuration | [`docs/alarmas-panic-legado.md`](../docs/alarmas-panic-legado.md) — every alarm it carried, recovered from the database of the old network. **That document, not the code, is the reference now.** |
 | Cost of porting | [`docs/panic-python3-qt-port-estimate.md`](../docs/panic-python3-qt-port-estimate.md) |
-| Last commit containing the tree | `PENDING` |
+| Last commit containing the tree | tag **`panic-final`** (`62afd93`) — `git show panic-final:PANIC/panic/alarmapi.py`, or `git checkout panic-final -- PANIC` to get the lot back |
 
 ⚠️ Local patches existed to make it work against Qt 5.5. They were never
 committed to this repository and are **deliberately discarded**: they were
