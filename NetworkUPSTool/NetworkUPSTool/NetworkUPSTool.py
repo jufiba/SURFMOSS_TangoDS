@@ -36,6 +36,23 @@ class NetworkUPSTool(Device):
     A wrapper for showing the more relevant information from NUT, the network UPS tool.
     """
     # PROTECTED REGION ID(NetworkUPSTool.class_variable) ENABLED START #
+    # Decoding happens here, once, rather than at each of the five call sites:
+    # python3-nut hands back bytes for both keys and values, while the code
+    # below indexes with str literals and compares against str. The old
+    # python-nut, on Python 2, made no distinction. class_variable is the only
+    # region inside the class body that POGO preserves, so this is where a
+    # helper method has to live.
+    #
+    # isinstance rather than a bare .decode() so the server does not care which
+    # of the two packagings it is running against -- being tied to one is what
+    # broke it in the first place.
+    def _get_vars(self):
+        raw = self.client.GetUPSVars(self.UPSunitName)
+        return {self._text(k): self._text(v) for k, v in raw.items()}
+
+    @staticmethod
+    def _text(value):
+        return value.decode() if isinstance(value, bytes) else value
     # PROTECTED REGION END #    //  NetworkUPSTool.class_variable
 
     # -----------------
@@ -78,8 +95,12 @@ class NetworkUPSTool(Device):
         Device.init_device(self)
         # PROTECTED REGION ID(NetworkUPSTool.init_device) ENABLED START #
         self.client=PyNUT.PyNUTClient()
-        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
-        self.commUPS=self.client.GetUPSCommands(self.UPSunitName)
+        self.varsUPS=self._get_vars()
+        # A list of bytes, not a dict: decoded here rather than through
+        # _get_vars. Nothing reads it today, but it is left in the same
+        # shape as varsUPS so that whatever does will not meet bytes.
+        self.commUPS=[self._text(c)
+                      for c in self.client.GetUPSCommands(self.UPSunitName)]
         if (self.varsUPS["ups.status"]=="OL"):
             self.set_state(tango.DevState.ON)
         elif (self.varsUPS["ups.status"]=="OB"):
@@ -104,7 +125,7 @@ class NetworkUPSTool(Device):
 
     def read_UpsStatus(self):
         # PROTECTED REGION ID(NetworkUPSTool.UpsStatus_read) ENABLED START #
-        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
+        self.varsUPS=self._get_vars()
         if (self.varsUPS["ups.status"]=="OL"):
             self.set_state(tango.DevState.ON)
             status="OnLine"
@@ -119,19 +140,19 @@ class NetworkUPSTool(Device):
 
     def read_Temperature(self):
         # PROTECTED REGION ID(NetworkUPSTool.Temperature_read) ENABLED START #
-        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
+        self.varsUPS=self._get_vars()
         return (float(self.varsUPS["ups.temperature"]))
         # PROTECTED REGION END #    //  NetworkUPSTool.Temperature_read
 
     def read_Load(self):
         # PROTECTED REGION ID(NetworkUPSTool.Load_read) ENABLED START #
-        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
+        self.varsUPS=self._get_vars()
         return (float(self.varsUPS["ups.load"]))
         # PROTECTED REGION END #    //  NetworkUPSTool.Load_read
 
     def read_Charge(self):
         # PROTECTED REGION ID(NetworkUPSTool.Charge_read) ENABLED START #
-        self.varsUPS=self.client.GetUPSVars(self.UPSunitName)
+        self.varsUPS=self._get_vars()
         return (float(self.varsUPS["battery.charge"]))
         # PROTECTED REGION END #    //  NetworkUPSTool.Charge_read
 
