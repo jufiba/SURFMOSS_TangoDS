@@ -25,6 +25,7 @@ from tango import AttrWriteType
 # PROTECTED REGION ID(LeyboldIG3.additionnal_import) ENABLED START #
 import os
 import sys
+import time
 import serial
 
 class IG3Error(Exception):
@@ -173,9 +174,16 @@ class LeyboldIG3(Device):
 
     def read_Pressure(self):
         # PROTECTED REGION ID(LeyboldIG3.Pressure_read) ENABLED START #
+        # 0.0 on a pressure gauge reads as perfect vacuum, which is the most
+        # dangerous value this attribute can hand to an interlock or an alarm:
+        # it says the chamber is fine at exactly the moment nothing is known.
+        # Every path that has no reading returns INVALID instead, so a client
+        # that checks quality sees nothing rather than good news, and one that
+        # does not at least gets a number that cannot be mistaken for a good
+        # one. Same reasoning as SEAWaterflowmeter and TempSensorDS18B20.
         state=self.get_state()
         if (state==tango.DevState.OFF):
-            return 0.0
+            return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
         self.cmd("S00")
         try:
             (kind,payload)=self.response()
@@ -183,7 +191,7 @@ class LeyboldIG3(Device):
             self.set_state(tango.DevState.FAULT)
             self.set_status("Can't read the pressure: %s"%e)
             self.error_stream("Can't read the pressure: %s"%e)
-            return(0.0)
+            return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
         if (kind=="ACK"):
             return float(payload)
         # Only NAK reaches here; a bad frame or no frame raised above. The old
@@ -193,7 +201,7 @@ class LeyboldIG3(Device):
         self.set_status("IG3 refused the pressure request: %s"
                         %str(payload,"ascii"))
         self.debug_stream("IG3 refused the pressure request")
-        return(0.0)
+        return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
         # PROTECTED REGION END #    //  LeyboldIG3.Pressure_read
 
 
