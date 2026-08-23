@@ -252,8 +252,10 @@ import fails at launch.
 
 **The live-server list below is what all three must agree on.**
 
-Tally: **32 live · 7 inactive · 4 deprecated** (= 43 entry-point servers), plus
-RaspberryButton_old (dead duplicate, remove) and PANIC (third-party, separate).
+Tally: **32 live · 7 inactive · 4 deprecated** (= 43 entry-point servers).
+
+_RaspberryButton_old and PANIC used to be counted here as special cases; neither
+is in the repository any more. See the note below._
 
 _(Era 31 · 9 hasta el 13-ago-2026, cuando WisselMCA y GammaVacuumSPCe pasaron de
 inactivos a vivos, y 33 · 7 · 3 hasta el 18-ago-2026, cuando Motor pasó a
@@ -288,20 +290,34 @@ V4L2Camera, VSMControlDevice, WebCam.
 _(WisselMCA y GammaVacuumSPCe salieron de esta lista el 13-ago-2026 —
 reactivados, ver más abajo.)_
 
-### DEPRECATED — dead hardware, remove from install set permanently (3)
+### DEPRECATED — dead hardware, remove from install set permanently (4)
 
 Move to `deprecated/`. **Death by omission**: never entered in the new DB. See
 `deprecated/README.md`.
 
-MitutoyoPostable, SpecsXRC1000, VarianMultiGauge.
+MitutoyoPostable, **Motor**, SpecsXRC1000, VarianMultiGauge.
+
+_(Motor entró aquí el 18-ago-2026, sustituido por un Arduino con un DRV8825; su
+reemplazo es `ArduinoMotor`. Comprobado el 23-ago-2026 que no queda en la BD ni
+como servidor, ni como clase, ni con dispositivos.)_
 
 ### Special cases
 
-- **RaspberryButton_old** — dead duplicate of RaspberryButton (forced the TOML
-  dedup). Remove from repo.
-- **PANIC (PyAlarm)** — third-party Alba alarm system, still Python 2 + Qt5. Not a
-  SURFMOSS server; installed separately if/when converted. No entry point in this
-  repo's pyproject.
+- **RaspberryButton_old** — ✅ ya no existe. Era un duplicado muerto de
+  RaspberryButton que forzaba la deduplicación del TOML. Comprobado el
+  23-ago-2026: no está en la raíz, ni en `inactive/`, ni en `deprecated/`.
+- **PANIC (PyAlarm)** — ✅ retirado del árbol el 21-ago-2026. Sistema de alarmas de
+  ALBA, código de terceros, Python 2 + Qt5, sin port previsto. Nunca tuvo entry
+  point aquí. Lo que vigilaba está en
+  [`alarmas-panic-legado.md`](alarmas-panic-legado.md), recuperado de la BD de la
+  red vieja; el código, en la etiqueta `panic-final` y en
+  https://github.com/ALBA-Synchrotron/panic
+
+- **AnalogInterlock** — ⏳ está en el árbol pero **deliberadamente fuera** de
+  `[project.scripts]` y de `packages`, así que no se instala. Por eso hay **33
+  directorios de servidor y 32 instalables**, y no es un error: espera a que
+  pi-xps pase a netboot, porque hoy arranca de su microSD y no comparte software
+  con la raíz compartida. Ver `AnalogInterlock/README.md`.
 
 ---
 
