@@ -204,6 +204,7 @@ The `docs/` directory holds the longer-form documentation:
 |---|---|
 | `LEEMmacros.md` | LEEM acquisition macros: versioning, change history with reasoning, invariants to preserve |
 | `LEEMgui.md` | Acquisition GUI: architecture, layout decisions, how to add an acquisition, testing |
+| `netboot-shared-root.md` | How the Pis netboot from one shared read-only NFS root on wolframite: exports, per-Pi `/var`, machine-id, per-host service activation, recovery |
 | `surfmoss-device-server-migration-reference.md` | Device server restructuring and Trixie migration reference |
 | `alarmas-panic-legado.md` | Every alarm the retired PANIC system carried, recovered from the old network's database — the reference for whatever replaces it |
 | `panic-python3-qt-port-estimate.md` | What porting PANIC to Python 3 and current Qt would cost, and the alternatives |
