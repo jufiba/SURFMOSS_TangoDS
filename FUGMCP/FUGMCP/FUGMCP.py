@@ -197,8 +197,13 @@ class FUGMCP(Device):
         resp=self.ser.readline()
         if (resp[:-1]!=bytes("E0","ascii")):
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Error writing SetVoltage from FUG MCP %s"%resp[:-1])
-            self.debug_stream("Error writing SetVoltage from FUG MCP %s"%resp[:-1])
+            # decode with "replace", not the strict decode used elsewhere
+            # in this repository: this runs when the instrument answered
+            # something unexpected, so the bytes may not be ASCII at all,
+            # and a decode that raises would lose the one message that
+            # says what went wrong.
+            self.set_status("Error writing SetVoltage from FUG MCP %s"%resp[:-1].decode("ascii","replace"))
+            self.debug_stream("Error writing SetVoltage from FUG MCP %s"%resp[:-1].decode("ascii","replace"))
         return
         # PROTECTED REGION END #    //  FUGMCP.SetVoltage_write
 
@@ -216,8 +221,8 @@ class FUGMCP(Device):
         resp=self.ser.readline()
         if (resp[:-1]!=bytes("E0","ascii")):
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Error writing SetCurret from FUG MCP %s"%resp[:-1])
-            self.debug_stream("Error writing SetCurrent from FUG MCP %s"%resp[:-1])
+            self.set_status("Error writing SetCurret from FUG MCP %s"%resp[:-1].decode("ascii","replace"))
+            self.debug_stream("Error writing SetCurrent from FUG MCP %s"%resp[:-1].decode("ascii","replace"))
         return
         # PROTECTED REGION END #    //  FUGMCP.SetCurrent_write
 

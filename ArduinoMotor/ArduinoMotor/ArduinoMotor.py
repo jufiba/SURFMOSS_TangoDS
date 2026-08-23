@@ -87,11 +87,16 @@ class ArduinoMotor(Device):
             b=self.ser.readline()
             print(b)
         if (b[0:16]==bytes("Motor Sputtering","ascii")):
-            self.set_status("Connected to %s"%b)
+            # decode with "replace", not the strict decode used elsewhere
+            # in this repository: this runs when the instrument answered
+            # something unexpected, so the bytes may not be ASCII at all,
+            # and a decode that raises would lose the one message that
+            # says what went wrong.
+            self.set_status("Connected to %s"%b.decode("ascii","replace"))
             self.set_state(tango.DevState.ON)
         else:
             self.set_state(tango.DevState.FAULT)
-            self.set_status("ArduinoMotor IDN? returned %s"%b)
+            self.set_status("ArduinoMotor IDN? returned %s"%b.decode("ascii","replace"))
         for i in range(0,4):
             print(self.ser.readline())
         # PROTECTED REGION END #    //  ArduinoMotor.init_device
