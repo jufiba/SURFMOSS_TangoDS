@@ -26,6 +26,18 @@ from tango import AttrWriteType
 import os
 import sys
 import serial
+
+class IG3Error(Exception):
+    """The IG3 did not answer, or answered something that is not a frame.
+
+    One exception for the three ways the exchange can fail — no reply, a reply
+    that does not check out, and a reply whose type is not in the protocol —
+    because to every caller they mean the same thing: there is no reading to be
+    had. response() used to return None for the third and raise IndexError for
+    the first two, and every caller then subscripted it.
+    """
+
+
 # PROTECTED REGION END #    //  LeyboldIG3.additionnal_import
 
 __all__ = ["LeyboldIG3", "main"]
@@ -40,16 +52,35 @@ class LeyboldIG3(Device):
         b=bytes(a,"ascii")
         self.ser.write(bytes([2,len(b)])+b+bytes([sum(b)%256]))
     def response(self):
+        """Read one reply frame. ("ACK"|"NAK", payload), or IG3Error.
+
+        Every read is checked for length before anything is indexed. A read
+        that times out returns short rather than raising, so h[1] on an empty
+        header was an IndexError -- and that is the likely failure, not the
+        exotic one: it is what a disconnected or silent gauge produces.
+        """
         h=self.ser.read(2)
+        if (len(h)<2):
+            raise IG3Error("no reply: %d of the 2 header bytes arrived "
+                           "(timeout, cable, or wrong baud rate)"%len(h))
+        if (h[1]==0):
+            raise IG3Error("the header announces an empty body")
         d=self.ser.read(h[1])
-        ck=int.from_bytes(self.ser.read(1),byteorder="big")
-        cck=sum(d)%256
-        if (cck!=ck):
-            return("CHK",d[1:])
-        elif (d[0]==0x06):
-            return(("ACK",d[1:]))
-        elif (d[0]==0x15):
-            return(("NAK",d[1:]))
+        if (len(d)<h[1]):
+            raise IG3Error("truncated reply: %d of the %d bytes announced"
+                           %(len(d),h[1]))
+        raw=self.ser.read(1)
+        if (len(raw)<1):
+            raise IG3Error("the checksum byte never arrived")
+        ck=int.from_bytes(raw,byteorder="big")
+        if (sum(d)%256!=ck):
+            raise IG3Error("checksum mismatch: computed %d, received %d"
+                           %(sum(d)%256,ck))
+        if (d[0]==0x06):
+            return("ACK",d[1:])
+        if (d[0]==0x15):
+            return("NAK",d[1:])
+        raise IG3Error("unrecognised frame, first byte 0x%02x"%d[0])
     # PROTECTED REGION END #    //  LeyboldIG3.class_variable
 
     # -----------------
@@ -82,38 +113,48 @@ class LeyboldIG3(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(LeyboldIG3.init_device) ENABLED START #
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead. Everything that can
+        # fail is caught here and turned into FAULT with the reason in the
+        # status, so the device stays up and says what is wrong.
+        #
+        # The old code caught serial.SerialTimeoutException, which pyserial
+        # raises on a write that times out. Nothing here writes with a timeout;
+        # a read that times out returns short and used to become an IndexError
+        # inside response(). It is IG3Error that matters now.
         try:
             self.ser=serial.Serial(self.SerialPort,baudrate=self.Speed,timeout=1.0)
+        except serial.SerialException as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
+        try:
             self.cmd("H")
-            r=self.response()
-            if (r[0]=="NAK"):
+            (kind,payload)=self.response()
+            if (kind=="NAK"):
                 self.set_state(tango.DevState.FAULT)
                 self.set_status("IG3 is saying it does not understand me")
                 self.debug_stream("IG3 is saying it does not understand me")
                 return
-            elif (r[0]=="CHK"):
+            if (str(payload[0:3],"ascii")!="IG3"):
                 self.set_state(tango.DevState.FAULT)
-                self.set_status("IG3 is having checksum errors")
-                self.debug_stream("IG3 is having checksum errors")
-                return
-            elif (str(r[1][0:3],"ascii")!="IG3"):
-                self.set_state(tango.DevState.FAULT)
-                self.set_status("This is not an IG3")
+                self.set_status("This is not an IG3, it identifies as %s"
+                                %str(payload,"ascii"))
                 self.debug_stream("This is not an IG3")
                 return
-        except serial.SerialTimeoutException:
+            self.set_status("Connected to Leybold IG3")
+            self.debug_stream("Connected to Leybold IG3")
+            self.cmd("S14")
+            (kind,payload)=self.response()
+            if (str(payload,"ascii")=="1"):
+                self.set_state(tango.DevState.ON)
+            else:
+                self.set_state(tango.DevState.OFF)
+        except IG3Error as e:
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Can't connect to IG3")
-            self.debug_stream("Can't connect to IG3")
-            return
-        self.set_status("Connected to Leybold IG3")
-        self.debug_stream("Connected to Leybold IG3")
-        self.cmd("S14")
-        r=self.response()
-        if (str(r[1],"ascii")=="1"):
-            self.set_state(tango.DevState.ON)
-        else:
-            self.set_state(tango.DevState.OFF)
+            self.set_status("Can't talk to the IG3: %s"%e)
+            self.error_stream("Can't talk to the IG3: %s"%e)
         # PROTECTED REGION END #    //  LeyboldIG3.init_device
 
     def always_executed_hook(self):
@@ -136,15 +177,23 @@ class LeyboldIG3(Device):
         if (state==tango.DevState.OFF):
             return 0.0
         self.cmd("S00")
-        r=self.response()
-
-        if (r[0]=="ACK"):
-            return float(r[1])
-        else:
+        try:
+            (kind,payload)=self.response()
+        except IG3Error as e:
             self.set_state(tango.DevState.FAULT)
-            self.set_status(r[0]+r[1])
-            self.debug_stream(r[0]+r[1])
+            self.set_status("Can't read the pressure: %s"%e)
+            self.error_stream("Can't read the pressure: %s"%e)
             return(0.0)
+        if (kind=="ACK"):
+            return float(payload)
+        # Only NAK reaches here; a bad frame or no frame raised above. The old
+        # code did r[0]+r[1], concatenating str with bytes, so the error path
+        # raised TypeError while reporting the error.
+        self.set_state(tango.DevState.FAULT)
+        self.set_status("IG3 refused the pressure request: %s"
+                        %str(payload,"ascii"))
+        self.debug_stream("IG3 refused the pressure request")
+        return(0.0)
         # PROTECTED REGION END #    //  LeyboldIG3.Pressure_read
 
 
@@ -163,12 +212,18 @@ class LeyboldIG3(Device):
             return
         elif (state==tango.DevState.OFF):
             self.cmd("R09")
-            r=self.response()
-            if (r[0]=="ACK"):
+            try:
+                (kind,payload)=self.response()
+            except IG3Error as e:
+                self.set_state(tango.DevState.FAULT)
+                self.set_status("Can't talk to the IG3: %s"%e)
+                self.error_stream("Can't talk to the IG3: %s"%e)
+                return
+            if (kind=="ACK"):
                 self.set_state(tango.DevState.ON)
             else:
-                self.set_status(r[0]+" "+str(r[1],"ascii"))
-                self.debug_stream(r[0]+" "+str(r[1],"ascii"))
+                self.set_status("IG3 refused: %s"%str(payload,"ascii"))
+                self.debug_stream("IG3 refused: %s"%str(payload,"ascii"))
                 self.set_state(tango.DevState.FAULT)
         # PROTECTED REGION END #    //  LeyboldIG3.Start
 
@@ -183,12 +238,18 @@ class LeyboldIG3(Device):
             return
         else:
             self.cmd("R10")
-            r=self.response()
-            if (r[0]=="ACK"):
+            try:
+                (kind,payload)=self.response()
+            except IG3Error as e:
+                self.set_state(tango.DevState.FAULT)
+                self.set_status("Can't talk to the IG3: %s"%e)
+                self.error_stream("Can't talk to the IG3: %s"%e)
+                return
+            if (kind=="ACK"):
                 self.set_state(tango.DevState.OFF)
             else:
-                self.set_status(r[0]+" "+str(r[1],"ascii"))
-                self.debug_stream(r[0]+" "+str(r[1],"ascii"))
+                self.set_status("IG3 refused: %s"%str(payload,"ascii"))
+                self.debug_stream("IG3 refused: %s"%str(payload,"ascii"))
                 self.set_state(tango.DevState.FAULT)
         # PROTECTED REGION END #    //  LeyboldIG3.Stop
 
@@ -200,9 +261,12 @@ class LeyboldIG3(Device):
     @DebugIt()
     def SendCommand(self, argin):
         # PROTECTED REGION ID(LeyboldIG3.SendCommand) ENABLED START #
+        # Deliberately not caught: this is the expert diagnostic command, and a
+        # DevFailed carrying the real reason is more use at the Jive prompt
+        # than a string that hides it.
         self.cmd(argin)
-        r=self.response()
-        return r[0]+" "+str(r[1],"ascii")
+        (kind,payload)=self.response()
+        return kind+" "+str(payload,"ascii")
         # PROTECTED REGION END #    //  LeyboldIG3.SendCommand
 
 # ----------
