@@ -5,7 +5,127 @@ the new Trixie NFS root (`/nfs/pi-trixie` on wolframite) and reconciling them at
 the clean-DB cutover. Built from the Python-3 audit, the entry-point inventory,
 and the dependency map._
 
-_Last updated: 20-ago-2026_
+_Last updated: 26-Aug-2026_
+
+---
+
+## Status (26-Aug-2026): the three Pfeiffer servers, and what is still open
+
+All three are running against real pumps:
+
+| Device | Server | Pi | Port | Address | Reading |
+|---|---|---|---|---|---|
+| `xps/vacuum/turboPCH` | PfeifferTC100/1 | pi-xps | `…usb-0:1.2:1.0-port0` | 001 `TC100` | 990 Hz, 0.17 A |
+| `leem/vacuum/turboPCH` | PfeifferTU400/1 | pi-uleem | `…usb-0:1.1.2:1.0-port0` | 001 `TC 400` | 1000 Hz, 0.53 A |
+| `leem/vacuum/scrollPump` | PfeifferHiscroll/1 | pi-uleem | `…usb-0:1.2.3:1.0-port0` | 002 `HiScrl` | 1557 rpm, 0.41 A |
+
+Four separate faults were behind "the server dies seconds after the Starter
+launches it". Only the first was a Python 3 problem, and even that one was not
+really about Python.
+
+### Fixed: `read_until()` lost its keyword in pyserial 3 (f018f5b)
+
+```python
+resp = self.ser.read_until(terminator=b"\r")     # pyserial 2.x
+TypeError: SerialBase.read_until() got an unexpected keyword argument 'terminator'
+```
+
+3.x calls the argument `expected`. The call is **older than the migration** and
+worked on the pyserial 2.x that Python 2 used; what moved underneath it was the
+library, not the language. It was in PfeifferTU400, PfeifferHiscroll,
+PfeifferTC100, CenterOneGauge and MKSGauge.
+
+Now passed positionally, `read_until(b"\r")`, which both versions accept.
+
+**Why it survived the migration:** db0bca9 was checked with `python3 -m
+py_compile` ("All 40 DS Python files now pass"), and a wrong keyword argument
+compiles perfectly. `tools/audit_serial_api.py` is that gap closed.
+
+**Why it killed the server rather than one attribute:** the call sits in
+`init_device`, and an exception escaping `init_device` makes PyTango exit the
+whole process — the Starter then leaves it for dead. All three now catch and go
+FAULT with the reason in the status, as LeyboldIG3 does. `sendcommand()` also
+checks the reply before indexing it (length, announced against actual,
+checksum, parameter echo) and clears the input buffer before writing;
+PfeifferHiscroll additionally had no `timeout=`, so a silent pump hung
+`init_device` for ever instead of failing.
+
+### Fixed: PfeifferHiscroll reported watts as degrees (be3b186)
+
+`read_TemperatureFinalStage` asked for **P316**, which is what `read_Power`
+already asks for. It showed as `168.0 °C` next to `168 W` on the running pump.
+The power stage temperature is **P324**: read back 56, next to P326
+(electronics) 55 and P346 (motor) 54.
+
+No framing check could have caught this — the pump answers P316 correctly. It
+was asking the wrong question, and only live hardware showed it.
+
+### Fixed: a converter with a vendor PID gets no `/dev` entry, silently
+
+PfeifferTU400 could not open its port although the property was right and the
+cable was in. On pi-leem, `1-1.1.2` was enumerated with **no driver bound**:
+
+```
+1-1.1.2    0403:daf1  drv=NONE  tty=none  Delphin USB Serial Converter 09QC4001
+```
+
+An FTDI part (vendor `0403`) reflashed with a vendor product id that is not in
+the `ftdi_sio` table. Nothing is logged as an error; the port is simply absent.
+Fixed with a udev rule now on the shared root — see
+`docs/netboot-shared-root.md` for the rule and how to test it from `/run`.
+
+### Not a fault: the servers were being looked for on the wrong Pi
+
+`PfeifferTU400/1` and `PfeifferHiscroll/1` belong to **pi-uleem**, not pi-leem.
+pi-leem's USB tree is numbered so much like pi-uleem's that both `SerialPort`
+properties named paths that *existed* there, with entirely different adapters on
+them — so the symptom was silence, not an error, and it looked like stale
+properties or dead pumps. The properties were correct all along.
+
+The remaining silence on the TU400 was the RS-485 converter itself; it answered
+as soon as it was reconnected by hand. `tools/pfeiffer_probe.py` is what
+distinguishes these cases: a pump that is off and a property pointing at the
+wrong port are both silence, and only a name coming back tells them apart.
+
+### Still open
+
+- ⚠️ **The deployed PfeifferHiscroll still returns watts for
+  `TemperatureFinalStage`.** The running code is `60805d7`; the fix is
+  `be3b186`. Pull on wolframite and restart the server.
+- ⚠️ **`inactive/PfeifferDCU002` and `inactive/GammaIonPump` still carry
+  `read_until(terminator=…)`.** They are not installed, so they break nothing
+  today, but they will die on first use. `tools/audit_serial_api.py` reports
+  both.
+- ⚠️ **CenterOneGauge has no `timeout=`** on its port, so it can still block
+  indefinitely in `read_until`. It got the keyword fix only.
+- ⚠️ **pi-leem's FTDI on `1.2.3` (`AB0JP499`) logs real USB faults** —
+  `failed to set flow control: -71`, `urb stopped: -32`. That adapter or its
+  cabling looks independently bad.
+- The `0403:daf1` Delphin converter on pi-leem's `1.1.2` belongs to something
+  else on that Pi; no Pfeiffer answers on it. The udev rule is still needed
+  there, just not for the TU400. **Unidentified.**
+- 2.x camelCase spellings (`inWaiting`, `flushInput`) remain in AMLPGC1,
+  Hygrometer and Tti604. They work in pyserial 3.5 and are deprecated, nothing
+  more.
+
+### Tools added for this (d906b33)
+
+```
+python3 tools/audit_serial_api.py           # every DS, against the pyserial API
+python3 tools/pfeiffer_probe.py             # on a Pi: who is on which port
+python3 tools/<either> --self-test          # both check their own method first
+```
+
+`audit_serial_api.py` reads the servers with `ast` and checks each call on a
+pyserial object against what pyserial 3.5 accepts. Its table is frozen from the
+Pi and `--self-test` compares it against the installed pyserial wherever
+pyserial can be imported; the regression fixture is this repository's own
+history (the five files must report at `f018f5b^` and must not at `f018f5b`).
+
+`pfeiffer_probe.py` is read-only — action `00` only, never `10` — because
+aiming `Start` or `SetRotSpeed` at whatever happens to be on a port is how a
+vacuum system gets damaged. **Stop the device server before probing its port:**
+the port is not locked, and two openers on one bus read each other's replies.
 
 ---
 
@@ -433,6 +553,30 @@ pi-mossbauer, `SEAWaterflowmeter/2`; sputtering, `ArduinoMotor/1`. **Las tres pr
 siguen arrancando de microSD**, no de netboot — ver _Netboot frente a microSD_.
 
 _Completar por host desde Astor a medida que se migren._
+
+#### Update (26-Aug-2026): read from the DB, not from Astor
+
+`db.get_host_server_list()` is the authority — `tango/admin/<host>`'s `Servers`
+property is empty on every host here, so the assignment lives in the per-server
+record (`db.get_server_info()` → `host`, `mode`, `level`) and is what the
+Starter acts on. Confirmed:
+
+```
+pi-leem.lab   AMLPGC1/1, ElmitecLEEM2k/1, ElmitecUview/1, FUGMCP/1·2·3,
+              NetworkUPSTool/1, PIDController/1·2·3, RaspberrySwitch/2
+pi-uleem.lab  CenterOneGauge/1, Hygrometer/3, PfeifferHiscroll/1,
+              PfeifferTU400/1, RaspberrySwitch/1, SEAWaterflowmeter/1,
+              TempSensorDS18B20/2
+pi-xps.lab    PfeifferTC100/1  (+ RaspberryButton/1, SEAWaterflowmeter/3)
+```
+
+**The two LEEM pumps belong to pi-uleem**, and neither appears under pi-leem.
+An Astor window left open from before the change keeps showing them under
+pi-leem in red; refresh it.
+
+**pi-uleem netboots now** (resolved 26-Aug-2026), so the note above about the
+first three still running from microSD is out of date: **pi-hvleem is the only
+Pi left on microSD.** See `docs/netboot-shared-root.md`.
 
 ---
 
