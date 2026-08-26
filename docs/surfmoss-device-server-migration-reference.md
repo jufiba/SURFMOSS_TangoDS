@@ -129,136 +129,137 @@ the port is not locked, and two openers on one bus read each other's replies.
 
 ---
 
-## Estado (08-ago-2026): primera Pi validada en la red nueva
+## Status (08-Aug-2026): first Pi validated on the new network
 
-**pi-rackmossbauer arranca Debian 13 por netboot desde `/nfs/pi-trixie`, con
-Tango 10, y el Starter lanza sus device servers.** Los únicos fallos restantes son
-por hardware ausente (la Pi está en el despacho, no en el laboratorio).
+**pi-rackmossbauer boots Debian 13 by netboot from `/nfs/pi-trixie`, with Tango
+10, and the Starter launches its device servers.** The only remaining failures
+are from absent hardware (the Pi is in the office, not in the lab).
 
-> Corrección del 17-ago-2026: eso no era del todo cierto. Con el hardware presente,
-> TempSensorDS18B20 y WisselMCA seguían fallando por defectos del propio código
-> (ver sus secciones más abajo). «Falla solo por hardware ausente» era una hipótesis,
-> no una comprobación.
+> Correction of 17-Aug-2026: that was not quite true. With the hardware present,
+> TempSensorDS18B20 and WisselMCA still failed, through defects in their own code
+> (see their sections below). "It only fails because the hardware is absent" was
+> a hypothesis, not a check.
 
-Cadena validada de punta a punta: DHCP → TFTP → NFS → sistema → DNS `.lab` → NTP
-→ Tango DB → Starter → device servers.
+Chain validated end to end: DHCP → TFTP → NFS → system → DNS `.lab` → NTP →
+Tango DB → Starter → device servers.
 
-### Tres problemas resueltos ese día (los tres bloqueaban el arranque de DS)
+### Three problems solved that day (all three blocked DS start-up)
 
-**1. Collations de MariaDB — la causa principal, y la más difícil de ver.**
-La base importada del servidor viejo tenía todas las tablas en
-`utf8mb4_general_ci`, mientras la base en MariaDB 11 (Debian 13) usaba por defecto
-`utf8mb4_uca1400_ai_ci`. Los **procedimientos almacenados** (`ds_start`,
-`import_device`…) comparan parámetros con columnas y fallaban con
-`ERROR 1267: Illegal mix of collations`. Su `EXIT HANDLER` lo convertía en un
-genérico `MySQL Error`, y el Databaseds lo traducía a
-**"The device server X is not defined in database. Exiting!"** — mensaje engañoso
-que costó todo un día de diagnóstico.
+**1. MariaDB collations — the main cause, and the hardest to see.**
+The database imported from the old server had every table in
+`utf8mb4_general_ci`, while the database on MariaDB 11 (Debian 13) defaulted to
+`utf8mb4_uca1400_ai_ci`. The **stored procedures** (`ds_start`,
+`import_device`…) compare parameters against columns and failed with
+`ERROR 1267: Illegal mix of collations`. Their `EXIT HANDLER` turned that into a
+generic `MySQL Error`, and Databaseds translated it into
+**"The device server X is not defined in database. Exiting!"** — a misleading
+message that cost a whole day of diagnosis.
 
-Síntoma característico: las consultas de lectura funcionan (listar instancias,
-`--check-server`, `import_device` desde PyTango), pero **arrancar** cualquier device
-server falla. Falla igual con Tango 9 y con Tango 10, desde cualquier máquina, por
-nombre o por IP. No es problema de versiones ni de red.
+Characteristic symptom: read queries work (listing instances, `--check-server`,
+`import_device` from PyTango), but **starting** any device server fails. It fails
+identically with Tango 9 and Tango 10, from any machine, by name or by IP. It is
+neither a version nor a network problem.
 
-Diagnóstico: llamar al procedimiento a mano revela el fallo enmascarado.
+Diagnosis: calling the procedure by hand reveals the masked failure.
 ```bash
 sudo mysql tango -e "CALL ds_start('Starter/pi-rackmossbauer','pi-rackmossbauer',@res); SELECT @res;"
 # -> MySQL Error
 ```
-Para ver el error real hay que recrear el procedimiento sin su `EXIT HANDLER`.
+To see the real error, the procedure has to be recreated without its `EXIT HANDLER`.
 
-Solución:
+Fix:
 ```bash
 sudo mysql -e "ALTER DATABASE tango CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
-sudo mysql tango < /usr/share/tango-db/stored_proc.sql   # recrear: conservan el collation de creación
+sudo mysql tango < /usr/share/tango-db/stored_proc.sql   # recreate: they keep the collation they were created with
 ```
-⚠️ **Crítico para la reimportación limpia**: si se vuelve a cargar el volcado viejo,
-el problema reaparece. El procedimiento debe incluir siempre el ajuste de collation
-y la recreación de los procedimientos almacenados.
+⚠️ **Critical for the clean reimport**: if the old dump is loaded again, the
+problem comes back. The procedure must always include the collation change and
+the recreation of the stored procedures.
 
-**2. `argv[0]` con ruta absoluta en los device servers Python.**
-Los wrappers que genera `pip install -e` dejan la ruta completa en `sys.argv[0]`
-(`/usr/local/bin/ElmitecLEEM2k`). PyTango 10 usa `argv[0]` como nombre de servidor,
-y en la DB está registrado como `ElmitecLEEM2k` a secas → no casa.
-(El antiguo `setup.py install` usaba `EASY-INSTALL-ENTRY-SCRIPT`, que sí dejaba el
-nombre simple; por eso funcionaba antes.)
+**2. `argv[0]` with an absolute path in the Python device servers.**
+The wrappers `pip install -e` generates leave the full path in `sys.argv[0]`
+(`/usr/local/bin/ElmitecLEEM2k`). PyTango 10 uses `argv[0]` as the server name,
+and the DB has it registered as plain `ElmitecLEEM2k` → no match.
+(The old `setup.py install` used `EASY-INSTALL-ENTRY-SCRIPT`, which did leave
+the bare name; that is why it used to work.)
 
-Solución aplicada a los 41 servidores (31 vivos + inactivos), dentro de la región
-protegida de POGO:
+Fix applied to all 41 servers (31 live plus inactive), inside the POGO protected
+region:
 ```python
 sys.argv[0] = os.path.basename(sys.argv[0])
 ```
-Nota: 40 de 41 ficheros **no importaban ni `os` ni `sys`**; hubo que añadir ambos.
+Note: 40 of the 41 files **imported neither `os` nor `sys`**; both had to be added.
 
-**3. Databaseds publicando `0.0.0.0`.**
-`/etc/tangorc` tenía `TANGO_HOST=0.0.0.0:10000` (arreglo previo para que escuchara
-en todas las interfaces). Sirve para escuchar, pero el IOR publicado lleva
-`0.0.0.0` y los clientes remotos no pueden reconectar → `TRANSIENT_CallTimedout` al
-pedir `sys/database/2`.
+**3. Databaseds publishing `0.0.0.0`.**
+`/etc/tangorc` had `TANGO_HOST=0.0.0.0:10000` (an earlier fix so it would listen
+on every interface). That works for listening, but the published IOR then carries
+`0.0.0.0` and remote clients cannot reconnect → `TRANSIENT_CallTimedout` when
+asking for `sys/database/2`.
 
-Solución — drop-in `/etc/systemd/system/tango-db.service.d/endpoint.conf`:
+Fix — drop-in `/etc/systemd/system/tango-db.service.d/endpoint.conf`:
 ```
 [Service]
 ExecStart=
 ExecStart=/usr/lib/tango/Databaseds 2 -ORBendPoint giop:tcp:0.0.0.0:10000 -ORBendPointPublish giop:tcp:10.43.88.3:10000
 ```
 
-### Otros ajustes de la raíz Trixie (afectan a todas las Pis, es compartida)
+### Other adjustments to the Trixie root (they affect every Pi, it is shared)
 
-- **Firmware de arranque**: la copia inicial solo trajo la partición p2, sin
-  `/boot/firmware`. Se obtuvo con `apt install --reinstall raspi-firmware
-  linux-image-rpi-v8` dentro del chroot, y se copió a `/tftpboot/<serial>/`.
-  (`mkinitramfs` falla en chroot y en raíz NFS — es esperable y **no hace falta**:
-  con `root=/dev/nfs` + `ip=dhcp` el kernel monta la raíz sin initrd.)
-- **`config.txt`** necesita `arm_64bit=1` (la raíz es arm64, las Pi son 3B+).
-  Conservar `dtoverlay=w1-gpio,gpiopin=4` (TempSensorDS18B20). Verificado que el bus
-  1-Wire se activa en Trixie (`/sys/bus/w1/devices/` existe).
-- **`/etc/resolv.conf`** venía copiado del chroot con los DNS de la red vieja.
-  Corregido a `nameserver 10.43.88.3` + `domain lab`.
-- **`/etc/systemd/timesyncd.conf`** → `NTP=tangodb.lab`. timesyncd **ignora** la
-  opción NTP del DHCP, hay que ponerlo explícito.
-- **Usuario**: la imagen RaspiOS trae `pi` con `/usr/sbin/nologin` y `!` en shadow;
-  se completa con el asistente de primer arranque (o a mano desde wolframite).
-- **`tango-starter`** no venía instalado; su unidad systemd tiene
-  `Requires=tango-db.service`, que no existe en la Pi. Hay que copiar la unidad a
-  `/etc/systemd/system/` y borrar esa línea (un drop-in con `Requires=` vacío **no**
-  la anula).
-- ⚠️ El `ExecStartPre=tango-starter-register-helper` **crea registros automáticamente**
-  en la DB tomando el nombre de `TANGO_HOST` (creó un espurio `Starter/tangodb.lab`).
-  Vigilar en cada Pi nueva.
+- **Boot firmware**: the initial copy brought only partition p2, without
+  `/boot/firmware`. It was obtained with `apt install --reinstall raspi-firmware
+  linux-image-rpi-v8` inside the chroot, and copied to `/tftpboot/<serial>/`.
+  (`mkinitramfs` fails in a chroot and on an NFS root — that is expected and
+  **not needed**: with `root=/dev/nfs` + `ip=dhcp` the kernel mounts the root
+  without an initrd.)
+- **`config.txt`** needs `arm_64bit=1` (the root is arm64, the Pis are 3B+).
+  Keep `dtoverlay=w1-gpio,gpiopin=4` (TempSensorDS18B20). Verified that the
+  1-Wire bus comes up on Trixie (`/sys/bus/w1/devices/` exists).
+- **`/etc/resolv.conf`** had been copied from the chroot with the old network's
+  DNS. Corrected to `nameserver 10.43.88.3` + `domain lab`.
+- **`/etc/systemd/timesyncd.conf`** → `NTP=tangodb.lab`. timesyncd **ignores**
+  the DHCP NTP option; it has to be set explicitly.
+- **User**: the RaspiOS image ships `pi` with `/usr/sbin/nologin` and `!` in
+  shadow; complete it with the first-boot wizard (or by hand from wolframite).
+- **`tango-starter`** was not installed; its systemd unit has
+  `Requires=tango-db.service`, which does not exist on the Pi. The unit has to be
+  copied to `/etc/systemd/system/` and that line deleted (a drop-in with an empty
+  `Requires=` does **not** cancel it).
+- ⚠️ `ExecStartPre=tango-starter-register-helper` **creates records automatically**
+  in the DB, taking the name from `TANGO_HOST` (it created a spurious
+  `Starter/tangodb.lab`). Watch for it on every new Pi.
 
-### Pendiente en esta Pi
+### Pending on this Pi
 
-- Devolverla al laboratorio y validar LeyboldIG3 (puerto serie) y TempSensorDS18B20
-  (sensor 1-Wire). Ambos fallan ahora solo por hardware ausente.
-- **WisselMCA/1** ✅ reactivado (13-ago-2026) y **probado contra el MCA real**
-  (17-ago-2026): protocolo HID verificado, cuatro defectos corregidos. Falta
-  arrancarlo bajo el Starter con el código corregido (ver
-  _Dependencias de WisselMCA_ más abajo).
-- **TempSensorDS18B20/1** ya no falla por hardware ausente: el sensor
-  `28-3cd5f649fc87` responde. Moría al arrancar por un defecto del servidor,
-  corregido el 17-ago-2026 (ver _TempSensorDS18B20_ más abajo).
-- La ruta serie de LeyboldIG3 (`/dev/serial/by-path/platform-3f980000.usb-...`)
-  codifica el puerto USB físico: si se cambia de conector, hay que actualizar la
-  propiedad.
+- Return it to the lab and validate LeyboldIG3 (serial port) and
+  TempSensorDS18B20 (1-Wire sensor). Both now fail only through absent hardware.
+- **WisselMCA/1** ✅ reactivated (13-Aug-2026) and **tested against the real MCA**
+  (17-Aug-2026): HID protocol verified, four defects corrected. Still to do:
+  start it under the Starter with the corrected code (see
+  _WisselMCA dependencies_ below).
+- **TempSensorDS18B20/1** no longer fails through absent hardware: the sensor
+  `28-3cd5f649fc87` answers. It died at start-up through a defect in the server,
+  corrected on 17-Aug-2026 (see _TempSensorDS18B20_ below).
+- LeyboldIG3's serial path (`/dev/serial/by-path/platform-3f980000.usb-...`)
+  encodes the physical USB port: if it is moved to another connector, the
+  property has to be updated.
 
-### Inventario de asignaciones recuperado
+### Recovered assignment inventory
 
-`~/tango-server-assignments.txt` en wolframite contiene la salida de
-`SELECT name, host, level FROM server ORDER BY host, level` — 64 filas con qué
-servidor corre en qué máquina y con qué nivel de arranque. Es la fuente para
-rellenar los "TBD" de la sección _Host → server assignments_ más abajo.
+`~/tango-server-assignments.txt` on wolframite holds the output of
+`SELECT name, host, level FROM server ORDER BY host, level` — 64 rows of which
+server runs on which machine and at which start level. It is the source for
+filling in the "TBD"s of the _Host → server assignments_ section below.
 
-Ojo: los hosts figuran con el dominio viejo `.labo` (`pi-leem.labo`,
-`sputtering.labo`…). La red nueva usa `.lab`.
+Careful: the hosts appear with the old domain `.labo` (`pi-leem.labo`,
+`sputtering.labo`…). The new network uses `.lab`.
 
-### Servidores de pi-rackmossbauer (confirmado desde la DB)
+### pi-rackmossbauer's servers (confirmed from the DB)
 
 `LeyboldIG3/1`, `TempSensorDS18B20/1`, `WisselMCA/1`.
 
 ---
 
-## Status del chroot (30-jun-2026)
+## Chroot status (30-Jun-2026)
 
 **Trixie root device-server install: COMPLETE and verified (30-jun-2026).**
 On `/nfs/pi-trixie` (ARM64 chroot on wolframite):
@@ -288,67 +289,68 @@ Repo restructure committed and pushed (Mac reference → GitHub → chroot pull)
 
 ---
 
-## ⛔ No ejecutar *Generate* de POGO sobre un servidor existente (20-ago-2026)
+## ⛔ Do not run POGO's *Generate* on an existing server (20-Aug-2026)
 
-**POGO 9.10.6 no puede regenerar estos servidores.** Probado sobre
-SEAWaterflowmeter: el fichero que produjo **ni siquiera compila**. Tres tipos de
-daño, independientes entre sí:
+**POGO 9.10.6 cannot regenerate these servers.** Tried on SEAWaterflowmeter: the
+file it produced **does not even compile**. Three kinds of damage, independent of
+one another:
 
-1. **SyntaxError — `label` repetido.** En cada atributo emite el `label` dos
-   veces, uno del nombre y otro del bloque `<properties>` del modelo:
+1. **SyntaxError — repeated `label`.** For every attribute it emits `label`
+   twice, once from the name and once from the model's `<properties>` block:
    ```python
    @attribute(label='channel0', dtype='DevDouble', label="channel0", ...)
    #                                               ^^^^^ keyword repetido
    ```
    `SyntaxError: keyword argument repeated: label`.
 
-2. **NameError — moderniza la cabecera pero no las regiones.** Cambia
-   `import PyTango` por `import tango`, y las regiones protegidas las copia
-   literalmente, con sus `PyTango.DevState`, `PyTango.Except.throw_exception` y
-   `PyTango.AttrQuality.ATTR_INVALID` dentro. Ocho referencias a un nombre que ya
-   no está enlazado. **40 ficheros del repositorio** tienen ese patrón.
+2. **NameError — it modernises the header but not the regions.** It changes
+   `import PyTango` to `import tango`, and copies the protected regions
+   literally, with their `PyTango.DevState`, `PyTango.Except.throw_exception` and
+   `PyTango.AttrQuality.ATTR_INVALID` still inside. Eight references to a name
+   that is no longer bound. **40 files in the repository** have that pattern.
 
-3. **Cambios silenciosos de comportamiento.** Aparece `polling_period=3000` en
-   los atributos, salido del `polledPeriod` que llevaba años en el modelo sin
-   efecto — el servidor se pone a sondear solo. Añade andamiaje que no encaja con
-   la implementación (`self._channel0 = 0.0` frente al `self.channeldata` real),
-   renombra los métodos de lectura, crea un `__main__.py`, y **borra los
-   comentarios que estén fuera de las regiones protegidas**.
+3. **Silent changes of behaviour.** `polling_period=3000` appears on the
+   attributes, out of the `polledPeriod` that had sat in the model for years with
+   no effect — the server starts polling on its own. It adds scaffolding that
+   does not match the implementation (`self._channel0 = 0.0` against the real
+   `self.channeldata`), renames the read methods, creates a `__main__.py`, and
+   **deletes any comments outside the protected regions**.
 
-Además, al abrir un modelo le quita los `<states>` declarados. De los 107 del
-repositorio, 96 tienen descripción vacía y no se pierde nada; los **11 con
-descripción real** están en CryoCon32, ElmitecUview, NetworkUPSTool y
-VarianTV301nav, y ahí sí cuesta algo (`STANDBY = running on battery power`).
+On top of that, opening a model strips the `<states>` it declares. Of the 107 in
+the repository, 96 have an empty description and nothing is lost; the **11 with a
+real description** are in CryoCon32, ElmitecUview, NetworkUPSTool and
+VarianTV301nav, and there it does cost something
+(`STANDBY = running on battery power`).
 
-### Lo que sí funcionó
+### What did work
 
-**Las regiones protegidas se conservan íntegras**, incluidos métodos auxiliares
-puestos en `class_variable`. Lo que no encaja es todo lo que POGO genera
-alrededor. Y POGO **sigue sirviendo para crear servidores nuevos desde cero**: el
-MFC generado limpio salió correcto.
+**The protected regions survive intact**, including helper methods put in
+`class_variable`. What does not fit is everything POGO generates around them. And
+POGO **is still good for creating new servers from scratch**: the MFC generated
+clean came out correct.
 
-### La decisión (opción A′)
+### The decision (option A′)
 
-El `.xmi` es **documentación del interfaz**: vale para Jive, para documentar y
-para revisar qué expone un servidor. **No** para generar. Se mantiene
-sincronizado a mano — está comprobado que POGO acepta sin protestar un `.xmi`
-editado a mano, incluso con bloques `<attributes>` añadidos enteros — y POGO se
-usa solo para leer el modelo.
+The `.xmi` is **documentation of the interface**: good for Jive, for documenting,
+and for reviewing what a server exposes. **Not** for generating. It is kept in
+step by hand — POGO has been confirmed to accept a hand-edited `.xmi` without
+complaint, even with whole `<attributes>` blocks added — and POGO is used only to
+read the model.
 
-La red de seguridad es **`tools/check_xmi.py`**, que compara modelo y código en
-los 44 servidores y falla si divergen. Conviene pasarlo antes de commitear un
-cambio de interfaz:
+The safety net is **`tools/check_xmi.py`**, which compares model against code
+across all 44 servers and fails if they diverge. Worth running before committing
+an interface change:
 
 ```bash
-python3 tools/check_xmi.py            # 0 si todo cuadra, 1 si hay divergencias
+python3 tools/check_xmi.py            # 0 if everything matches, 1 if there are divergences
 ```
 
-Estado al escribir esto: 41 en sincronía, 0 divergencias, 2 sin modelo
-(AnalogInterlock y GammaVacuumSPCe) y 1 no comparable (PIDController, plantilla
-antigua con `DeviceClass`).
+State at the time of writing: 41 in sync, 0 divergences, 2 with no model
+(AnalogInterlock and GammaVacuumSPCe) and 1 not comparable (PIDController, an old
+template using `DeviceClass`).
 
-⚠️ Y si alguna vez se ejecuta *Generate* por error, el destrozo se ve enseguida:
-`python3 -m compileall` falla, porque el fichero no compila.
+⚠️ And if *Generate* is ever run by mistake, the wreckage shows up at once:
+`python3 -m compileall` fails, because the file does not compile.
 
 ---
 
@@ -377,10 +379,10 @@ Tally: **32 live · 7 inactive · 4 deprecated** (= 43 entry-point servers).
 _RaspberryButton_old and PANIC used to be counted here as special cases; neither
 is in the repository any more. See the note below._
 
-_(Era 31 · 9 hasta el 13-ago-2026, cuando WisselMCA y GammaVacuumSPCe pasaron de
-inactivos a vivos, y 33 · 7 · 3 hasta el 18-ago-2026, cuando Motor pasó a
-deprecated. El recuento del chroot de arriba, con fecha 30-jun-2026, es anterior a
-ambos cambios: al reinstalar deben salir 32 wrappers, no 31.)_
+_(It was 31 · 9 until 13-Aug-2026, when WisselMCA and GammaVacuumSPCe went from
+inactive to live, and 33 · 7 · 3 until 18-Aug-2026, when Motor went to
+deprecated. The chroot tally above, dated 30-Jun-2026, predates both changes:
+a reinstall should produce 32 wrappers, not 31.)_
 
 ---
 
@@ -407,8 +409,8 @@ Move to `inactive/`. Code present but hardware idle or work remains. Not in
 GammaIonPump, Keithley2100, MCC1208LS, PfeifferDCU002,
 V4L2Camera, VSMControlDevice, WebCam.
 
-_(WisselMCA y GammaVacuumSPCe salieron de esta lista el 13-ago-2026 —
-reactivados, ver más abajo.)_
+_(WisselMCA and GammaVacuumSPCe left this list on 13-Aug-2026 — reactivated,
+see below.)_
 
 ### DEPRECATED — dead hardware, remove from install set permanently (4)
 
@@ -417,27 +419,28 @@ Move to `deprecated/`. **Death by omission**: never entered in the new DB. See
 
 MitutoyoPostable, **Motor**, SpecsXRC1000, VarianMultiGauge.
 
-_(Motor entró aquí el 18-ago-2026, sustituido por un Arduino con un DRV8825; su
-reemplazo es `ArduinoMotor`. Comprobado el 23-ago-2026 que no queda en la BD ni
-como servidor, ni como clase, ni con dispositivos.)_
+_(Motor came here on 18-Aug-2026, replaced by an Arduino with a DRV8825; its
+replacement is `ArduinoMotor`. Checked on 23-Aug-2026 that nothing of it is left
+in the DB — not as a server, not as a class, and with no devices.)_
 
 ### Special cases
 
-- **RaspberryButton_old** — ✅ ya no existe. Era un duplicado muerto de
-  RaspberryButton que forzaba la deduplicación del TOML. Comprobado el
-  23-ago-2026: no está en la raíz, ni en `inactive/`, ni en `deprecated/`.
-- **PANIC (PyAlarm)** — ✅ retirado del árbol el 21-ago-2026. Sistema de alarmas de
-  ALBA, código de terceros, Python 2 + Qt5, sin port previsto. Nunca tuvo entry
-  point aquí. Lo que vigilaba está en
-  [`alarmas-panic-legado.md`](alarmas-panic-legado.md), recuperado de la BD de la
-  red vieja; el código, en la etiqueta `panic-final` y en
+- **RaspberryButton_old** — ✅ no longer exists. It was a dead duplicate of
+  RaspberryButton that forced the TOML deduplication. Checked on 23-Aug-2026: it
+  is not at the root, nor in `inactive/`, nor in `deprecated/`.
+- **PANIC (PyAlarm)** — ✅ removed from the tree on 21-Aug-2026. ALBA's alarm
+  system, third-party code, Python 2 + Qt5, with no port planned. It never had an
+  entry point here. What it watched over is in
+  [`alarmas-panic-legado.md`](alarmas-panic-legado.md), recovered from the old
+  network's DB; the code is at the `panic-final` tag and at
   https://github.com/ALBA-Synchrotron/panic
 
-- **AnalogInterlock** — ⏳ está en el árbol pero **deliberadamente fuera** de
-  `[project.scripts]` y de `packages`, así que no se instala. Por eso hay **33
-  directorios de servidor y 32 instalables**, y no es un error: espera a que
-  pi-xps pase a netboot, porque hoy arranca de su microSD y no comparte software
-  con la raíz compartida. Ver `AnalogInterlock/README.md`.
+- **AnalogInterlock** — ⏳ it is in the tree but **deliberately outside**
+  `[project.scripts]` and `packages`, so it is not installed. That is why there
+  are **33 server directories and 32 installable ones**, and it is not a mistake:
+  it is waiting for pi-xps to move to netboot, because today it boots from its
+  microSD and does not share software with the shared root. See
+  `AnalogInterlock/README.md`.
 
 ---
 
@@ -455,7 +458,7 @@ NOT pull PyPI versions over the system packages.
 |---|---|---|
 | python3-tango | pytango | ALL (already installed, 10.0.2-1) |
 | python3-serial | pyserial | most serial-instrument servers |
-| python3-rpi-lgpio | RPi.GPIO (shim) | RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, WaterSwitch — ver _GPIO en Trixie_ |
+| python3-rpi-lgpio | RPi.GPIO (shim) | RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, WaterSwitch — see _GPIO on Trixie_ |
 | python3-nut | PyNUT | NetworkUPSTool |
 
 ```bash
@@ -483,8 +486,8 @@ pip install --break-system-packages simple-pid w1thermsensor
   import was removed. No live server imports numpy (grep-verified). Re-add
   `python3-numpy` if/when ElmitecUview's ImageData attribute is implemented.
 - **matplotlib** — ElmitecUview corrected to need neither numpy nor matplotlib; the
-  other user (VSMControlDevice) is inactive. ⚠️ El «no live server imports numpy»
-  de arriba dejó de ser cierto al reactivar WisselMCA, que sí lo usa.
+  other user (VSMControlDevice) is inactive. ⚠️ The "no live server imports numpy"
+  above stopped being true when WisselMCA was reactivated, as it does use it.
 - **opencv / python3-opencv** — only V4L2Camera (inactive).
 - **usb_1208LS / Linux_Drivers source build** — only MCC1208LS (inactive). The
   single nastiest install, gone.
@@ -494,17 +497,18 @@ dependency set has been eliminated by omission.
 
 ### Verify on real hardware (cannot be tested in the x86 chroot)
 
-- **GPIO library**: ✅ resuelto el 18-ago-2026 — RPi.GPIO **no sirve** en Trixie, hay
-  que usar `python3-rpi-lgpio`, y hacen falta dos apaños más. Ver _GPIO en Trixie_ más
-  abajo, que ya recoge la verificación en hardware de `SEAWaterflowmeter/4` (pi-vsm) y
-  `RaspberrySwitch/2` (pi-leem). `RaspberryButton` solo corre en pi-xps, que sigue con
-  microSD, así que no le toca todavía; `WaterSwitch` no está dado de alta en ninguna
-  parte. TempSensorDS18B20 salió de esta lista el 17-ago-2026 (el pin lo lleva el
-  overlay w1-gpio del kernel) y Motor el 18-ago-2026 (a `deprecated/`).
+- **GPIO library**: ✅ resolved on 18-Aug-2026 — RPi.GPIO **does not work** on
+  Trixie, `python3-rpi-lgpio` has to be used, and two further workarounds are
+  needed. See _GPIO on Trixie_ below, which already records the hardware
+  verification of `SEAWaterflowmeter/4` (pi-vsm) and `RaspberrySwitch/2`
+  (pi-leem). `RaspberryButton` runs only on pi-xps, which is still on microSD, so
+  its turn has not come; `WaterSwitch` is not registered anywhere.
+  TempSensorDS18B20 left this list on 17-Aug-2026 (its pin is handled by the
+  kernel's w1-gpio overlay) and Motor on 18-Aug-2026 (to `deprecated/`).
 - **w1thermsensor**: the kernel one-wire modules + overlay must be enabled on the
-  Pi, independent of the pip package. ✅ Verificado el 17-ago-2026 en
-  pi-rackmossbauer: `w1_gpio`/`w1_therm` cargados y el sensor enumera, aunque el bus
-  va ruidoso (ver _TempSensorDS18B20_).
+  Pi, independent of the pip package. ✅ Verified on 17-Aug-2026 on
+  pi-rackmossbauer: `w1_gpio`/`w1_therm` loaded and the sensor enumerates, though
+  the bus is noisy (see _TempSensorDS18B20_).
 
 ---
 
@@ -520,39 +524,41 @@ FUGMCP/1·2·3, NetworkUPSTool/1, PIDController/1·2·3, RaspberrySwitch/2.
 
 Removed at clean import: **VarianMultiGauge/1** (deprecated — was red in Astor).
 
-### pi-rackmossbauer (.11) — CONFIRMADO desde la DB (08-ago-2026)
+### pi-rackmossbauer (.11) — CONFIRMED from the DB (08-Aug-2026)
 
 `LeyboldIG3/1`, `TempSensorDS18B20/1`, `WisselMCA/1`.
 
-WisselMCA ✅ reactivado (13-ago-2026) y probado contra el MCA real (17-ago-2026):
-ya está en la raíz del repositorio y en el `pyproject.toml`, así que se instala y el
-Starter lo encontrará en `StartDsPath`. Pendiente: arrancarlo bajo el Starter con el
-código corregido (ver _Dependencias de WisselMCA_ más abajo).
+WisselMCA ✅ reactivated (13-Aug-2026) and tested against the real MCA
+(17-Aug-2026): it is now at the repository root and in `pyproject.toml`, so it
+installs and the Starter will find it in `StartDsPath`. Pending: start it under
+the Starter with the corrected code (see _WisselMCA dependencies_ below).
 
-Ya migrada a `/nfs/pi-trixie` (Debian 13). Los otros dos servidores arrancan y
-fallan solo por hardware ausente.
+Already migrated to `/nfs/pi-trixie` (Debian 13). The other two servers start and
+fail only through absent hardware.
 
-### pi-vsm (.12) — CONFIRMADO desde el Starter (18-ago-2026)
+### pi-vsm (.12) — CONFIRMED from the Starter (18-Aug-2026)
 
 `AGPolaritySwitch/1`, `Itech6000C/1`, `SEAWaterflowmeter/4`, `SRIlockin830/1`,
 `Tti604/1`. Todos ON el 18-ago-2026.
 
-Ya migrada a netboot desde `/nfs/pi-trixie`. VSMControlDevice sigue en `inactive/` y
-**no** está dado de alta aquí; confirmar si hace falta antes de revivirlo.
+Already migrated to netboot from `/nfs/pi-trixie`. VSMControlDevice is still in
+`inactive/` and is **not** registered here; confirm whether it is needed before
+reviving it.
 
-⚠️ **`pi-vsm.lab` no tiene registro en el DNS del laboratorio** (18-ago-2026), y es el
-único que falta: `pi-leem`, `pi-xps`, `pi-uleem`, `pi-mossbauer`, `sputtering` y
-`tangodb` sí resuelven. Hay que entrar por IP (`10.43.88.12`), y es la causa del
-`sudo: unable to resolve host` de esa Pi.
+⚠️ **`pi-vsm.lab` has no record in the lab DNS** (18-Aug-2026), and it is the only
+one missing: `pi-leem`, `pi-xps`, `pi-uleem`, `pi-mossbauer`, `sputtering` and
+`tangodb` do resolve. It has to be reached by IP (`10.43.88.12`), and that is the
+cause of that Pi's `sudo: unable to resolve host`.
 
-### Other Pis (pi-xps, pi-mossbauer, pi-hvleem, ender, …) — parcialmente conocido
+### Other Pis (pi-xps, pi-mossbauer, pi-hvleem, ender, …) — partially known
 
-De la BD, servidores de GPIO (18-ago-2026): pi-xps corre `RaspberryButton/1` y
-`SEAWaterflowmeter/3`; pi-uleem, `RaspberrySwitch/1` y `SEAWaterflowmeter/1`;
-pi-mossbauer, `SEAWaterflowmeter/2`; sputtering, `ArduinoMotor/1`. **Las tres primeras
-siguen arrancando de microSD**, no de netboot — ver _Netboot frente a microSD_.
+From the DB, GPIO servers (18-Aug-2026): pi-xps runs `RaspberryButton/1` and
+`SEAWaterflowmeter/3`; pi-uleem, `RaspberrySwitch/1` and `SEAWaterflowmeter/1`;
+pi-mossbauer, `SEAWaterflowmeter/2`; sputtering, `ArduinoMotor/1`. **The first
+three were still booting from microSD** rather than netboot — see _Netboot versus
+microSD_. (Out of date: see the update below.)
 
-_Completar por host desde Astor a medida que se migren._
+_Fill in per host from Astor as they are migrated._
 
 #### Update (26-Aug-2026): read from the DB, not from Astor
 
@@ -580,206 +586,210 @@ Pi left on microSD.** See `docs/netboot-shared-root.md`.
 
 ---
 
-## ✅ IPs hardcodeadas en los device servers — RESUELTO
+## ✅ Hardcoded IPs in the device servers — RESOLVED
 
-Tres DS se conectaban a su instrumento **por red** con la dirección IP escrita en
-el propio código, no en una propiedad de Tango: **Itech6000C, ElmitecUview y
-ElmitecLEEM2k**.
+Three DS connected to their instrument **over the network** with the IP address
+written into the code itself, not into a Tango property: **Itech6000C,
+ElmitecUview and ElmitecLEEM2k**.
 
-Eso bloqueaba la migración: las IPs eran de la red vieja (`10.10.99.x`), así que en
-cuanto el instrumento cambiaba de VLAN el DS dejaba de encontrarlo.
+That blocked the migration: the IPs belonged to the old network (`10.10.99.x`),
+so as soon as the instrument changed VLAN the DS stopped finding it.
 
-**Actualizadas en la Fase 2** (los tres instrumentos están en el LEEM / VSM).
+**Updated in Phase 2** (all three instruments are on the LEEM / VSM).
 
-**Externalizadas a propiedades de device el 13-ago-2026** (commits `2d749c8` y
-`eba613b`). Los tres DS ya declaraban las propiedades y tenían la línea correcta
-escrita justo encima de la literal, comentada — es decir, lo que hubiera en la
-base de datos se estaba ignorando. Ahora manda la BD:
+**Externalised into device properties on 13-Aug-2026** (commits `2d749c8` and
+`eba613b`). All three DS already declared the properties and had the correct line
+written just above the literal, commented out — that is, whatever was in the
+database was being ignored. Now the DB is what counts:
 
-**Nombres unificados el 13-ago-2026**: los cuatro DS de red usan ahora `IP` y
-`Port`. ElmitecUview los tenía como `UviewIP` / `UviewPort` y GammaVacuumSPCe
-llamaba `Host` al suyo.
+**Names unified on 13-Aug-2026**: the four networked DS now use `IP` and `Port`.
+ElmitecUview had them as `UviewIP` / `UviewPort`, and GammaVacuumSPCe called its
+own `Host`.
 
-| DS | propiedad | valor por defecto | `Port` |
+| DS | property | default value | `Port` |
 |---|---|---|---|
 | ElmitecLEEM2k | `IP` | `tvips.lab` | 5566 |
 | ElmitecUview | `IP` | `tvips.lab` | 5570 |
 | Itech6000C | `IP` | `PWSItech6000VSM.lab` | 30000 |
-| GammaVacuumSPCe | `IP` | **sin default — hay que ponerlo en la BD** | 23 |
+| GammaVacuumSPCe | `IP` | **no default — it has to be set in the DB** | 23 |
 
-`tvips` es el ordenador del LEEM, que controla también la cámara TVIPS XFS216.
+`tvips` is the LEEM computer, which also controls the TVIPS XFS216 camera.
 
-⚠️ El renombrado tiene un efecto en la base de datos: un valor guardado bajo
-`UviewIP`, `UviewPort` o `Host` queda huérfano y el DS no lo verá. Si algún
-dispositivo los tenía puestos, hay que reescribirlos con el nombre nuevo.
+⚠️ The rename has an effect on the database: a value stored under `UviewIP`,
+`UviewPort` or `Host` is left orphaned and the DS will not see it. If any device
+had them set, they have to be rewritten under the new name.
 
-Los defaults se pusieron a la dirección real, así que una propiedad sin poner en
-la BD da el comportamiento correcto. ⚠️ Al revés sí hay riesgo: si un dispositivo
-tiene ya `IP` o `UviewIP` escrita en la base de datos con un valor obsoleto, ahora
-manda esa y el DS fallará al reiniciar. Comprobar en Jive antes del arranque.
+The defaults were set to the real address, so a property left unset in the DB
+gives the correct behaviour. ⚠️ The other way round there is a risk: if a device
+already has `IP` or `UviewIP` written in the database with a stale value, that is
+now what counts and the DS will fail on restart. Check in Jive before starting.
 
-Tres detalles que salieron al hacerlo:
+Three details that came out of doing this:
 
-- **ElmitecUview tenía tres direcciones distintas apuntadas**: `leem.labo` en el
-  código, `leemPC.labo` como default del `.py` y `10.10.99.29` en el `.xmi`.
-  Unificadas.
-- **ElmitecLEEM2k no tenía default ninguno.** Con la propiedad sin poner,
-  `self.IP` habría salido cadena vacía y el `connect()` habría fallado en
-  silencio — el `except` desnudo se lo traga y deja el DS en FAULT.
-- No hay más DS de red: el resto es serie, USB o GPIB. El
-  `grep -rn '10\.10\.99'` sobre los device servers ya da vacío.
+- **ElmitecUview had three different addresses noted**: `leem.labo` in the code,
+  `leemPC.labo` as the `.py` default and `10.10.99.29` in the `.xmi`. Unified.
+- **ElmitecLEEM2k had no default at all.** With the property unset, `self.IP`
+  would have come out as an empty string and `connect()` would have failed
+  silently — the bare `except` swallows it and leaves the DS in FAULT.
+- There are no further networked DS: the rest are serial, USB or GPIB.
+  `grep -rn '10\.10\.99'` over the device servers now comes back empty.
 
-Nota: los DS de puerto serie tienen un problema análogo pero distinto — la ruta
-`/dev/serial/by-path/...` codifica el conector USB físico. No cambia con la red,
-pero sí si se enchufa el conversor en otro puerto de la Pi.
+Note: the serial-port DS have an analogous but different problem — the
+`/dev/serial/by-path/...` path encodes the physical USB connector. It does not
+change with the network, but it does if the converter is plugged into another
+port on the Pi.
 
 ---
 
-## Dependencias de WisselMCA (reactivado 13-ago-2026)
+## WisselMCA dependencies (reactivated 13-Aug-2026)
 
-El servidor volvió a la raíz del repositorio y es la **32ª entrada** del
-`pyproject.toml` (`[project.scripts]`, `[tool.setuptools.packages]` y
-`[tool.setuptools.package-dir]`). El arreglo de `argv[0]` ya lo tenía, porque la
-pasada de los 41 servidores cubrió también los inactivos.
+The server came back to the repository root and is the **32nd entry** of
+`pyproject.toml` (`[project.scripts]`, `[tool.setuptools.packages]` and
+`[tool.setuptools.package-dir]`). It already had the `argv[0]` fix, because the
+pass over the 41 servers covered the inactive ones too.
 
-Necesita **numpy** y un binding HID. Y ahí está la trampa: el código llama a
+It needs **numpy** and an HID binding. And there is the trap: the code calls
 
 ```python
-dev = hid.device()          # minúscula
+dev = hid.device()          # lower case
 ```
 
-Esa API es la de **cython-hidapi**, que en PyPI se publica como **`hidapi`**. El
-paquete de PyPI llamado literalmente `hid` es otro proyecto distinto: expone
-`hid.Device()` con mayúscula y daría `AttributeError` al abrir el aparato. Los dos
-ocupan el mismo nombre de módulo al importar, así que el error solo se ve en
-ejecución, no al instalar.
+That API is **cython-hidapi**'s, which PyPI publishes as **`hidapi`**. The PyPI
+package literally named `hid` is a different project: it exposes `hid.Device()`
+with a capital, and would raise `AttributeError` on opening the device. Both
+occupy the same module name on import, so the error only shows at run time, not
+at install time.
 
-En la raíz Trixie:
+On the Trixie root:
 
 ```bash
 apt install python3-numpy libhidapi-hidraw0
-apt install python3-hid        # comprobar cuál es, ver abajo
+apt install python3-hid        # check which one it is, see below
 ```
 
-Comprobación que zanja la duda:
+The check that settles it:
 
 ```bash
 python3 -c "import hid; print(hid.__file__, hasattr(hid,'device'), hasattr(hid,'Device'))"
 ```
 
-Tiene que salir `device=True`. Si sale `Device=True`, es el paquete equivocado y
-hay que usar `pip install hidapi --break-system-packages`.
+It has to come out `device=True`. If it comes out `Device=True`, it is the wrong
+package and `pip install hidapi --break-system-packages` is needed.
 
-`libhidapi-hidraw0` es la biblioteca C que el binding carga en ejecución; sin ella
-el `import` falla aunque el paquete Python esté instalado.
+`libhidapi-hidraw0` is the C library the binding loads at run time; without it
+the `import` fails even with the Python package installed.
 
-⚠️ Esto rompe el «net pip footprint: two pure-Python packages» de la sección de
-dependencias: cython-hidapi es una extensión compilada. En ARM64 hay rueda o se
-compila contra `libhidapi-dev`, por eso conviene el paquete de apt si sirve.
+⚠️ This breaks the "net pip footprint: two pure-Python packages" of the
+dependency section: cython-hidapi is a compiled extension. On ARM64 there is
+either a wheel or a build against `libhidapi-dev`, which is why the apt package
+is preferable if it works.
 
-**Permisos: hacen falta DOS reglas udev, no una.** El DS abre el aparato por
-VID/PID `0x0925:0x0035`. Con `hidraw` sola no basta:
+**Permissions: TWO udev rules are needed, not one.** The DS opens the device by
+VID/PID `0x0925:0x0035`. `hidraw` alone is not enough:
 
 ```
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0925", ATTRS{idProduct}=="0035", MODE="0660", GROUP="plugdev"
 SUBSYSTEM=="usb",    ATTR{idVendor}=="0925",  ATTR{idProduct}=="0035",  MODE="0660", GROUP="plugdev"
 ```
 
-Ojo a la diferencia `ATTRS` (atributos del padre, para hidraw) frente a `ATTR`
-(atributos propios, para usb). El binding instalado usa el **backend libusb**, que
-accede por `/dev/bus/usb/BBB/DDD` (`crw-rw-r-- root root`) y **desconecta el driver
-hidraw del kernel al abrir**, con lo que el nodo `/dev/hidraw*` desaparece. Sin la
-segunda regla el `open()` sigue dando `OSError: open failed` aunque la primera esté
-puesta y el usuario esté en `plugdev`. Diagnosticado así en pi-rackmossbauer el
-17-ago-2026.
+Mind the difference between `ATTRS` (the parent's attributes, for hidraw) and
+`ATTR` (the device's own, for usb). The installed binding uses the **libusb
+backend**, which goes through `/dev/bus/usb/BBB/DDD` (`crw-rw-r-- root root`) and
+**detaches the kernel's hidraw driver on open**, so the `/dev/hidraw*` node
+disappears. Without the second rule, `open()` still gives `OSError: open failed`
+even with the first one in place and the user in `plugdev`. Diagnosed this way on
+pi-rackmossbauer on 17-Aug-2026.
 
-El usuario que corre el DS (`tango`) tiene que estar en `plugdev`. Los grupos se
-heredan al crear el proceso, así que **hay que reiniciar el Starter**, no solo el
-device server, tras un `usermod -aG`.
+The user running the DS (`tango`) has to be in `plugdev`. Groups are inherited
+when the process is created, so **the Starter has to be restarted**, not just the
+device server, after a `usermod -aG`.
 
-### Probado contra el MCA real (17-ago-2026)
+### Tested against the real MCA (17-Aug-2026)
 
-Ya no está sin probar: el protocolo se ha ejercitado contra la tarjeta (número de
-serie `2007 61 122`). Tres defectos encontrados y corregidos, todos ellos invisibles
-en un chroot:
+It is no longer untested: the protocol has been exercised against the card
+(serial number `2007 61 122`). Three defects found and corrected, all of them
+invisible in a chroot:
 
-1. **Reensamblado de reports HID.** `readpage` pedía `dev.read(131)`, pero el manual
-   (`WisselMCA/CMCA 550_Newprotokoll Remotr Control.pdf`, página 1) dice
-   "HID-Device, 64 bytes package". hidapi devolvía solo el primer report — 62 bytes
-   útiles de 128 — y dejaba los otros dos **encolados**, con lo que cada comando
-   posterior leía las sobras del anterior y respondía "wrong count". `read_response()`
-   acumula reports hasta completar la respuesta y `drain()`, llamado en `open()`,
-   descarta lo que dejara una sesión desincronizada previa.
-2. **Errores enmascarados.** Doce sitios hacían `(t, r) = self.c.X()` e ignoraban el
-   flag. Al fallar, `r` era la cadena de error; `r[2] * 10000` es repetición de
-   cadena (legal) y solo reventaba en la división, con un
-   `TypeError: unsupported operand type(s) for /: 'str' and 'int'` a cientos de
-   líneas del origen. Ahora pasan por `checked()`, que lanza una excepción Tango con
-   el mensaje real del aparato.
-3. **Desbordamiento uint16 con NumPy 2.** Los tres lectores de la ventana hacían
-   `float(r[n] * 10000 / 16383)` sobre un `numpy.uint16` de `frombuffer`. Con NumPy 2
-   (NEP 50) el escalar conserva su dtype, así que la multiplicación **desborda módulo
-   65536 antes de dividir**: ULD=819 se leía como 3.88 mV en vez de 499.91. Como el
-   wrap no es monótono, cambiar un límite parecía no afectar a la lectura. El `float()`
-   tiene que ir **antes** de la aritmética. Es el único DS del repositorio expuesto a
-   esto — los demás `uint16` son declaraciones de atributos Tango, no escalares numpy.
+1. **HID report reassembly.** `readpage` asked for `dev.read(131)`, but the
+   manual (`WisselMCA/CMCA 550_Newprotokoll Remotr Control.pdf`, page 1) says
+   "HID-Device, 64 bytes package". hidapi returned only the first report — 62
+   useful bytes out of 128 — and left the other two **queued**, so every later
+   command read the leftovers of the previous one and answered "wrong count".
+   `read_response()` accumulates reports until the answer is complete, and
+   `drain()`, called in `open()`, discards whatever a previously desynchronised
+   session may have left.
+2. **Masked errors.** Twelve places did `(t, r) = self.c.X()` and ignored the
+   flag. On failure, `r` was the error string; `r[2] * 10000` is string
+   repetition (legal) and only blew up at the division, with a
+   `TypeError: unsupported operand type(s) for /: 'str' and 'int'` hundreds of
+   lines away from the origin. They now go through `checked()`, which raises a
+   Tango exception carrying the device's real message.
+3. **uint16 overflow with NumPy 2.** The three window readers did
+   `float(r[n] * 10000 / 16383)` on a `numpy.uint16` from `frombuffer`. With
+   NumPy 2 (NEP 50) the scalar keeps its dtype, so the multiplication
+   **overflows modulo 65536 before dividing**: ULD=819 read as 3.88 mV instead of
+   499.91. Since the wrap is not monotonic, changing a limit appeared not to
+   affect the reading. The `float()` has to come **before** the arithmetic. It is
+   the only DS in the repository exposed to this — the other `uint16`s are Tango
+   attribute declarations, not numpy scalars.
 
-**Y una inconsistencia de diseño**, también corregida: `setPHAmode` e `init_device`
-derivaban la longitud del espectro del límite superior de la ventana con
-`lastchannel = round(upper_mV * 16383 / 10000)`, que es la conversión mV → **valor
-crudo de 14 bits**, no a canales. Los límites son tensiones de entrada (página 4:
-"16383 = 0x3FFF = 10 Volts"), y el resultado excedía el hardware: una ventana de 10 V
-daba 16383 "canales" en una tarjeta de 8192 como máximo, con lo que `Spectrum` leía
-más allá del final de los datos, en las páginas 256-1023 que el manual reserva para
-DFG.
+**And a design inconsistency**, also corrected: `setPHAmode` and `init_device`
+derived the spectrum length from the window's upper limit with
+`lastchannel = round(upper_mV * 16383 / 10000)`, which is the mV → **raw 14-bit
+value** conversion, not to channels. The limits are input voltages (page 4:
+"16383 = 0x3FFF = 10 Volts"), and the result exceeded the hardware: a 10 V window
+gave 16383 "channels" on a card of 8192 at most, so `Spectrum` read past the end
+of the data, into pages 256-1023 that the manual reserves for DFG.
 
-**El mapeo correcto, medido en la tarjeta:** con `Res=0` y `ULD1 = 1310` (800 mV), el
-último canal con cuentas es **655 = 1310 >> 1, exacto**. Es decir, el valor de 14 bits
-de la ventana cubre el mismo margen 0-10 V que los canales, así que
-
-```
-canal = ULD >> (1 + Res)          # la mitad del crudo con 13 bit
-canales totales = 8192 >> Res     # Res[1:0], bits 2-3 del byte 1 del General Setup
-```
-
-Era justo lo que buscaba el autor original: su expresión daba el crudo, que es **el
-doble** del canal. `phalastchannel()` lo calcula, acotado a la resolución, y lo usan
-`init_device`, `setPHAmode` y `write_Upper_Window_Limit` — mover el nivel superior
-mueve dónde se acaban las cuentas, así que la longitud lo sigue.
-
-Leer los 8192 canales enteros no aporta nada y cuesta: la suma es idéntica (216013
-cuentas en ambos casos, porque los pulsos por encima del nivel superior se rechazan),
-pero tarda **2.05 s frente a 0.17 s**. Y 2 s está incómodamente cerca del timeout de
-cliente por defecto de Tango (3 s), lo que habría hecho `Spectrum` inestable para quien
-no lo suba.
-
-### Estado verificado a través del device server (17-ago-2026)
+**The correct mapping, measured on the card:** with `Res=0` and `ULD1 = 1310`
+(800 mV), the last channel with counts is **655 = 1310 >> 1, exactly**. That is,
+the window's 14-bit value covers the same 0-10 V range as the channels, so
 
 ```
-Configuration : 0x0000  -> OS=0  Res=0  -> 13 bit -> 8192 canales
+channel      = ULD >> (1 + Res)   # half the raw value at 13 bit
+total channels = 8192 >> Res      # Res[1:0], bits 2-3 of byte 1 of the General Setup
+```
+
+That was exactly what the original author was after: their expression gave the
+raw value, which is **twice** the channel. `phalastchannel()` computes it,
+clamped to the resolution, and it is used by `init_device`, `setPHAmode` and
+`write_Upper_Window_Limit` — moving the upper level moves where the counts end,
+so the length follows it.
+
+Reading all 8192 channels adds nothing and costs: the sum is identical (216013
+counts either way, because pulses above the upper level are rejected), but it
+takes **2.05 s against 0.17 s**. And 2 s is uncomfortably close to Tango's
+default client timeout (3 s), which would have made `Spectrum` unreliable for
+anyone who does not raise it.
+
+### State verified through the device server (17-Aug-2026)
+
+```
+Configuration : 0x0000  -> OS=0  Res=0  -> 13 bit -> 8192 channels
 Model         : 2007 61 122
-Mode          : 3 (PHA)   ModeByte 0x03 (parado)
-ventana       : 200.21 - 800.22 mV
-Spectrum      : 672 canales en 0.17 s, suma 216013, 491 canales no vacíos
+Mode          : 3 (PHA)   ModeByte 0x03 (stopped)
+window        : 200.21 - 800.22 mV
+Spectrum      : 672 channels in 0.17 s, sum 216013, 491 non-empty channels
 ```
 
-Escribir y volver a leer los límites: 2000/5000/8000 mV → crudo 3277/8192/13106 →
-2000.24/5000.31/7999.76 mV. Los valores originales quedaron restaurados.
+Writing the limits and reading them back: 2000/5000/8000 mV → raw
+3277/8192/13106 → 2000.24/5000.31/7999.76 mV. The original values were restored.
 
-Nota: `ReadLastChannel` es un comando **sin `dtype_out`** — no devuelve nada, actualiza
-`lastchannel` con lo que diga la tarjeta (último canal no nulo + 1). Devolver `None` es
-su comportamiento correcto, no un fallo. Y la tarjeta redondea ese valor al final de la
-página: con datos hasta el canal 655 informa 671 (página 20 = canales 640-671).
+Note: `ReadLastChannel` is a command **with no `dtype_out`** — it returns
+nothing, it updates `lastchannel` with whatever the card reports (last non-empty
+channel + 1). Returning `None` is its correct behaviour, not a fault. And the
+card rounds that value to the end of the page: with data up to channel 655 it
+reports 671 (page 20 = channels 640-671).
 
 ---
 
-## GPIO en Trixie: RPi.GPIO no vale, hay que usar rpi-lgpio (18-ago-2026)
+## GPIO on Trixie: RPi.GPIO does not work, rpi-lgpio is needed (18-Aug-2026)
 
-La advertencia de _Verify on real hardware_ se ha confirmado, y de la peor manera:
-**falla en ejecución, no al importar**, así que el chroot no lo detecta y el
-servidor arranca hasta que toca el pin.
+The warning under _Verify on real hardware_ has been confirmed, and in the worst
+way: **it fails at run time, not on import**, so the chroot does not catch it and
+the server starts up until it touches the pin.
 
-`SEAWaterflowmeter/4` no arrancaba en pi-vsm:
+`SEAWaterflowmeter/4` would not start on pi-vsm:
 
 ```
 File ".../SEAWaterflowmeter.py", line 154, in init_device
@@ -787,22 +797,23 @@ File ".../SEAWaterflowmeter.py", line 154, in init_device
 RuntimeError: Failed to add edge detection
 ```
 
-Reproducido en dos líneas como usuario `pi` (que está en `gpio`, así que **no es de
-permisos**), en una Pi 3B+ con kernel 6.18.39 y `python3-rpi.gpio` 0.7.1a4:
+Reproduced in two lines as user `pi` (who is in `gpio`, so **it is not a
+permissions problem**), on a Pi 3B+ with kernel 6.18.39 and `python3-rpi.gpio`
+0.7.1a4:
 
 ```
 GPIO.setup(17, GPIO.IN)            -> OK, GPIO.input(17) -> 0
 GPIO.add_event_detect(17, RISING)  -> RuntimeError: Failed to add edge detection
 ```
 
-`setup`, `input` y `output` **siguen funcionando**; lo que se rompe es solo la
-**detección de flancos**, que es lo único que RPi.GPIO hace todavía por el interfaz
-`sysfs` antiguo. Por eso SEAWaterflowmeter fue el primero en notarlo: es el único
-servidor del repositorio que usa `add_event_detect`.
+`setup`, `input` and `output` **still work**; what breaks is only **edge
+detection**, which is the one thing RPi.GPIO still does through the old `sysfs`
+interface. That is why SEAWaterflowmeter noticed it first: it is the only server
+in the repository that uses `add_event_detect`.
 
-**Remedio: `python3-rpi-lgpio`**, un shim que reimplementa la API de RPi.GPIO sobre
-`lgpio`, que habla con `/dev/gpiochip*`. Está en el archivo de raspberrypi.com para
-Trixie (0.6) y su dependencia `python3-lgpio` ya venía instalada.
+**Remedy: `python3-rpi-lgpio`**, a shim that reimplements the RPi.GPIO API on top
+of `lgpio`, which talks to `/dev/gpiochip*`. It is in the raspberrypi.com archive
+for Trixie (0.6) and its dependency `python3-lgpio` was already installed.
 
 ```
 Package:   python3-rpi-lgpio
@@ -811,28 +822,29 @@ Conflicts: python3-rpi.gpio
 Provides:  python3-rpi.gpio
 ```
 
-⚠️ **Sustituye a `python3-rpi.gpio`, y la raíz NFS es compartida**: se instala en el
-chroot de wolframite y afecta a **todas las Pis y a todos los DS de GPIO a la vez**.
+⚠️ **It replaces `python3-rpi.gpio`, and the NFS root is shared**: it is installed
+in wolframite's chroot and affects **every Pi and every GPIO DS at once**.
 
-Verificado sin tocar la raíz, descargando el .deb y extrayéndolo en `/tmp` con
-`PYTHONPATH` por delante:
-
-```
-pin 6:  setup + add_event_detect OK, lectura 1
-pin 13: setup + add_event_detect OK, lectura 0
-```
-
-y con el servidor real (instancia 4, canales 6,13 según la BD):
+Verified without touching the root, by downloading the .deb and extracting it in
+`/tmp` with `PYTHONPATH` in front:
 
 ```
-estado: ON | Measurement thread is running     channel0 = 0.0   channel1 = 0.0
+pin 6:  setup + add_event_detect OK, read 1
+pin 13: setup + add_event_detect OK, read 0
 ```
 
-### Segunda trampa: lgpio y la raíz de solo lectura (18-ago-2026)
+and with the real server (instance 4, channels 6,13 per the DB):
 
-Instalar el shim **no basta**. `rpi-lgpio` importa `lgpio`, y `lgpio` crea un FIFO
-de notificaciones **en el directorio de trabajo** nada más importarse. En estas Pis
-ese directorio está en la raíz NFS de solo lectura, así que el import muere:
+```
+state: ON | Measurement thread is running     channel0 = 0.0   channel1 = 0.0
+```
+
+### Second trap: lgpio and the read-only root (18-Aug-2026)
+
+Installing the shim **is not enough**. `rpi-lgpio` imports `lgpio`, and `lgpio`
+creates a notification FIFO **in the working directory** as soon as it is
+imported. On these Pis that directory is on the read-only NFS root, so the import
+dies:
 
 ```
 File "/usr/lib/python3/dist-packages/lgpio.py", line 504, in __init__
@@ -840,25 +852,25 @@ File "/usr/lib/python3/dist-packages/lgpio.py", line 504, in __init__
 FileNotFoundError: [Errno 2] No such file or directory: '.lgd-nfy-3'
 ```
 
-El `-3` **no es un número de fichero**: es el código de error de no haber podido
-crear la tubería. Mensaje engañoso, del mismo estilo que el de las collations.
+The `-3` **is not a file number**: it is the error code for having failed to
+create the pipe. A misleading message, of the same kind as the collations one.
 
-No se arregla solo con el CWD del Starter. Ese CWD es `/var/tmp/ds.log`, que **sí**
-es escribible… pero es `pi:pi drwxrwxr-x`, y los DS corren como `tango`, que no está
-en el grupo `pi`:
+It is not fixed by the Starter's CWD alone. That CWD is `/var/tmp/ds.log`, which
+**is** writable… but it is `pi:pi drwxrwxr-x`, and the DS run as `tango`, who is
+not in the `pi` group:
 
 ```
 xCreatePipe: Can't set permissions (436) for /var/tmp/ds.log/.lgd-nfy0, No such file or directory
 ```
 
-Y tampoco vale apuntar todos a `/tmp` con un `LG_WD` común: el nombre del FIFO
-(`.lgd-nfy0`) es **por proceso, no por servidor**, y hay dos Pis que corren dos
-servidores de GPIO cada una — pi-uleem (`RaspberrySwitch/1` + `SEAWaterflowmeter/1`)
-y pi-xps (`RaspberryButton/1` + `SEAWaterflowmeter/3`) — que acabarían compartiendo
-el mismo FIFO. Con `/tmp` además entra el *sticky bit*: si el fichero ya existe de
-otro usuario, el segundo no puede tocarlo.
+Nor does pointing everything at `/tmp` with a common `LG_WD` work: the FIFO's
+name (`.lgd-nfy0`) is **per process, not per server**, and two Pis run two GPIO
+servers each — pi-uleem (`RaspberrySwitch/1` + `SEAWaterflowmeter/1`) and pi-xps
+(`RaspberryButton/1` + `SEAWaterflowmeter/3`) — which would end up sharing the
+same FIFO. With `/tmp` the *sticky bit* comes in too: if the file already exists
+from another user, the second cannot touch it.
 
-**Solución aplicada en el código**, en los cuatro servidores de GPIO, justo antes del
+**Fix applied in the code**, in all four GPIO servers, just before the
 `import RPi.GPIO`:
 
 ```python
@@ -866,213 +878,230 @@ os.environ.setdefault("LG_WD", tempfile.mkdtemp(prefix="lgpio-"))
 atexit.register(shutil.rmtree, os.environ["LG_WD"], True)
 ```
 
-Cada proceso se lleva su propio directorio privado en `/tmp` (tmpfs, escribible por
-cualquiera) y lo borra al salir. Va en el código y no en la unidad de systemd a
-propósito: así funciona lo lance quien lo lance —el Starter, una sesión de itango o
-a mano— y se despliega por el mismo `git pull` que todo lo demás, sin tocar la raíz
-compartida.
+Each process takes its own private directory in `/tmp` (tmpfs, writable by
+anyone) and deletes it on exit. It goes in the code rather than in the systemd
+unit on purpose: that way it works whoever launches it — the Starter, an itango
+session, or by hand — and it deploys through the same `git pull` as everything
+else, without touching the shared root.
 
-Verificado en pi-vsm con el servidor real lanzado como `tango` desde el CWD del
-Starter: `ON | Measurement thread is running`.
+Verified on pi-vsm with the real server launched as `tango` from the Starter's
+CWD: `ON | Measurement thread is running`.
 
-Qué usa cada servidor vivo de la API, para saber qué revisar tras el cambio:
+What each live server uses from the API, to know what to check after the change:
 
-| Servidor | Usa | Riesgo |
+| Server | Uses | Risk |
 |---|---|---|
-| SEAWaterflowmeter | `add_event_detect` | Es el que se arregla |
-| RaspberrySwitch | `setup`, `input`, `PUD_UP/DOWN` | Bajo |
-| WaterSwitch | `setup`, `input`, `PUD_UP` | Bajo |
-| RaspberryButton | `setup`, `output` | Bajo |
+| SEAWaterflowmeter | `add_event_detect` | The one being fixed |
+| RaspberrySwitch | `setup`, `input`, `PUD_UP/DOWN` | Low |
+| WaterSwitch | `setup`, `input`, `PUD_UP` | Low |
+| RaspberryButton | `setup`, `output` | Low |
 
-`rpi-lgpio` documenta diferencias de comportamiento en detalles como el *bouncetime*
-de los eventos y en **PWM**. El único servidor que usaba PWM era Motor, que pasó a
-`deprecated/` el 18-ago-2026 al sustituirlo por un Arduino con un DRV8825, así que
-ese riesgo **ya no existe**.
+`rpi-lgpio` documents behavioural differences in details such as event
+*bouncetime* and in **PWM**. The only server that used PWM was Motor, which went
+to `deprecated/` on 18-Aug-2026 when it was replaced by an Arduino with a
+DRV8825, so that risk **no longer exists**.
 
-Nota: los `time` y `calibration` vacíos de `vsm/safety/water` en la BD no son un
-problema — tienen `default_value` en el código (1.0 y 7.5).
+Note: the empty `time` and `calibration` of `vsm/safety/water` in the DB are not
+a problem — they have a `default_value` in the code (1.0 and 7.5).
 
-### Tercera trampa: lgpio respeta las reservas del kernel, RPi.GPIO no (18-ago-2026)
+### Third trap: lgpio respects the kernel's reservations, RPi.GPIO does not (18-Aug-2026)
 
-Con RPi.GPIO los pines **no eran exclusivos** — accedía por `/dev/mem`, saltándose al
-kernel. lgpio va por el dispositivo de caracteres y respeta quién tiene cada línea,
-así que **conflictos que llevaban años latentes salen a la luz al migrar**:
+With RPi.GPIO the pins **were not exclusive** — it went through `/dev/mem`,
+bypassing the kernel. lgpio goes through the character device and respects who
+holds each line, so **conflicts that had lain dormant for years surface on
+migration**:
 
 ```
 lgpio.error: 'GPIO busy'
 ```
 
-Le pasó a `RaspberrySwitch/2` en pi-leem, configurado en el GPIO 4:
+It happened to `RaspberrySwitch/2` on pi-leem, configured on GPIO 4:
 
 ```
 leem/power/xps    GPIOport = 4
 gpiochip0 line 4: "GPIO4"  output drive=open-drain  consumer="onewire@4"
 ```
 
-Lo tenía tomado el overlay `w1-gpio` del kernel. Y en pi-leem **no hay ningún sensor
-1-Wire**: los dispositivos que enumeraba eran `00-77…`, `00-f7…`, de familia 0, o sea
-fantasmas de un bus vacío. Un DS18B20 real es `28-…`.
+The kernel's `w1-gpio` overlay had it taken. And on pi-leem there is **no 1-Wire
+sensor at all**: the devices it enumerated were `00-77…`, `00-f7…`, of family 0 —
+that is, ghosts of an empty bus. A real DS18B20 is `28-…`.
 
-**Los overlays son por Pi, no compartidos.** Esto importa y no era obvio:
-`/boot/firmware` sí está en la raíz NFS compartida, pero **no contiene `config.txt`** —
-el bootloader lo lee por TFTP de `/tftpboot/<serie>/` en wolframite. Así que se
-resuelve sin recablear ni tocar la BD, quitando el overlay solo donde no hace falta:
+**Overlays are per Pi, not shared.** This matters and was not obvious:
+`/boot/firmware` *is* on the shared NFS root, but **it does not contain
+`config.txt`** — the bootloader reads that over TFTP from `/tftpboot/<serial>/` on
+wolframite. So it is solved without recabling or touching the DB, by removing the
+overlay only where it is not needed:
 
-| Pi | Serie | Sensor 1-Wire real | Overlay `w1-gpio` |
+| Pi | Serial | Real 1-Wire sensor | `w1-gpio` overlay |
 |---|---|---|---|
-| pi-rackmossbauer | — | `28-3cd5f649fc87` ✅ | **mantener** (`TempSensorDS18B20/1`) |
-| pi-leem | `487100ad` | no (fantasmas) | quitado — desbloquea `RaspberrySwitch/2` |
-| pi-vsm | `88ec955a` | no (fantasmas) | quitado (pendiente de reiniciar) |
+| pi-rackmossbauer | — | `28-3cd5f649fc87` ✅ | **keep** (`TempSensorDS18B20/1`) |
+| pi-leem | `487100ad` | no (ghosts) | removed — unblocks `RaspberrySwitch/2` |
+| pi-vsm | `88ec955a` | no (ghosts) | removed (pending a reboot) |
 
-Hecho el 18-ago-2026. Tras reiniciar pi-leem el GPIO 4 quedó libre
-(`line 4: "GPIO4" input`, sin consumidor) y `RaspberrySwitch/2` **arrancó solo**, sin
-intervención: `leem/power/xps -> Switch = True`. Su estado `UNKNOWN` es de siempre —
-ese servidor nunca llama a `set_state` — y no es una secuela.
+Done on 18-Aug-2026. After rebooting pi-leem, GPIO 4 was free
+(`line 4: "GPIO4" input`, with no consumer) and `RaspberrySwitch/2` **started on
+its own**, with no intervention: `leem/power/xps -> Switch = True`. Its `UNKNOWN`
+state is longstanding — that server never calls `set_state` — and is not an
+after-effect.
 
-⚠️ Corrección de lo escrito el 17-ago sobre TempSensorDS18B20: allí se dijo que el
-ruido del bus 1-Wire "merece una revisión del cableado". **Es dudoso**: pi-leem y
-pi-vsm producen los mismos fantasmas de familia 0 sin tener nada conectado, así que
-esos mensajes son lo normal en cualquier Pi con el overlay puesto y el bus vacío o
-flojo, no prueba de mal cableado. Lo que sigue en pie es que el sensor real puede
-desaparecer y volver, y por eso el DS reintenta.
+⚠️ Correction to what was written on 17-Aug about TempSensorDS18B20: it said
+there that the 1-Wire bus noise "deserves a look at the cabling". **That is
+doubtful**: pi-leem and pi-vsm produce the same family-0 ghosts with nothing
+connected, so those messages are normal on any Pi with the overlay set and the
+bus empty or weak, not evidence of bad cabling. What does still stand is that the
+real sensor can disappear and come back, which is why the DS retries.
 
-### Pines configurados de cada servidor de GPIO (18-ago-2026)
+### Configured pins of each GPIO server (18-Aug-2026)
 
-Para prever choques antes de reiniciar. Sacado de la BD; ojo con las propiedades,
-que **no se llaman igual** en todos: `RaspberrySwitch` y `WaterSwitch` usan
-`GPIOport`, `RaspberryButton` usa **`Pin`**, y `SEAWaterflowmeter` usa `channels`
-(lista separada por comas).
+To anticipate clashes before rebooting. Taken from the DB; mind the properties,
+which are **not named the same** in all of them: `RaspberrySwitch` and
+`WaterSwitch` use `GPIOport`, `RaspberryButton` uses **`Pin`**, and
+`SEAWaterflowmeter` uses `channels` (a comma-separated list).
 
-| Servidor | Pi | Arranque | Pines |
+| Server | Pi | Boot | Pins |
 |---|---|---|---|
-| SEAWaterflowmeter/4 | pi-vsm | netboot | 6, 13 ✅ verificado con lgpio |
-| RaspberrySwitch/2 | pi-leem | netboot | 4 → resuelto quitando el overlay |
+| SEAWaterflowmeter/4 | pi-vsm | netboot | 6, 13 ✅ verified with lgpio |
+| RaspberrySwitch/2 | pi-leem | netboot | 4 → resolved by removing the overlay |
 | SEAWaterflowmeter/1 | pi-uleem | microSD | 26, 13, 6, 5 |
 | SEAWaterflowmeter/2 | pi-mossbauer | microSD | 26, 13 |
 | SEAWaterflowmeter/3 | pi-xps | microSD | 13 |
 | RaspberrySwitch/1 | pi-uleem | microSD | 12 |
 | RaspberryButton/1 | pi-xps | microSD | 26 |
 
-`WaterSwitch` no está dado de alta en ninguna parte.
+`WaterSwitch` is not registered anywhere.
 
-### Netboot frente a microSD: no todas las Pis comparten software
+### Netboot versus microSD: not every Pi shares software
 
-**Solo pi-rackmossbauer, pi-leem y pi-vsm arrancan por netboot** desde
-`/nfs/pi-trixie`. pi-uleem, pi-xps y pi-mossbauer siguen con su **microSD propia**,
-con su propio software y sus propias contraseñas. Consecuencias:
+**Only pi-rackmossbauer, pi-leem and pi-vsm boot by netboot** from
+`/nfs/pi-trixie`. pi-uleem, pi-xps and pi-mossbauer are still on their **own
+microSD**, with their own software and their own passwords. Consequences:
 
-- El cambio a `rpi-lgpio` **no las afecta**: conservan RPi.GPIO y sus servidores no se
-  rompen al reiniciar. Los pines de la tabla de arriba solo importarán el día que
-  pasen a netboot.
-- Tampoco reciben el código del repositorio por el `git pull` de wolframite.
-- El apaño de `LG_WD` es inofensivo ahí: es una variable que el RPi.GPIO original ni
-  mira, así que el mismo código sirve para las dos clases de Pi.
-- **Las claves de host SSH solo las comparten las de netboot** (misma raíz, misma
-  clave). Verificar con `HostKeyAlias` contra la clave de otra Pi funciona entre
-  pi-rackmossbauer, pi-leem y pi-vsm, y **falla correctamente** con las de microSD.
+- The move to `rpi-lgpio` **does not affect them**: they keep RPi.GPIO and their
+  servers do not break on reboot. The pins in the table above will only matter
+  the day they move to netboot.
+- Nor do they get the repository's code through wolframite's `git pull`.
+- The `LG_WD` workaround is harmless there: it is a variable the original
+  RPi.GPIO does not even look at, so the same code serves both kinds of Pi.
+- **Only the netbooting ones share SSH host keys** (same root, same key).
+  Checking with `HostKeyAlias` against another Pi's key works between
+  pi-rackmossbauer, pi-leem and pi-vsm, and **correctly fails** with the microSD
+  ones.
 
-### Verificado en hardware (18-ago-2026)
+> Out of date as of 26-Aug-2026: pi-uleem and pi-xps now netboot too, and
+> **pi-hvleem is the only Pi left on microSD**. See the update under _Host →
+> server assignments_ and `docs/netboot-shared-root.md`.
 
-- **`SEAWaterflowmeter/4`** en pi-vsm: arranca desde el Starter
-  (`ON | Measurement thread is running`) y **mide bien con el agua abierta**
-  (confirmado por el usuario). Los ceros iniciales eran el grifo cerrado, no un fallo
-  de los *callbacks*. Cadena completa validada: `rpi-lgpio` + `LG_WD` privado +
-  detección de flancos.
-- **`RaspberrySwitch/2`** en pi-leem: entrada leída (`Switch = True`).
-- Un detalle práctico del cambio: con lgpio **no se puede sondear un pin desde fuera
-  mientras un DS lo tiene reclamado** (`lgpio.error: 'GPIO busy'`). Con RPi.GPIO sí se
-  podía. Si alguna herramienta o sesión de itango medía pines en caliente, dejará de
-  funcionar.
+### Verified on hardware (18-Aug-2026)
+
+- **`SEAWaterflowmeter/4`** on pi-vsm: starts from the Starter
+  (`ON | Measurement thread is running`) and **measures correctly with the water
+  running** (confirmed by the user). The initial zeros were the tap being closed,
+  not a failure of the *callbacks*. Full chain validated: `rpi-lgpio` + private
+  `LG_WD` + edge detection.
+- **`RaspberrySwitch/2`** on pi-leem: input read (`Switch = True`).
+- A practical detail of the change: with lgpio **a pin cannot be probed from
+  outside while a DS holds it claimed** (`lgpio.error: 'GPIO busy'`). With
+  RPi.GPIO it could be. If any tool or itango session measured pins live, it will
+  stop working.
 
 ---
 
-## TempSensorDS18B20 (corregido 17-ago-2026)
+## TempSensorDS18B20 (corrected 17-Aug-2026)
 
-Moría al arrancar, y **no era por hardware ausente**: el sensor
-`28-3cd5f649fc87` está conectado y lee. `init_device` llamaba a
-`w1thermsensor.W1ThermSensor()` sin protección, y al lanzar `NoSensorFoundError`
-PyTango **terminaba el proceso entero** — en `/var/tmp/ds.log/TempSensorDS18B20_1.log`:
-`Exiting: Server exited with tango.DevFailed … Exited`. El Starter lo marca FAULT y no
-lo vuelve a levantar.
+It died at start-up, and **not through absent hardware**: the sensor
+`28-3cd5f649fc87` is connected and reads. `init_device` called
+`w1thermsensor.W1ThermSensor()` unprotected, and when that raised
+`NoSensorFoundError` PyTango **terminated the whole process** — in
+`/var/tmp/ds.log/TempSensorDS18B20_1.log`:
+`Exiting: Server exited with tango.DevFailed … Exited`. The Starter marks it
+FAULT and does not bring it back up.
 
-Corregido: FAULT con el mensaje real en vez de morir; el hilo de control reintenta
-adquirir el sensor y recupera a ON solo; ya no muere en un `get_temperature()` fallido
-(que antes dejaba `Temperature` congelada en el último valor **para siempre**); FAULT
-tras tres fallos seguidos y `ATTR_INVALID` cuando no hay sensor, para no servir un
-valor viejo como fresco. El hilo es daemon y espera en un `Event`, e `init_device` para
-el anterior, así un `Init` desde Astor no deja dos hilos escribiendo `self.temp`.
+Corrected: FAULT with the real message instead of dying; the control thread
+retries acquiring the sensor and recovers to ON by itself; it no longer dies on a
+failed `get_temperature()` (which previously left `Temperature` frozen at the
+last value **for ever**); FAULT after three consecutive failures and
+`ATTR_INVALID` when there is no sensor, so as not to serve a stale value as
+fresh. The thread is a daemon and waits on an `Event`, and `init_device` stops
+the previous one, so an `Init` from Astor does not leave two threads writing
+`self.temp`.
 
-⚠️ **El bus 1-Wire de esta Pi está ruidoso.** Reporta un esclavo fantasma en casi cada
-búsqueda:
+⚠️ **This Pi's 1-Wire bus is noisy.** It reports a ghost slave on almost every
+search:
 
 ```
 w1_master_driver w1_bus_master1: Family 0 for 00.b3c800000000.12 is not registered.
 ```
 
-153 de esos en el buffer de `dmesg`, uno cada ~45-60 s. Con ese ruido el esclavo real
-puede desaparecer de `/sys/bus/w1/devices` y volver — lo que el software ahora tolera,
-pero **no cura**. Merece una revisión del cableado (longitud, pull-up de 4.7 kΩ,
-apantallamiento).
+153 of those in the `dmesg` buffer, one every ~45-60 s. With that noise the real
+slave can disappear from `/sys/bus/w1/devices` and come back — which the software
+now tolerates, but does **not** cure. It deserves a look at the cabling (length,
+4.7 kΩ pull-up, shielding).
 
-También **dejó de importar `RPi.GPIO`**: el pin lo maneja el overlay `w1-gpio` del
-kernel, configurado en `config.txt`, no el servidor. La propiedad `GPIOPin` se queda,
-documentada como informativa, para no dejar huérfanos los valores de la BD.
+> See the correction under _GPIO on Trixie_ (18-Aug-2026): the family-0 ghosts
+> also appear on Pis with nothing connected, so they are not by themselves
+> evidence of bad cabling.
+
+It also **stopped importing `RPi.GPIO`**: the pin is handled by the kernel's
+`w1-gpio` overlay, configured in `config.txt`, not by the server. The `GPIOPin`
+property stays, documented as informational, so as not to orphan the DB's values.
 
 ---
 
-## Desplegar código en las Pis: la raíz NFS es de solo lectura desde el cliente
+## Deploying code to the Pis: the NFS root is read-only from the client
 
-Verificado el 17-ago-2026 en pi-rackmossbauer: **`git pull` en el propio Pi no
-funciona**. Su raíz es `10.43.88.3:/nfs/pi-trixie` por NFSv4 y, aunque el cliente la
-monta `rw`, toda escritura da `EROFS` — `/opt/tango/SURFMOSS_TangoDS`, e incluso
-`/home/pi`, también con `sudo`. Solo `/tmp` es escribible (tmpfs). `/var` sí lo es,
-por su propio export: `10.43.88.3:/nfs/clients/pi-rackmossbauer/var` (de ahí que los
-logs del Starter en `/var/tmp/ds.log/` sí se escriban).
+Verified on 17-Aug-2026 on pi-rackmossbauer: **`git pull` on the Pi itself does
+not work**. Its root is `10.43.88.3:/nfs/pi-trixie` over NFSv4 and, although the
+client mounts it `rw`, every write gives `EROFS` — `/opt/tango/SURFMOSS_TangoDS`,
+and even `/home/pi`, with `sudo` too. Only `/tmp` is writable (tmpfs). `/var` is,
+through its own export: `10.43.88.3:/nfs/clients/pi-rackmossbauer/var` (which is
+why the Starter's logs in `/var/tmp/ds.log/` do get written).
 
-Antes de llegar al motivo real aparecen dos errores de git que despistan:
-`fatal: detected dubious ownership` (el repo es de `root`, uno entra como `pi`) y
-luego, con `sudo`, `cannot open '.git/FETCH_HEAD': Read-only file system`.
+Before reaching the real reason, two git errors appear that throw you off:
+`fatal: detected dubious ownership` (the repo belongs to `root`, you log in as
+`pi`) and then, with `sudo`,
+`cannot open '.git/FETCH_HEAD': Read-only file system`.
 
-El pull tiene que hacerse **donde `/nfs/pi-trixie` sea escribible** (wolframite), y
-luego reiniciar el DS en el Pi con el Starter.
+The pull has to be done **where `/nfs/pi-trixie` is writable** (wolframite), and
+then the DS restarted on the Pi with the Starter.
 
-**Para probar un parche contra el hardware sin desplegar**: `scp` del módulo a `/tmp`
-y ejercitarlo con `importlib.util.spec_from_file_location`. Para un device server
-completo, `-nodb` evita tocar la base de datos:
+**To test a patch against the hardware without deploying**: `scp` the module to
+`/tmp` and exercise it with `importlib.util.spec_from_file_location`. For a
+complete device server, `-nodb` avoids touching the database:
 
 ```bash
 python3 /tmp/mods.py test -nodb -dlist test/temp/1 -ORBendPoint giop:tcp:127.0.0.1:12988
 python3 -c 'import tango; print(tango.DeviceProxy("tango://127.0.0.1:12988/test/temp/1#dbase=no").state())'
 ```
 
-Con `-nodb` las propiedades toman su `default_value`. Ojo: hay que fijar el endpoint a
-`127.0.0.1`, porque el nombre corto `pi-rackmossbauer` **no resuelve en el propio Pi**
-(se ve también como `sudo: unable to resolve host`) y el IOR publicado queda
-inalcanzable.
+With `-nodb` the properties take their `default_value`. Careful: the endpoint has
+to be pinned to `127.0.0.1`, because the short name `pi-rackmossbauer` **does not
+resolve on the Pi itself** (it also shows up as `sudo: unable to resolve host`)
+and the published IOR ends up unreachable.
 
 ---
 
-## GammaVacuumSPCe (reactivado 13-ago-2026)
+## GammaVacuumSPCe (reactivated 13-Aug-2026)
 
-Fuente de la bomba iónica DIGITEL SPCe de Gamma Vacuum, por Telnet sobre TCP
-(puerto 23 por defecto). Devuelto a la raíz y dado de alta como **33ª entrada** del
-`pyproject.toml`. El arreglo de `argv[0]` ya lo tenía.
+Source for the Gamma Vacuum DIGITEL SPCe ion pump, over Telnet on TCP (port 23 by
+default). Returned to the root and registered as the **33rd entry** of
+`pyproject.toml`. It already had the `argv[0]` fix.
 
-Sin dependencias nuevas: solo `socket` y `struct`, de la biblioteca estándar.
+No new dependencies: only `socket` and `struct`, from the standard library.
 
-Dos cosas que lo distinguen del resto:
+Two things set it apart from the rest:
 
-- **No tiene `.xmi`.** Es el único device server del repositorio en esa situación
-  — se escribió a mano, no con POGO. Consecuencia práctica: **POGO no puede
-  regenerarlo ni editarlo**. POGO trabaja desde el `.xmi`, no desde el `.py`, así
-  que añadir regiones protegidas al código no basta; habría que reconstruir el
-  modelo declarando atributos, comandos y propiedades, y volver a generar.
-- **Nunca se ha probado contra el controlador real.** Era la nota de
-  `inactive/README.md`. Que ahora se instale no cambia eso.
+- **It has no `.xmi`.** It is the only device server in the repository in that
+  situation — it was written by hand, not with POGO. Practical consequence:
+  **POGO can neither regenerate nor edit it**. POGO works from the `.xmi`, not
+  from the `.py`, so adding protected regions to the code is not enough; the
+  model would have to be rebuilt, declaring attributes, commands and properties,
+  and generated again.
+- **It has never been tested against the real controller.** That was the note in
+  `inactive/README.md`. Its being installed now does not change that.
 
-La propiedad `IP` **no tiene valor por defecto** a propósito: no hay una dirección
-conocida que poner. Hay que fijarla en la base de datos al registrar el
-dispositivo, o el `connect()` fallará con cadena vacía.
+The `IP` property **has no default value** on purpose: there is no known address
+to put there. It has to be set in the database when registering the device, or
+`connect()` will fail with an empty string.
 
 ---
 
@@ -1111,18 +1140,18 @@ ls /usr/local/bin/ | grep -iE 'Mitutoyo|Specs|VarianMultiGauge|Gamma|Keithley|MC
    - [ ] 3 dead → `deprecated/`, 7 paused → `inactive/`, both excluded in
          `packages.find`.
    - [ ] RaspberryButton_old removed.
-   - [x] WisselMCA encoding fix committed, y el servidor reactivado el
-         13-ago-2026: vive en la raíz y está en el `pyproject.toml` (32ª entrada).
-   - [x] GammaVacuumSPCe reactivado el 13-ago-2026 (33ª entrada). Sin `.xmi` y
-         sin probar contra el controlador; su propiedad `IP` no tiene default y
-         hay que fijarla en la BD al registrar el dispositivo.
-   - [x] Los cuatro DS de red usan `IP` / `Port` con el mismo nombre. Ojo a los
-         valores huérfanos en la BD bajo `UviewIP`, `UviewPort` y `Host`.
+   - [x] WisselMCA encoding fix committed, and the server reactivated on
+         13-Aug-2026: it lives at the root and is in `pyproject.toml` (32nd entry).
+   - [x] GammaVacuumSPCe reactivated on 13-Aug-2026 (33rd entry). No `.xmi` and
+         untested against the controller; its `IP` property has no default and
+         has to be set in the DB when registering the device.
+   - [x] The four networked DS use `IP` / `Port` under the same name. Mind the
+         orphaned values in the DB under `UviewIP`, `UviewPort` and `Host`.
 2. **Trixie root install (in chroot, binds mounted)**
    - [ ] apt deps: `python3-tango python3-serial python3-rpi-lgpio`,
-         más `python3-numpy libhidapi-hidraw0` para WisselMCA.
+         plus `python3-numpy libhidapi-hidraw0` for WisselMCA.
    - [ ] pip deps: `simple-pid w1thermsensor` (`--break-system-packages`),
-         más el binding HID de WisselMCA (ver sección de dependencias).
+         plus WisselMCA's HID binding (see the dependencies section).
    - [ ] `pip install -e --no-deps --break-system-packages .` from repo root.
    - [ ] All 33 live wrappers present in `/usr/local/bin`; no parked ones.
    - [ ] `/etc/tangorc` = `TANGO_HOST=tangodb.lab:10000`.
@@ -1131,9 +1160,9 @@ ls /usr/local/bin/ | grep -iE 'Mitutoyo|Specs|VarianMultiGauge|Gamma|Keithley|MC
    - [ ] Build fresh DB with the 33 live servers only — parked ones never entered.
    - [ ] Each Pi's Starter control list matches its live-server set.
    - [ ] Disable wolframite's own Starter (DB host, runs no instrument servers).
-   - [x] **IPs hardcodeadas** externalizadas a propiedades (13-ago-2026). Queda
-         verificar en Jive que ningún dispositivo arrastra un valor obsoleto en
-         `IP` / `UviewIP`, que ahora sí manda (ver sección arriba).
+   - [x] **Hardcoded IPs** externalised into properties (13-Aug-2026). Still to
+         verify in Jive that no device carries a stale value in `IP` / `UviewIP`,
+         which now is what counts (see the section above).
 4. **Per-server validation (on a test Pi booted off Trixie root)**
    - [ ] Bring servers up **one at a time** under the Starter.
    - [ ] Hardware/serial servers last, when the instrument is free.
@@ -1148,92 +1177,89 @@ ls /usr/local/bin/ | grep -iE 'Mitutoyo|Specs|VarianMultiGauge|Gamma|Keithley|MC
 
 ---
 
-## Plan de migración por lotes (agrupación por switch)
+## Batch migration plan (grouped by switch)
 
-Los puertos se cambian por switch, no de uno en uno, así que **todas las máquinas
-de un switch cambian de red a la vez**.
+Ports are changed per switch, not one at a time, so **every machine on a switch
+changes network at once**.
 
-### ✅ CLAVE (8-ago-2026): las Pis viejas SÍ funcionan contra wolframite
+### ✅ KEY (8-Aug-2026): the old Pis DO work against wolframite
 
-**Comprobado con pi-rackmossbauer arrancando su raíz Debian 10 (Tango 9.2.5)
-contra wolframite (Tango 10): arranca y sus device servers levantan
-correctamente** (los únicos fallos son por hardware ausente). WisselMCA arranca
-sin problema.
+**Checked with pi-rackmossbauer booting its Debian 10 root (Tango 9.2.5) against
+wolframite (Tango 10): it boots and its device servers come up correctly** (the
+only failures are from absent hardware). WisselMCA starts without trouble.
 
-Esto **elimina el cuello de botella** del plan original. Ya NO hace falta migrar
-todas las Pis a Trixie antes de mover los puertos. La secuencia pasa a ser:
+This **removes the bottleneck** of the original plan. It is no longer necessary
+to migrate every Pi to Trixie before moving the ports. The sequence becomes:
 
-1. Pedir a IT el cambio de **todos** los puertos a la red nueva.
-2. El laboratorio sigue operando con las Pis viejas (Debian 10) contra wolframite.
-3. Migrar cada Pi a Trixie cuando convenga, sin ventanas de mantenimiento.
+1. Ask IT to change **all** the ports to the new network.
+2. The lab keeps operating with the old Pis (Debian 10) against wolframite.
+3. Migrate each Pi to Trixie whenever convenient, with no maintenance windows.
 
-_Nota histórica: durante horas se creyó que las Pis viejas eran incompatibles con
-el Databaseds 10. Era falso: el fallo real era el conflicto de collations de
-MariaDB, que afectaba por igual a Tango 9 y 10. Corregido eso, la
-retrocompatibilidad funciona._
+_Historical note: for hours it was believed that the old Pis were incompatible
+with Databaseds 10. That was false: the real failure was the MariaDB collation
+conflict, which affected Tango 9 and 10 alike. With that corrected, backward
+compatibility works._
 
-### Requisito previo al cambio de puertos
+### Prerequisite before the port change
 
-Los dos PCs Debian 10 (sputtering, vsm) también corren device servers. Hay que
-verificar que funcionan contra wolframite antes de mover su switch. **vsm** es el
-urgente (va en el paso 1); **sputtering** puede esperar al paso 3.
+The two Debian 10 PCs (sputtering, vsm) also run device servers. They have to be
+verified against wolframite before their switch is moved. **vsm** is the urgent
+one (it goes in step 1); **sputtering** can wait for step 3.
 
-### Secuencia de migración por fases (según `traslado_red_laboratorio.md`)
+### Phased migration sequence (per `traslado_red_laboratorio.md`)
 
-El orden protege lo que está en uso: XPS y Mössbauer siguen midiendo hasta el
-final. Y la primera fase sirvió de banco de pruebas real, con poco en juego.
+The order protects what is in use: XPS and Mössbauer keep measuring until the
+end. And the first phase served as a real test bench, with little at stake.
 
-#### ✅ Fase 1 — COMPLETADA (10-ago-2026)
+#### ✅ Phase 1 — COMPLETED (10-Aug-2026)
 
-Nave 409 (VSM et al): VLAN 303 Talleres, puerto #01 Gi1/0/2.
+Bay 409 (VSM et al): VLAN 303 Talleres, port #01 Gi1/0/2.
 
-| Equipo | MAC | IP nueva | Estado |
+| Machine | MAC | New IP | State |
 |---|---|---|---|
-| vsm (PC Debian 10) | `00:15:17:50:bd:77` | `10.43.88.30` | ✅ device servers OK contra wolframite |
-| pi-vsm (netboot) | `b8:27:eb:ec:95:5a` | `10.43.88.12` | ✅ arranca y DS OK |
-| fuente ITech | `8c:c8:f4:41:bd:f4` | `10.43.88.40` | |
+| vsm (Debian 10 PC) | `00:15:17:50:bd:77` | `10.43.88.30` | ✅ device servers OK against wolframite |
+| pi-vsm (netboot) | `b8:27:eb:ec:95:5a` | `10.43.88.12` | ✅ boots and DS OK |
+| ITech source | `8c:c8:f4:41:bd:f4` | `10.43.88.40` | |
 | 3dprinter (ender) | `b8:27:eb:26:ba:05` | `10.43.88.16` | |
 
-**Resultado clave**: valida que **tanto las Pis netboot como los PCs Debian 10**
-funcionan sin cambios contra wolframite (Tango 10). Nada bloquea las fases
-siguientes.
+**Key result**: it validates that **both the netboot Pis and the Debian 10 PCs**
+work unchanged against wolframite (Tango 10). Nothing blocks the later phases.
 
-#### ✅ Fase 2 — COMPLETADA — Nave 408 (LEEM et al)
+#### ✅ Phase 2 — COMPLETED — Bay 408 (LEEM et al)
 
-Rocasolano Talleres, VLAN 13; puertos #4 Gi1/0/4, #5 Gi1/0/17.
+Rocasolano Talleres, VLAN 13; ports #4 Gi1/0/4, #5 Gi1/0/17.
 
 leempc (`18:66:da:3d:88:2c`), tvips (`10:b6:76:49:fc:ad`),
 ferberite (`10:ff:e0:63:02:ca`), Quadera mass spec (`00:50:c2:66:85:11`),
 pi-leem (`b8:27:eb:71:00:ad`), pi-uleem (`b8:27:eb:86:01:9e`),
 pi-hvleem (`b8:27:eb:56:e6:91`).
 
-El instrumento con la lista de DS más larga, funcionando. Se actualizaron también
-las IPs hardcodeadas de Itech6000C, ElmitecUview y ElmitecLEEM2k.
+The instrument with the longest list of DS, working. The hardcoded IPs of
+Itech6000C, ElmitecUview and ElmitecLEEM2k were updated at the same time.
 
-#### ✅ Fase 2a — COMPLETADA — hematite
+#### ✅ Phase 2a — COMPLETED — hematite
 
-Trasladado a `10.43.88.2` con **IP estática** (configurada por IT/IQF, no por
-DHCP), manteniendo acceso IQF y VPN. El nombre se sirve desde `/etc/hosts` de
-wolframite.
+Moved to `10.43.88.2` with a **static IP** (configured by IT/IQF, not by DHCP),
+keeping IQF and VPN access. The name is served from wolframite's `/etc/hosts`.
 
-⚠️ Hasta la Fase 4, XPS y Mössbauer **no tienen acceso al almacenamiento**: deben
-guardar espectros localmente.
+⚠️ Until Phase 4, XPS and Mössbauer **have no access to the storage**: they must
+save spectra locally.
 
-Con hematite en la red nueva, el salto intermedio por wolframite deja de ser
-necesario para llegar a las Pis desde la VPN.
+With hematite on the new network, the intermediate hop through wolframite is no
+longer needed to reach the Pis from the VPN.
 
-#### ✅ Fase 3 — COMPLETADA — XPS upper floor (despachos)
+#### ✅ Phase 3 — COMPLETED — XPS upper floor (offices)
 
-Rocasolano-XPS, sala 500B y despachos 500C–500G. Incluye magnetite
-(`40:b0:76:0f:67:f3`), fortytwo (Mac de Juan, `a0:ce:c8:ff:9d:b0`), impresora
-Kyocera y equipos personales del grupo.
+Rocasolano-XPS, room 500B and offices 500C–500G. Includes magnetite
+(`40:b0:76:0f:67:f3`), fortytwo (Juan's Mac, `a0:ce:c8:ff:9d:b0`), the Kyocera
+printer and the group's personal machines.
 
-Los puertos omitidos se quedan en la **red IQF**, no en la red vieja del
-laboratorio, así que seguirán funcionando tras la Fase 4.
+The ports left out stay on the **IQF network**, not on the lab's old network, so
+they will keep working after Phase 4.
 
-#### ✅ Fase 4 — COMPLETADA — XPS + Mössbauer (CUTOVER REAL)
+#### ✅ Phase 4 — COMPLETED — XPS + Mössbauer (THE REAL CUTOVER)
 
-Rocasolano-XPS, puerto #17 Gi2/0/17, y **localsurfmoss apagado** (puerto #18
+Rocasolano-XPS, port #17 Gi2/0/17, and **localsurfmoss powered off** (port #18
 Gi4/0/18).
 
 localsurfmoss, specs (`40:b0:76:0f:68:08`), mossbauer (`00:24:8c:e8:8f:25`),
@@ -1241,51 +1267,59 @@ pi-xps (`b8:27:eb:36:cf:2f`), pi-mossbauer (`b8:27:eb:eb:87:7b`),
 pi-rackmossbauer (`b8:27:eb:a9:82:05`), sputtering (`00:15:17:24:e6:4e`),
 CANbox XPS (`00:50:c2:4a:23:0c`).
 
-**La red vieja `10.10.99.0/24` ha desaparecido.** Wolframite queda single-homed
-(`enp6s0f0` comentada) y es el único servidor: DHCP, DNS, TFTP, NFS, NTP y Tango DB.
+**The old network `10.10.99.0/24` is gone.** Wolframite is left single-homed
+(`enp6s0f0` commented out) and is the only server: DHCP, DNS, TFTP, NFS, NTP and
+the Tango DB.
 
-**Banco de pruebas**: dos puertos en la red nueva (despacho de Juan +
-wolframite). Permite bajar una Pi, validarla y devolverla a su switch. Sigue
-siendo útil para preparar migraciones a Trixie.
+**Test bench**: two ports on the new network (Juan's office + wolframite). It
+allows taking a Pi down, validating it and returning it to its switch. Still
+useful for preparing Trixie migrations.
 
-Como todas las Pis de producción son **3B+**, la raíz Trixie compartida vale para
-todas.
+Since every production Pi is a **3B+**, the shared Trixie root works for all of
+them.
 
-### Trabajo pendiente por tipo de máquina
+### Work pending, by kind of machine
 
-- **3 Pis netboot** (pi-leem, pi-rackmossbauer, pi-vsm): ya tienen directorio
-  TFTP; para migrar a Trixie basta apuntar a `/nfs/pi-trixie` y copiar el firmware
-  nuevo (ver `netboot-pi-raiz-compartida.md`).
-- **4 Pis con microSD** (pi-xps, pi-mossbauer, pi-hvleem, ender): **convertir a
-  netboot** (decidido). Crear su `/tftpboot/<serial>/` y anotar su MAC. Ya no
-  urge: pueden seguir con su SD en la red nueva mientras tanto.
-- **2 PCs Debian 10** (sputtering, vsm): verificar si funcionan contra wolframite.
-  Repos muertos → hay que reinstalar o actualizar a Debian 13 con Tango 10.
+- **3 netboot Pis** (pi-leem, pi-rackmossbauer, pi-vsm): they already have a TFTP
+  directory; to migrate to Trixie it is enough to point at `/nfs/pi-trixie` and
+  copy the new firmware (see `netboot-pi-raiz-compartida.md`).
+- **4 Pis on microSD** (pi-xps, pi-mossbauer, pi-hvleem, ender): **convert to
+  netboot** (decided). Create their `/tftpboot/<serial>/` and note their MAC. No
+  longer urgent: they can stay on their SD on the new network meanwhile.
+- **2 Debian 10 PCs** (sputtering, vsm): check whether they work against
+  wolframite. Dead repos → they have to be reinstalled or upgraded to Debian 13
+  with Tango 10.
 
-### Por qué migrar igualmente
+> Update (26-Aug-2026): pi-uleem and pi-xps have been converted to netboot.
+> **pi-hvleem is the only Pi left on microSD.**
 
-Debian 10 tiene los repos muertos (no se puede instalar ni `git` sin recurrir a
-`archive.debian.org`). La migración sigue siendo necesaria, pero ahora es
-**desacoplada del cambio de red**: se puede hacer con calma, máquina a máquina.
+### Why migrate anyway
+
+Debian 10 has dead repos (not even `git` can be installed without resorting to
+`archive.debian.org`). The migration is still necessary, but it is now
+**decoupled from the network change**: it can be done calmly, machine by machine.
 
 ---
 
-## Acceso remoto
+## Remote access
 
-**Tras la Fase 3** (despachos ya en la red nueva):
+**After Phase 3** (the offices already on the new network):
 
-- Desde fortytwo u otro equipo migrado: **wolframite es `10.43.88.3`**, directo.
-  La dirección vieja `10.10.99.25` ya no es alcanzable desde la red nueva.
-- Desde fuera, por VPN: `hematite.iqf.csic.es` (`10.43.88.2`) → cualquier equipo de
-  la red nueva. Ya no hace falta el salto intermedio por wolframite.
+- From fortytwo or any other migrated machine: **wolframite is `10.43.88.3`**,
+  directly. The old address `10.10.99.25` is no longer reachable from the new
+  network.
+- From outside, over VPN: `hematite.iqf.csic.es` (`10.43.88.2`) → any machine on
+  the new network. The intermediate hop through wolframite is no longer needed.
 
-Conviene un `~/.ssh/config` con `ProxyJump` por hematite para el acceso desde casa.
+A `~/.ssh/config` with `ProxyJump` through hematite is worth having for access
+from home.
 
-La interfaz `enp6s0f0` de wolframite (red vieja, `10.10.99.25`) sigue activa hasta
-la Fase 4; después puede retirarse.
+Wolframite's `enp6s0f0` interface (old network, `10.10.99.25`) stays up until
+Phase 4; afterwards it can be retired.
 
-**Tailscale no funciona en la red nueva**: el FortiGate (`FG101FTK21000170`) hace
-inspección TLS y re-firma el certificado de `controlplane.tailscale.com`. Tailscale
-hace pinning y lo rechaza por diseño. Además `UDP: false` y solo un DERP alcanzable
-(Bengaluru). No es una regla que se pueda quitar sin excluir el dominio de la
-inspección TLS. Descartado.
+**Tailscale does not work on the new network**: the FortiGate (`FG101FTK21000170`)
+does TLS inspection and re-signs the certificate of
+`controlplane.tailscale.com`. Tailscale pins it and rejects that by design. On
+top of that, `UDP: false` and only one reachable DERP (Bengaluru). It is not a
+rule that can be lifted without excluding the domain from TLS inspection.
+Dropped.
