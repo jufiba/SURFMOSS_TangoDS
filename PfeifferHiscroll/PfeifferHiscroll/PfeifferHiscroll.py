@@ -234,7 +234,11 @@ class PfeifferHiscroll(Device):
 
     def read_TemperatureFinalStage(self):
         # PROTECTED REGION ID(PfeifferHiscroll.TemperatureFinalStage_read) ENABLED START #
-        (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","00","316","=?")
+        # P316 is the drive power, which read_Power already asks for; this
+        # attribute was reporting watts as degrees. The power stage temperature
+        # is P324. Read from the pump: P324 56, alongside P326 (electronics) 55
+        # and P346 (motor) 54, while P316 was 168.
+        (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("002","00","324","=?")
         return int(rdata)
         # PROTECTED REGION END #    //  PfeifferHiscroll.TemperatureFinalStage_read
 
