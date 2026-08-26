@@ -26,6 +26,16 @@ from tango import AttrWriteType
 import os
 import sys
 import serial
+
+class PfeifferError(Exception):
+    """The pump did not answer, or answered something that is not a frame.
+
+    One exception for every way the exchange can fail -- no reply, a truncated
+    one, a length that does not match, a bad checksum -- because to every caller
+    they mean the same thing: there is no reading to be had.
+    """
+
+
 # PROTECTED REGION END #    //  PfeifferTU400.additionnal_import
 
 __all__ = ["PfeifferTU400", "main"]
@@ -37,17 +47,59 @@ class PfeifferTU400(Device):
     """
     # PROTECTED REGION ID(PfeifferTU400.class_variable) ENABLED START #
 
+    # A frame is address(3) action(2) parameter(3) length(2) data(length)
+    # checksum(3) CR, so the shortest one that can arrive is 14 characters.
+    MINFRAME=14
+
     def sendcommand(self,address,action,parameter,data):
+        """Send one frame and return (address,action,parameter,data,checksum).
+
+        Raises PfeifferError if no usable reply came back.
+
+        read_until() takes the terminator positionally. It was being passed as
+        terminator=, the pyserial 2.x name that 3.x renamed to `expected`, so
+        every exchange raised TypeError -- and from init_device that exits the
+        whole server. Positional works on both versions.
+
+        The reply is then checked before anything is indexed. A read that times
+        out comes back short rather than raising, so int(resp[8:10]) on '' was a
+        ValueError and rdata[0] an IndexError -- and that is the likely failure,
+        not the exotic one: it is what a silent or unplugged pump produces.
+        """
         cmd_string=address+action+parameter+"%02d"%len(data)+data
         cmd=(cmd_string+"%03d"%self.crc_code(cmd_string)+"\r").encode("ascii")
+        # Anything still in the buffer is the tail of an exchange that did not
+        # check out. Left there, it would be read as the reply to this command,
+        # and init_device sends two in a row.
+        self.ser.reset_input_buffer()
         self.ser.write(cmd)
-        resp=self.ser.read_until(terminator=b"\r").decode("ascii")
-        raddress=resp[0:3]
-        raction=resp[3:5]
-        rparameter=resp[5:8]
-        rdata=resp[10:10+int(resp[8:10])]
+        resp=self.ser.read_until(b"\r").decode("ascii")
+        where="%s%s"%(action,parameter)
+        if (not resp.endswith("\r")):
+            raise PfeifferError("no reply to %s: %d characters arrived without a "
+                                "terminator (timeout, cable, or wrong baud rate)"
+                                %(where,len(resp)))
+        if (len(resp)<self.MINFRAME):
+            raise PfeifferError("short reply to %s: %d characters, %d is the "
+                                "shortest frame"%(where,len(resp),self.MINFRAME))
+        if (not resp[8:10].isdigit()):
+            raise PfeifferError("reply to %s announces no length: %r"
+                                %(where,resp[8:10]))
+        n=int(resp[8:10])
+        if (len(resp)!=n+self.MINFRAME):
+            raise PfeifferError("reply to %s announces %d data characters but "
+                                "carries %d"%(where,n,len(resp)-self.MINFRAME))
+        # The checksum covers everything ahead of it: the 10 header characters
+        # and the n of data, which is all of the frame but the checksum and CR.
+        body=resp[:-4]
         rcrc=resp[-4:-1]
-        return(raddress,raction,rparameter,rdata,rcrc)
+        if (rcrc!="%03d"%self.crc_code(body)):
+            raise PfeifferError("checksum mismatch on the reply to %s: computed "
+                                "%03d, received %s"%(where,self.crc_code(body),rcrc))
+        if (resp[5:8]!=parameter):
+            raise PfeifferError("asked for parameter %s and the reply is for %s "
+                                "(the exchange is out of step)"%(parameter,resp[5:8]))
+        return(resp[0:3],resp[3:5],resp[5:8],resp[10:10+n],rcrc)
 
     def crc_code(self,a):
         result=0
@@ -102,10 +154,31 @@ class PfeifferTU400(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(PfeifferTU400.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=1)
-        (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","10","060","2")
-        (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","00","010","=?")
-        if (rdata[0]=="1"):
+        self.ser=None
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead -- that is what a
+        # stale SerialPort property and a pump that never answers both used to
+        # do. Everything that can fail is caught here and turned into FAULT
+        # with the reason in the status, so the device stays up and says what
+        # is wrong.
+        try:
+            self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=1)
+        except serial.SerialException as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
+        try:
+            self.sendcommand("001","10","060","2")
+            (radd,raction,rparameter,rdata,rcrc)=self.sendcommand("001","00","010","=?")
+        except PfeifferError as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No usable answer on %s: %s"%(self.SerialPort,e))
+            self.error_stream("No usable answer on %s: %s"%(self.SerialPort,e))
+            return
+        # A reply can carry an empty data field, and rdata[0] on it was an
+        # IndexError.
+        if (rdata.startswith("1")):
             self.set_state(tango.DevState.ON)
         else:
             self.set_state(tango.DevState.OFF)
@@ -118,7 +191,8 @@ class PfeifferTU400(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(PfeifferTU400.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         # PROTECTED REGION END #    //  PfeifferTU400.delete_device
 
     # ------------------

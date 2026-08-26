@@ -44,7 +44,7 @@ class CenterOneGauge(Device):
 
     def sendcommand(self, str_command):
         self.ser.write(str_command.encode("ascii"))
-        resp=self.ser.read_until(terminator=b"\r\n")
+        resp=self.ser.read_until(b"\r\n")
         return resp.decode("ascii")
 
 

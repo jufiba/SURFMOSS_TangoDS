@@ -93,7 +93,7 @@ class MKSGauge(Device):
     def read_Pressure(self):
         # PROTECTED REGION ID(MKSGauge.Pressure_read) ENABLED START #
         self.ser.write(b"@254PR4?;FF")
-        a=self.ser.read_until(terminator=b";FF")
+        a=self.ser.read_until(b";FF")
         if (a[0:7]==b"@253ACK"):
             return float(a[7:15])
         return 9999
@@ -113,7 +113,7 @@ class MKSGauge(Device):
     def sendCommand(self, argin):
         # PROTECTED REGION ID(MKSGauge.sendCommand) ENABLED START #
         self.ser.write((argin+";FF").encode("ascii"))
-        return self.ser.read_until(terminator=b";FF").decode("ascii")
+        return self.ser.read_until(b";FF").decode("ascii")
         # PROTECTED REGION END #    //  MKSGauge.sendCommand
 
 # ----------
