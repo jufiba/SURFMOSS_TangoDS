@@ -441,18 +441,20 @@ line appears.
 
 ---
 
-### ⚠️ pi-uleem: does not netboot (still open)
+### pi-uleem: netboots (resolved)
 
-`pi-uleem.lab` works correctly **from its microSD** but **not** over the network.
-Noted 10-Aug-2026, not yet investigated.
+Resolved by 26-Aug-2026. `pi-uleem.lab` boots from the shared root with no
+microSD; confirmed by its `/` mount (`10.43.88.3:/nfs/pi-trixie`) and by the
+shared-root ssh host key it now presents.
 
-Possible causes when the time comes:
-- Netboot not enabled in that Pi's OTP (3B+ boards ship with it, but confirm with
-  `vcgencmd otp_dump | grep 17:`).
-- Missing `/tftpboot/<serial>/`, or the serial isn't the expected one.
-- Missing DHCP reservation, or wrong MAC.
+**`pi-hvleem` is the only one still on microSD.**
 
-Not blocking: it stays on microSD until resolved.
+Note that every netbooting Pi serves `/etc/ssh/ssh_host_*` from the shared root
+and so presents the *same* host key. Converting a Pi to netboot therefore trips
+"REMOTE HOST IDENTIFICATION HAS CHANGED" on the first ssh. Compare the offered
+fingerprint against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on a Pi
+that is already reachable before clearing anything; if they match it is the
+shared root, and `ssh-keygen -R <host>` is the fix.
 
 ---
 
