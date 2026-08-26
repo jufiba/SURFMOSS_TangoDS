@@ -215,6 +215,7 @@ class SEAWaterflowmeter(Device):
         label="channel0",
         unit="l/min",
         format="%3.1f",
+        display_level=DispLevel.EXPERT,
     )
 
     channel1 = attribute(
@@ -222,6 +223,7 @@ class SEAWaterflowmeter(Device):
         label="channel1",
         unit="l/min",
         format="%3.1f",
+        display_level=DispLevel.EXPERT,
     )
 
     channel2 = attribute(
@@ -229,6 +231,7 @@ class SEAWaterflowmeter(Device):
         label="channel2",
         unit="l/min",
         format="%3.1f",
+        display_level=DispLevel.EXPERT,
     )
 
     channel3 = attribute(
@@ -236,6 +239,7 @@ class SEAWaterflowmeter(Device):
         label="channel3",
         unit="l/min",
         format="%3.1f",
+        display_level=DispLevel.EXPERT,
     )
 
     UpdateCount = attribute(
