@@ -481,6 +481,52 @@ Already applied in `/nfs/pi-trixie`:
 - `/usr/local/sbin/host-is` — per-host activation helper, see above.
 - **Swap**: `Mechanism=zram` in an `rpi-swap` drop-in (see below). Without it each
   Pi creates a 1–2 GB writeback file in its NFS `/var`.
+- `/etc/udev/rules.d/99-pfeiffer-delphin.rules` — binds `ftdi_sio` to the TU400's
+  converter, which has a PID the driver does not know. See below.
+
+### ⚠️ A USB-serial converter with an unrecognised PID gets no `/dev` entry
+
+`PfeifferTU400/1` on pi-leem died at start with
+
+```
+Can't open /dev/serial/by-path/platform-3f980000.usb-usb-0:1.1.2:1.0-port0:
+[Errno 2] No such file or directory
+```
+
+The property was right and the cable was in. `1-1.1.2` was present in
+`/sys/bus/usb/devices`, but with **no driver bound**:
+
+```
+1-1.1.2    0403:daf1  drv=NONE  tty=none  Delphin USB Serial Converter 09QC4001
+```
+
+It is an FTDI part (vendor `0403`) reflashed with a vendor product id, `daf1`,
+which is not in the `ftdi_sio` table. The kernel enumerates the device, nothing
+claims it, and so no `ttyUSB` and no `/dev/serial/by-path` entry ever appear.
+Nothing is logged as an error — the port is simply absent.
+
+Fix, in `/nfs/pi-trixie/etc/udev/rules.d/99-pfeiffer-delphin.rules`:
+
+```
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0403", ATTR{idProduct}=="daf1", RUN+="/sbin/modprobe ftdi_sio", RUN+="/bin/sh -c \x27echo 0403 daf1 > /sys/bus/usb-serial/drivers/ftdi_sio/new_id\x27"
+```
+
+`\x27` is how udev spells a single quote inside `RUN+=`; a literal `'` there
+does not parse. Once `new_id` accepts the pair, `ftdi_sio` binds this converter
+and any other with the same PID.
+
+To try it on a running Pi without touching the read-only root, drop the same
+file in `/run/udev/rules.d/` (tmpfs, writable, gone at reboot), then
+`sudo udevadm control --reload` and re-enumerate the device with
+
+```
+echo 0 | sudo tee /sys/bus/usb/devices/1-1.1.2/authorized
+echo 1 | sudo tee /sys/bus/usb/devices/1-1.1.2/authorized
+```
+
+A one-off bind without any rule is `echo "0403 daf1" | sudo tee
+/sys/bus/usb-serial/drivers/ftdi_sio/new_id` — useful for a quick check, but it
+is lost at the next reboot.
 
 ### ⚠️ Swap: force `Mechanism=zram` (rpi-swap)
 
