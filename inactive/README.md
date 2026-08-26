@@ -26,5 +26,5 @@ the relevant Starter — and complete the work noted below first.
 PANIC was ALBA's Tango alarm system, **third-party** and not a SURFMOSS server.
 It was kept here against a future py2→py3 + Qt port; that port is not happening,
 and the tree has been removed. What it watched is written down in
-[`docs/alarmas-panic-legado.md`](../docs/alarmas-panic-legado.md), and the
+[`docs/alarms-panic-legacy.md`](../docs/alarms-panic-legacy.md), and the
 reasoning is in [`deprecated/README.md`](../deprecated/README.md).

@@ -121,7 +121,7 @@ pip install .
 
 Alarms used to live here too, in a vendored copy of ALBA's PANIC. That tree has
 been removed — see [`deprecated/README.md`](deprecated/README.md) for why, and
-[`docs/alarmas-panic-legado.md`](docs/alarmas-panic-legado.md) for what it
+[`docs/alarms-panic-legacy.md`](docs/alarms-panic-legacy.md) for what it
 watched.
 
 ### Raspberry Pi
@@ -206,5 +206,5 @@ The `docs/` directory holds the longer-form documentation:
 | `LEEMgui.md` | Acquisition GUI: architecture, layout decisions, how to add an acquisition, testing |
 | `netboot-shared-root.md` | How the Pis netboot from one shared read-only NFS root on wolframite: exports, per-Pi `/var`, machine-id, per-host service activation, recovery |
 | `surfmoss-device-server-migration-reference.md` | Device server restructuring and Trixie migration reference |
-| `alarmas-panic-legado.md` | Every alarm the retired PANIC system carried, recovered from the old network's database — the reference for whatever replaces it |
+| `alarms-panic-legacy.md` | Every alarm the retired PANIC system carried, recovered from the old network's database — the reference for whatever replaces it |
 | `panic-python3-qt-port-estimate.md` | What porting PANIC to Python 3 and current Qt would cost, and the alternatives |

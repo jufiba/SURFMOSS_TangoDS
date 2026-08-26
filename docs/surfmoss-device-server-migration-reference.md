@@ -431,7 +431,7 @@ in the DB — not as a server, not as a class, and with no devices.)_
 - **PANIC (PyAlarm)** — ✅ removed from the tree on 21-Aug-2026. ALBA's alarm
   system, third-party code, Python 2 + Qt5, with no port planned. It never had an
   entry point here. What it watched over is in
-  [`alarmas-panic-legado.md`](alarmas-panic-legado.md), recovered from the old
+  [`alarms-panic-legacy.md`](alarms-panic-legacy.md), recovered from the old
   network's DB; the code is at the `panic-final` tag and at
   https://github.com/ALBA-Synchrotron/panic
 
