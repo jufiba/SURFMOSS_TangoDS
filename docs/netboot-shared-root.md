@@ -1,8 +1,9 @@
 # Raspberry Pi netboot with a shared NFS root (wolframite)
 
 _Configuration validated 8-Aug-2026 (swap: 14-Aug-2026) on pi-rackmossbauer
-(Pi 3B+, Debian 13 Trixie, arm64). Every production Pi in the lab is a 3B+, so one
-root serves them all._
+(Pi 3B+, Debian 13 Trixie, arm64). One arm64 root serves the whole fleet: every
+production Pi was a 3B+ until pi-laser, a Pi 4, joined on 27-Aug-2026 — see the
+Pi 4 section below._
 
 _Revised 23-Aug-2026: added the `machine-id`, per-host service activation and
 package-installation sections, all three learned the hard way while bringing up
@@ -291,6 +292,57 @@ sudo ln -sf /usr/lib/systemd/system/nut-server.service \
 
 If a package's service refuses to start at boot despite everything looking
 correct, try this before investigating further.
+
+#### ⚠️ That workaround did not hold (26-Aug-2026) — still open
+
+`NetworkUPSTool/1` on pi-leem would not start. `PyNUTClient()` takes no
+arguments, so it connects to `127.0.0.1:3493`; `upsd` was down, the connection
+was refused, and the exception escaping `init_device` took the whole device
+server with it.
+
+`upsd` was down because **`nut-server.service` had still never been started**, at
+the 25-Aug-2026 boot, *with the `multi-user.target.wants/` symlink above already
+in place since 22-Aug*. Everything looked correct again: `enabled`, not masked,
+symlinks in both `multi-user.target.wants/` and `nut.target.wants/` predating the
+boot, `nut.target` active, and systemd listing the service under
+`multi-user.target`. It was simply never queued — the whole journal (one boot ID
+covering the entire uptime) holds no mention of the unit at all.
+
+Two blind alleys worth not repeating:
+
+- **It is not the `ExecCondition`.** `systemctl show` reports
+  `ConditionResult=no`, which looks damning but is only the default for a unit
+  that has never been evaluated. A failed `ExecCondition` logs
+  `Skipped due to 'exec-condition'`, and there is no such line anywhere. The
+  helper is correct too: `host-is pi-leem` exits 0 on pi-leem.
+- **`After=network-online.target` does not apply here**, although the NUT unit's
+  own comments recommend exactly that. On these Pis `network-online.target` is
+  never reached, because `systemd-networkd-wait-online` is masked. It would be a
+  no-op, and with `Requires=` it could leave the unit hanging.
+
+Starting it by hand works and stays up (`systemctl start nut-server`, then
+`upsd` listens on 127.0.0.1:3493 and the device server comes up ON). **That is
+the current state: it will fail again at the next reboot of pi-leem.**
+
+Two candidate fixes, neither applied yet:
+
+1. **Per-Pi, no shared-root change.** Append `systemd.wants=nut-server.service`
+   to pi-leem's `/tftpboot/487100ad/cmdline.txt`. Nothing else sees it. ⚠️ That
+   file must stay a single line — it carries `root=/dev/nfs`, so a stray newline
+   means the Pi does not boot.
+2. **One line in the shared root**, filling the empty `[Unit]` of
+   `/etc/systemd/system/nut-driver@.service.d/host.conf` with
+   `Wants=nut-server.service` and `Before=nut-server.service`, hanging it off the
+   unit that does start every boot. Other Pis get a queued-then-skipped job — one
+   journal line, no service, no port — which was checked: pi-uleem and pi-xps
+   already have `nut-server` `enabled` and `inactive` with 3493 closed.
+
+(2) is the safer edit and the one that survives a second UPS: the day another Pi
+gets one, the template-level `ExecCondition` has to become per-instance drop-ins
+anyway (a `nut-driver@XPS_UPS` would inherit `host-is pi-leem` and never run),
+and the per-instance file is then the natural place to say both "this UPS is on
+this Pi" and "it needs upsd". `nut-server` would also need `host-is` to accept a
+list — a one-line change to the helper, which nothing else in the root uses.
 
 ---
 
@@ -708,3 +760,11 @@ not `raspi-firmware`): copy them from a working 3B+ directory. They are identica
 across Pis; identity comes from DHCP.
 
 **Validated**: pi-test (`ed8dd269`, `dc:a6:32:89:e7:1d`, `10.43.88.21`), Aug-2026.
+
+**First production Pi 4: pi-laser**, netbooting from the shared root on
+27-Aug-2026, running `GammaVacuumSPCe/1`. The procedure above needed no changes,
+and the same arm64 root serves it alongside the 3B+ boards. The only thing that
+differs in practice is the USB tree: a Pi 4's `/dev/serial/by-path` names begin
+`platform-fd500000.pcie-...`, not `platform-3f980000.usb-...`, so a `SerialPort`
+property copied from a 3B+ will never match. pi-laser has no serial device
+today, but the next Pi 4 with one will meet this.

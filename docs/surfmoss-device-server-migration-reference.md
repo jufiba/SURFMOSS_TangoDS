@@ -5,7 +5,85 @@ the new Trixie NFS root (`/nfs/pi-trixie` on wolframite) and reconciling them at
 the clean-DB cutover. Built from the Python-3 audit, the entry-point inventory,
 and the dependency map._
 
-_Last updated: 26-Aug-2026_
+_Last updated: 27-Aug-2026_
+
+---
+
+## Status (27-Aug-2026): two servers meeting their hardware for the first time
+
+### CenterOneGauge: the state could only ever move to OFF (`ef1d1e1`)
+
+It read pressure correctly and reported OFF. `read_Pressure` set OFF when an
+exchange failed, and nothing anywhere set ON again — `init_device` set it once
+at start-up and that was the only path to it. One transient bad exchange left
+the device measuring perfectly and reporting OFF for ever. Found on
+`leem/vacuum/gaugeEvap` at 3.6 mbar, ATTR_VALID, state OFF, and ON again the
+moment it was restarted.
+
+Every path sets the state now, in both directions. A failed read returned 0.0,
+which on a pressure gauge reads as perfect vacuum; those paths return
+ATTR_INVALID, as `eb90aba` did for LeyboldIG3. The measurement status field was
+being parsed and discarded: confirmed against the gauge, `PR1` answers `\x06`
+and `ENQ` answers `0, 3.6000E+00`, and 0 is the only value of that field meaning
+the number beside it is a reading. The port also finally got `timeout=1`,
+without which a silent gauge blocked in `read_until` rather than failing and
+none of the new error handling could ever run.
+
+### GammaVacuumSPCe: written to the serial packet, run over Telnet (`0a016bc`)
+
+The server the repository had flagged as *never tested against the real
+controller*. Pointed at the LEEM column ion pump, it connected and reported
+nothing correctly. One root cause behind all of it.
+
+The manual is explicit that over Telnet, "unlike the serial command protocol, no
+opening tilde, **no address field, and no checksum** are required". The serial
+reply is `<ADDRESS> <STATUS> <CODE> [data] <CHECKSUM>` and the code read it that
+way — STATUS at `parts[1]`, first data field at `parts[3]`. Over Telnet the
+reply is `OK 00 2.2E-09 MBA`, so every field was read one place to the right.
+That is why `_connect` tested `parts[3] == 'YES'` against a three-field reply,
+always fell through, and reported OFF while the pump ran with its HV on.
+
+The reply also ends CR CR LF and then a `>` prompt:
+
+```
+spc 0b\r\n  ->  b'OK 00 2.2E-09 MBA\r\r\n>'
+```
+
+The reader stopped at the first CR and consumed one more byte, leaving the rest
+in the socket: every exchange returned the *previous* command's reply with an
+empty read between, and the lag grew by one per call. Asking six times for the
+pressure returned a voltage, nothing, a status, nothing, a pressure, nothing.
+It reads to the prompt now and drains anything stale before writing.
+
+Two things the hardware settled that the manual has wrong:
+
+- **The unit is `MBA`.** The manual documents `Torr`, `MBR` or `PA`. `MBA` was
+  in neither the manual nor the conversion table, and an unknown unit fell back
+  to 1.0 — right by luck for mbar, a silent 1.33x error had the pump been in
+  Torr. Unknown units are refused now instead of guessed.
+- **`3C GET SETPOINT` answers two values, not five.** The manual documents
+  `N, E, X.XE-XX, Y.YE-YY, O`; this unit answers `9.0E-08,2.0E-07`. There is one
+  setpoint — `3C 2` gives `ER 08 *ERROR: PARAMETER 1: ILLEGAL RANGE (1 - 1)`.
+
+Also: `_HV_OFF_CURRENT` and `_HV_OFF_PRESSURE` were defined and used nowhere,
+so an HV-off pump served its `0.1E-10` marker as a reading of 1e-11 mbar — an
+outstanding vacuum. And a command the controller will not run still answers
+`OK`, with the complaint in the data (`OK 00 *ERROR: COMMAND DISABLED`), so
+STATUS alone never said whether there was a reading.
+
+**Pressure interlock** (`109cc90`): `SetpointOn` and `SetpointOff`, in mbar —
+9e-08 and 2e-07 on this pump. The relay's own state is **not** exposed: it is
+not readable over the protocol on this unit, and deriving it from the pressure
+would be a guess, since the manual has the relay latching once active and also
+turning on for error conditions. Reading pin 11 of J1 (*setpoint logic output*)
+with a Pi GPIO would give the real state if it is ever wanted. An Off Point of
+`0.1E-10` is the same literal as the HV-off marker with a different meaning —
+the manual says the setpoint then latches on — and is reported INVALID rather
+than as a 1e-11 mbar threshold.
+
+Verified against the pump: ON, 2.2e-09 mbar, 7.9e-07 A, -3500 V, RUNNING,
+9e-08 / 2e-07 setpoints, all ATTR_VALID, with repeated rounds returning their
+own values rather than each other's.
 
 ---
 
@@ -89,15 +167,15 @@ wrong port are both silence, and only a name coming back tells them apart.
 
 ### Still open
 
-- ⚠️ **The deployed PfeifferHiscroll still returns watts for
-  `TemperatureFinalStage`.** The running code is `60805d7`; the fix is
-  `be3b186`. Pull on wolframite and restart the server.
+- ✅ **PfeifferHiscroll's `TemperatureFinalStage`** — fixed in `be3b186`,
+  deployed and restarted 26-Aug-2026; it reads ~56 °C instead of the drive
+  power.
 - ⚠️ **`inactive/PfeifferDCU002` and `inactive/GammaIonPump` still carry
   `read_until(terminator=…)`.** They are not installed, so they break nothing
   today, but they will die on first use. `tools/audit_serial_api.py` reports
   both.
-- ⚠️ **CenterOneGauge has no `timeout=`** on its port, so it can still block
-  indefinitely in `read_until`. It got the keyword fix only.
+- ✅ **CenterOneGauge** — it got `timeout=1` along with its own fix in
+  `ef1d1e1`; see the 27-Aug-2026 section below.
 - ⚠️ **pi-leem's FTDI on `1.2.3` (`AB0JP499`) logs real USB faults** —
   `failed to set flow control: -71`, `urb stopped: -32`. That adapter or its
   cabling looks independently bad.
@@ -583,6 +661,17 @@ pi-leem in red; refresh it.
 **pi-uleem netboots now** (resolved 26-Aug-2026), so the note above about the
 first three still running from microSD is out of date: **pi-hvleem is the only
 Pi left on microSD.** See `docs/netboot-shared-root.md`.
+
+#### Update (27-Aug-2026): pi-laser
+
+```
+pi-laser      GammaVacuumSPCe/1   (leem/vacuum/IonPumpColumns)
+```
+
+The first **Pi 4** in production, netbooting from the shared root. It was
+missing from this section entirely. Its server's `IP` property is
+`leemColumnsIonPump.lab` (`10.43.88.43`); `Port` is unset, so it takes the
+default 23.
 
 ---
 
@@ -1096,8 +1185,10 @@ Two things set it apart from the rest:
   from the `.py`, so adding protected regions to the code is not enough; the
   model would have to be rebuilt, declaring attributes, commands and properties,
   and generated again.
-- **It has never been tested against the real controller.** That was the note in
-  `inactive/README.md`. Its being installed now does not change that.
+- **It had never been tested against the real controller.** That was the note in
+  `inactive/README.md`, and it stopped being true on 27-Aug-2026, when it was
+  pointed at the LEEM column ion pump on pi-laser. It did not work: see the
+  status section at the top.
 
 The `IP` property **has no default value** on purpose: there is no known address
 to put there. It has to be set in the database when registering the device, or
@@ -1275,8 +1366,9 @@ the Tango DB.
 allows taking a Pi down, validating it and returning it to its switch. Still
 useful for preparing Trixie migrations.
 
-Since every production Pi is a **3B+**, the shared Trixie root works for all of
-them.
+Every production Pi was a **3B+** until pi-laser, a **Pi 4**, joined on
+27-Aug-2026. The same arm64 shared root serves both; only the bootloader setup
+differs, and that is covered in `docs/netboot-shared-root.md`.
 
 ### Work pending, by kind of machine
 
