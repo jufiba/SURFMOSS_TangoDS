@@ -98,11 +98,16 @@ interface board, which is how it ships. With those set, the 350 needs nothing
 from this end and a three-wire cable is enough. Check them before suspecting
 the cable.
 
-The one line that helps from here is **DTR: the 350 asserts it whenever it is
-powered** and never negates it — the manual calls it a "power on" indication.
-On a null modem cable that lands on the host's DSR, so `DSR=True` at the
-adapter is evidence both that the instrument is on and that the cable carries
-handshake lines. The probe reports it.
+The 350 asserts **DTR** whenever it is powered and never negates it — the
+manual calls it a "power on" indication — and on a null modem cable that lands
+on the host's DSR. That looked like a way to prove the instrument was on and
+the cable wired without the 350 having to answer anything.
+
+**It does not work on this adapter.** Run against the port on pi-leem with
+nothing plugged in at all, it reads `CTS=True DSR=True CD=True RI=False`: the
+pl2303's inputs float high. True therefore proves nothing. A line reading
+*false* still means something is actively pulling it down, so the probe
+reports all four, but do not read anything into them being true.
 
 ## First connection
 

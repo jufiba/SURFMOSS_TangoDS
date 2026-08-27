@@ -88,13 +88,19 @@ def plausible(reply):
 
 
 def control_lines(ser):
-    """What the 350 is driving back at us, if the cable carries it.
+    """What the adapter's inputs read. Informative only when they read FALSE.
 
-    The 350 asserts DTR on power-up and never negates it -- the manual calls it
-    a "power on" indication. On a null modem cable that lands on the host's
-    DSR. So DSR true is good evidence of two things at once: the instrument is
-    powered, and the cable carries handshake lines rather than being a
-    three-wire TX/RX/GND lash-up.
+    The idea was that the 350 asserts DTR whenever it is powered and never
+    negates it -- the manual calls it a "power on" indication -- so on a null
+    modem cable DSR true at this end would show the instrument was on and the
+    cable carried handshake lines.
+
+    Measured on 27-Aug-2026 with nothing plugged in at all, on the pl2303
+    adapter on pi-leem, that port reads CTS=True DSR=True CD=True RI=False. The
+    inputs float high, so true carries no information whatsoever and the idea
+    does not work on this hardware. A reading of FALSE still means something --
+    something is actively pulling that line down -- but true must not be taken
+    as evidence of anything.
 
     CD here is the host's, from whatever the cable maps to it; the 350's own
     DCD is an input to the 350 and cannot be read from this end.
@@ -136,17 +142,10 @@ def probe(port):
     else:
         print("control lines the adapter sees: %s"
               % "  ".join("%s=%s" % (k, v) for k, v in lines.items()))
-        if lines.get("DSR"):
-            print("   DSR is true. The 350 asserts DTR whenever it is powered,"
-                  "\n   so the instrument is on and the cable carries "
-                  "handshake lines.\n")
-        else:
-            print("   DSR is false. Either the 350 is not powered, or the "
-                  "cable is\n   three-wire (TX/RX/GND) and carries no "
-                  "handshake lines at all.\n   The second case is survivable: "
-                  "the 350's own DCD, CTS and DSR\n   can be forced true by "
-                  "switches [22], [23] and [24] on its board,\n   and then it "
-                  "needs nothing from this end.\n")
+        print("   Measured with nothing plugged in, this adapter reads "
+              "CTS=True DSR=True\n   CD=True RI=False: the inputs float high. "
+              "So true here proves nothing.\n   A line reading FALSE does mean "
+              "something is pulling it down.\n")
     heard = listen(ser, 6.0)
     ser.close()
     if heard:
