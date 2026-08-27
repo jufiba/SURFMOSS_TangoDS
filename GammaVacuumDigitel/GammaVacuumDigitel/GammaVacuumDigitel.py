@@ -215,6 +215,9 @@ class GammaVacuumDigitel(Device):
         """
         self._factor = None
         self._last = 0.0
+        # None until asked: whether this supply reports the setpoint relay
+        # state at all. Not knowing is different from it being absent.
+        self._reports_relay = None
         try:
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._sock.settimeout(5.0)
@@ -235,7 +238,26 @@ class GammaVacuumDigitel(Device):
                 self.set_state(DevState.ON)
             else:
                 self.set_state(DevState.OFF)
-            self.set_status("Connected to SPCe at %s:%d" % (self.IP, self.Port))
+            # Say what it is and what it can do. Both are one exchange each,
+            # asked once, and they turn "why is SetpointActive always
+            # invalid?" into something a client can read off the status.
+            model = "unknown model"
+            try:
+                model = " ".join(self._fields('01')) or model
+            except DigitelError:
+                pass
+            note = ""
+            try:
+                self._setpoint()
+                if (not self._reports_relay):
+                    note = ("; this supply reports only the two setpoint "
+                            "thresholds, not the relay state, so "
+                            "SetpointActive has no value to give")
+            except DigitelError:
+                pass
+            self.set_status("Connected to %s at %s:%d, supply %d%s"
+                            % (model, self.IP, self.Port, self.Supply, note))
+            self._describe_relay_support()
         except Exception as e:
             self._sock = None
             self.set_state(DevState.FAULT)
@@ -243,6 +265,7 @@ class GammaVacuumDigitel(Device):
 
     def _disconnect(self):
         self._factor = None
+        self._reports_relay = None
         if self._sock is not None:
             try:
                 self._sock.close()
@@ -468,24 +491,65 @@ class GammaVacuumDigitel(Device):
         """
         raw = [f.strip() for f in ' '.join(self._fields('3c')).split(',')]
         if (len(raw) == 2):
+            self._reports_relay = False
             return (raw[0], raw[1], None)
         if (len(raw) >= 5):
+            self._reports_relay = True
             return (raw[2], raw[3], raw[4])
         raise DigitelError("setpoint reply is neither two nor five values: %r"
                            % raw)
 
     def read_SetpointActive(self):
+        """The relay state, or INVALID on a supply that does not report it.
+
+        A supply that answers only the two thresholds is not faulty and there
+        is nothing wrong with the link: it simply has no such field to give,
+        and it never will. That used to go through the same path as a failed
+        exchange and put the whole device in FAULT, so reading one attribute a
+        model cannot support made every other reading look suspect.
+
+        Now the two are told apart. A capability that is absent returns
+        INVALID and leaves the state alone; only a real failure faults.
+        """
         try:
             (_on, _off, active) = self._setpoint()
-            if (active is None):
-                raise DigitelError("this supply reports only the two "
-                                   "thresholds, not the relay state")
-            return (active == '1')
         except (DigitelError, ValueError) as e:
             self.set_state(DevState.FAULT)
             self.set_status("Can't read the setpoint state: %s" % e)
             self.error_stream("Can't read the setpoint state: %s" % e)
             return (False, time.time(), tango.AttrQuality.ATTR_INVALID)
+        if (active is None):
+            # Not an error: no state change, no error_stream. The absence is
+            # already in the device status and in this attribute's own
+            # description, both set at connect.
+            return (False, time.time(), tango.AttrQuality.ATTR_INVALID)
+        return (active == '1')
+
+    def _describe_relay_support(self):
+        """Put the capability in the attribute's own description.
+
+        So it is visible in Jive next to the attribute rather than only in the
+        device status, and a client that finds SetpointActive permanently
+        invalid can read why without asking anyone.
+        """
+        if (self._reports_relay is None):
+            return
+        try:
+            attr = self.get_device_attr().get_attr_by_name("SetpointActive")
+            cfg = attr.get_properties()
+            if (self._reports_relay):
+                cfg.description = ("Whether the pressure interlock relay is "
+                                   "active, as the controller reports it")
+            else:
+                cfg.description = ("Not reported by this supply, which answers "
+                                   "only the two setpoint thresholds. Always "
+                                   "INVALID here; it is not a fault. Deriving "
+                                   "it from the pressure would be a guess: the "
+                                   "relay latches once active and also turns "
+                                   "on for error conditions.")
+            attr.set_properties(cfg)
+        except Exception as e:                                # noqa: BLE001
+            self.debug_stream("Could not describe SetpointActive: %s" % e)
 
     def read_SetpointOn(self):
         try:
