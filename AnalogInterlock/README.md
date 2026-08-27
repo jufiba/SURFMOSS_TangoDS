@@ -12,45 +12,30 @@ between two processes on a Raspberry Pi. Anything that genuinely must not
 happen belongs in a hardware chain — a flow switch in series with the supply
 enable — not here.
 
-## ⚠️ pi-xps must be netbooted first
+## ✅ pi-xps netboots (resolved 26-Aug-2026)
 
-This is written for the shared NFS root, but **pi-xps boots from its own
-microSD** and shares no software with it. Installing into `/nfs/pi-trixie` as
-described below does not reach that machine, and neither of the two
-prerequisites — the refactored `SEAWaterflowmeter` and the patched
-`RaspberryButton` — is present on it either. The agreed order (19-ago-2026) is
-to move pi-xps to netboot on a day when nothing is being measured, verify
-`SEAWaterflowmeter` there (including what `channel0` is actually named) and
-`RaspberryButton`, and only then bring this server up.
+This is written for the shared NFS root. Until 26-Aug-2026 **pi-xps booted from
+its own microSD** and shared no software with it, so installing into
+`/nfs/pi-trixie` did not reach that machine and this server was deliberately
+kept out of the install set. That is no longer the case.
+
+Both prerequisites are in the repository: `SEAWaterflowmeter`'s `UpdateCount`
+and `channelnames`, and `RaspberryButton`'s `Keepalive` / `DeadmanTimeout`. What
+still has to be checked **on the machine** before bringing this up is what
+`channelnames[0]` is actually set to on `xps/safety/water` — see
+_Registration_ below, where this document and the code disagree.
 
 ## Installation into the repository
 
-Drop the `AnalogInterlock/` directory at the top level of `SURFMOSS_TangoDS`,
-alongside `PIDController/`, `SEAWaterflowmeter/` and the rest, then add three
-lines to `pyproject.toml`:
+Done on 27-Aug-2026: `AnalogInterlock` is in `[project.scripts]`,
+`[tool.setuptools] packages` and `[tool.setuptools.package-dir]`, which brings
+the live count to 33 and makes the directory and installable counts agree again.
 
-```toml
-[project.scripts]
-# AnalogInterlock
-AnalogInterlock = "AnalogInterlock:main"
-```
+Installed is not registered: the server is built and its wrapper appears in
+`/usr/local/bin`, but nothing starts until it is entered in the database with
+the properties below.
 
-```toml
-[tool.setuptools]
-packages = [
-    "AGPolaritySwitch",
-    "AMLPGC1",
-    "AnalogInterlock",       # <- alphabetically after AMLPGC1
-    ...
-]
-```
-
-```toml
-[tool.setuptools.package-dir]
-AnalogInterlock   = "AnalogInterlock/AnalogInterlock"
-```
-
-Then regenerate the entry-point wrapper on the shared NFS root:
+To regenerate the entry-point wrapper on the shared NFS root:
 
 ```bash
 sudo systemd-nspawn -D /nfs/pi-trixie
@@ -72,7 +57,7 @@ Set the properties *before* starting it for the first time: without
 | Property             | Value for pi-xps              |
 |----------------------|-------------------------------|
 | `InputDevice`        | `xps/safety/water`            |
-| `InputAttribute`     | **check first** — see below   |
+| `InputAttribute`     | `xray` — confirmed, see below |
 | `HeartbeatAttribute` | `UpdateCount`                 |
 | `OutputDevice`       | `xps/safety/xrayguninterlock` |
 | `ThresholdOff`       | `1.6`                         |
@@ -82,11 +67,16 @@ Set the properties *before* starting it for the first time: without
 | `ProxyTimeout`       | `800` (default; see Timing)   |
 
 The named attribute comes from `channelnames` on `xps/safety/water`, which has
-`channels = '13'` — one channel, so one named attribute, whatever
-`channelnames[0]` says. This document said `xray` and the code's own example
-says `xraygun`; both cannot be right, and on the version running today there are
-no named attributes at all, only `channel0..3`. Read the property before setting
-this.
+`channels = '13'` — one channel, so one named attribute. **Settled on
+27-Aug-2026 by reading the database: `channelnames = ['xray']`**, so the
+attribute is `xray`. This document was right and the code's own example, which
+says `xraygun`, is wrong.
+
+The refactored server is deployed on pi-xps and running: `xps/safety/water` is
+ON and exposes `xray` alongside `channel0..3` and `UpdateCount`. So is the
+patched `RaspberryButton`: `xps/safety/xrayguninterlock` has `Pin = 26` and
+publishes `PinLevel`, `Active` and `TimeSinceKeepalive`. Its `DeadmanTimeout` is
+still unset, which is correct until commissioning step 4.
 
 Requires the refactored `SEAWaterflowmeter` (for the named attribute and for
 `UpdateCount`) and the patched `RaspberryButton` (for `Keepalive`).

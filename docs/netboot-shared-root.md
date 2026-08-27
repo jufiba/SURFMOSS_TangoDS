@@ -762,7 +762,7 @@ across Pis; identity comes from DHCP.
 **Validated**: pi-test (`ed8dd269`, `dc:a6:32:89:e7:1d`, `10.43.88.21`), Aug-2026.
 
 **First production Pi 4: pi-laser**, netbooting from the shared root on
-27-Aug-2026, running `GammaVacuumSPCe/1`. The procedure above needed no changes,
+27-Aug-2026, running `GammaVacuumDigitel/1`. The procedure above needed no changes,
 and the same arm64 root serves it alongside the 3B+ boards. The only thing that
 differs in practice is the USB tree: a Pi 4's `/dev/serial/by-path` names begin
 `platform-fd500000.pcie-...`, not `platform-3f980000.usb-...`, so a `SerialPort`

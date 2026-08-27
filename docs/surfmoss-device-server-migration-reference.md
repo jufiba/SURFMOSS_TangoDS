@@ -29,7 +29,10 @@ the number beside it is a reading. The port also finally got `timeout=1`,
 without which a silent gauge blocked in `read_until` rather than failing and
 none of the new error handling could ever run.
 
-### GammaVacuumSPCe: written to the serial packet, run over Telnet (`0a016bc`)
+### GammaVacuumDigitel: written to the serial packet, run over Telnet (`0a016bc`)
+
+_Renamed from `GammaVacuumSPCe` on 27-Aug-2026 (`6ffce36`), when it grew to serve
+the QPC as well; the old name appears below only in dated entries._
 
 The server the repository had flagged as *never tested against the real
 controller*. Pointed at the LEEM column ion pump, it connected and reported
@@ -424,7 +427,7 @@ python3 tools/check_xmi.py            # 0 if everything matches, 1 if there are 
 ```
 
 State at the time of writing: 41 in sync, 0 divergences, 2 with no model
-(AnalogInterlock and GammaVacuumSPCe) and 1 not comparable (PIDController, an old
+(AnalogInterlock and GammaVacuumDigitel) and 1 not comparable (PIDController, an old
 template using `DeviceClass`).
 
 ⚠️ And if *Generate* is ever run by mistake, the wreckage shows up at once:
@@ -452,13 +455,13 @@ import fails at launch.
 
 **The live-server list below is what all three must agree on.**
 
-Tally: **32 live · 7 inactive · 4 deprecated** (= 43 entry-point servers).
+Tally: **33 live · 7 inactive · 4 deprecated** (= 44 entry-point servers).
 
 _RaspberryButton_old and PANIC used to be counted here as special cases; neither
 is in the repository any more. See the note below._
 
-_(It was 31 · 9 until 13-Aug-2026, when WisselMCA and GammaVacuumSPCe went from
-inactive to live, and 33 · 7 · 3 until 18-Aug-2026, when Motor went to
+_(It was 31 · 9 until 13-Aug-2026, when WisselMCA and GammaVacuumDigitel (then
+GammaVacuumSPCe) went from inactive to live, and 33 · 7 · 3 until 18-Aug-2026, when Motor went to
 deprecated. The chroot tally above, dated 30-Jun-2026, predates both changes:
 a reinstall should produce 32 wrappers, not 31.)_
 
@@ -466,17 +469,17 @@ a reinstall should produce 32 wrappers, not 31.)_
 
 ## Server inventory
 
-### LIVE — install on the Trixie root (32)
+### LIVE — install on the Trixie root (33)
 
 Entry point in `[project.scripts]`, installed, registered in the new DB.
 
-AGPolaritySwitch, AMLPGC1, ArduinoDAC, ArduinoMotor, ArduinoPt, MFC
+AGPolaritySwitch, AMLPGC1, **AnalogInterlock**, ArduinoDAC, ArduinoMotor, ArduinoPt, MFC
 (BronkhorstMFC), CryoCon32, ElmitecLEEM2k, ElmitecUview, FUGMCP, HuttingerPFGDC,
 HuttingerPFGRF, Hygrometer, Itech6000C, CenterOneGauge (LeyboldCenterOne),
 LeyboldIG3, MKSGauge, NetworkUPSTool, PfeifferHiscroll, PfeifferTC100,
 PfeifferTU400, RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, SRIlockin830,
 TempSensorDS18B20, VarianTV301nav, WaterSwitch, Tti604, **PIDController**,
-**WisselMCA**, **GammaVacuumSPCe**.
+**WisselMCA**, **GammaVacuumDigitel**.
 
 ### INACTIVE — keep in repo, do NOT install (7)
 
@@ -487,7 +490,8 @@ Move to `inactive/`. Code present but hardware idle or work remains. Not in
 GammaIonPump, Keithley2100, MCC1208LS, PfeifferDCU002,
 V4L2Camera, VSMControlDevice, WebCam.
 
-_(WisselMCA and GammaVacuumSPCe left this list on 13-Aug-2026 — reactivated,
+_(WisselMCA and GammaVacuumDigitel, then GammaVacuumSPCe, left this list on
+13-Aug-2026 — reactivated,
 see below.)_
 
 ### DEPRECATED — dead hardware, remove from install set permanently (4)
@@ -513,12 +517,15 @@ in the DB — not as a server, not as a class, and with no devices.)_
   network's DB; the code is at the `panic-final` tag and at
   https://github.com/ALBA-Synchrotron/panic
 
-- **AnalogInterlock** — ⏳ it is in the tree but **deliberately outside**
-  `[project.scripts]` and `packages`, so it is not installed. That is why there
-  are **33 server directories and 32 installable ones**, and it is not a mistake:
-  it is waiting for pi-xps to move to netboot, because today it boots from its
-  microSD and does not share software with the shared root. See
-  `AnalogInterlock/README.md`.
+- **AnalogInterlock** — ✅ installed from 27-Aug-2026. It was deliberately held
+  out of `[project.scripts]` and `packages` while pi-xps still booted from its
+  own microSD and shared no software with the root, which is why the directory
+  and installable counts used to differ. pi-xps netboots now, and both of its
+  prerequisites are in the repository: `SEAWaterflowmeter`'s `UpdateCount` and
+  `channelnames`, and `RaspberryButton`'s `Keepalive` / `DeadmanTimeout`.
+  Installing it does **not** register or start it — see `AnalogInterlock/README.md`
+  for the properties, which must be set before its first start, and for the
+  commissioning sequence.
 
 ---
 
@@ -665,7 +672,7 @@ Pi left on microSD.** See `docs/netboot-shared-root.md`.
 #### Update (27-Aug-2026): pi-laser
 
 ```
-pi-laser      GammaVacuumSPCe/1   (leem/vacuum/IonPumpColumns)
+pi-laser      GammaVacuumDigitel/1  (leem/vacuum/IonPumpColumns)
 ```
 
 The first **Pi 4** in production, netbooting from the shared root. It was
@@ -692,7 +699,7 @@ written just above the literal, commented out — that is, whatever was in the
 database was being ignored. Now the DB is what counts:
 
 **Names unified on 13-Aug-2026**: the four networked DS now use `IP` and `Port`.
-ElmitecUview had them as `UviewIP` / `UviewPort`, and GammaVacuumSPCe called its
+ElmitecUview had them as `UviewIP` / `UviewPort`, and GammaVacuumDigitel called its
 own `Host`.
 
 | DS | property | default value | `Port` |
@@ -700,7 +707,7 @@ own `Host`.
 | ElmitecLEEM2k | `IP` | `tvips.lab` | 5566 |
 | ElmitecUview | `IP` | `tvips.lab` | 5570 |
 | Itech6000C | `IP` | `PWSItech6000VSM.lab` | 30000 |
-| GammaVacuumSPCe | `IP` | **no default — it has to be set in the DB** | 23 |
+| GammaVacuumDigitel | `IP` | **no default — it has to be set in the DB** | 23 |
 
 `tvips` is the LEEM computer, which also controls the TVIPS XFS216 camera.
 
@@ -1169,7 +1176,7 @@ and the published IOR ends up unreachable.
 
 ---
 
-## GammaVacuumSPCe (reactivated 13-Aug-2026)
+## GammaVacuumDigitel (reactivated 13-Aug-2026)
 
 Source for the Gamma Vacuum DIGITEL SPCe ion pump, over Telnet on TCP (port 23 by
 default). Returned to the root and registered as the **33rd entry** of
@@ -1233,7 +1240,7 @@ ls /usr/local/bin/ | grep -iE 'Mitutoyo|Specs|VarianMultiGauge|Gamma|Keithley|MC
    - [ ] RaspberryButton_old removed.
    - [x] WisselMCA encoding fix committed, and the server reactivated on
          13-Aug-2026: it lives at the root and is in `pyproject.toml` (32nd entry).
-   - [x] GammaVacuumSPCe reactivated on 13-Aug-2026 (33rd entry). No `.xmi` and
+   - [x] GammaVacuumDigitel reactivated on 13-Aug-2026 (as GammaVacuumSPCe). No `.xmi` and
          untested against the controller; its `IP` property has no default and
          has to be set in the DB when registering the device.
    - [x] The four networked DS use `IP` / `Port` under the same name. Mind the
