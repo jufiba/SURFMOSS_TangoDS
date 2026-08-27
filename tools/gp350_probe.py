@@ -16,11 +16,16 @@ It also answers the other question a first connection raises, which is whether
 the null modem cable is wired for this instrument at all:
 
 - Nothing answers on any combination -> no bytes are getting through in at
-  least one direction, or the gauge is off.
+  least one direction, or the gauge is off. Section 4.4 gives two separate ways
+  to produce exactly this silence, and they are worth telling apart:
+  DCD is tested as each character *arrives* and the character is ignored unless
+  it is true, so a false DCD means the 350 never even parses; while CTS and DSR
+  are tested before each character it *sends*, and the 350 waits for both before
+  transmitting, so a false CTS or DSR means it parsed fine and can never reply.
+  All three are forced true by switches [22], [23] and [24] as shipped.
 - SYNTAX ERROR on a message that is not a syntax error -> the bytes arrive but
-  DCD is not asserted while they do. The manual gives that as a cause of
-  SYNTAX ERROR, and it is a cable question: DCD, CTS and DSR can be forced true
-  by switches [22], [23] and [24] on the interface board.
+  DCD dropped part way through the message, so some characters were ignored and
+  what was left did not parse. The manual names that as a cause.
 - Unsolicited lines with nothing sent -> switch S1 was off at power-up and the
   module is in talk-only mode, sending all three displays every five seconds.
   A command/response server cannot work against that; S1 has to go on.
@@ -82,6 +87,24 @@ def plausible(reply):
     return None
 
 
+def control_lines(ser):
+    """What the 350 is driving back at us, if the cable carries it.
+
+    The 350 asserts DTR on power-up and never negates it -- the manual calls it
+    a "power on" indication. On a null modem cable that lands on the host's
+    DSR. So DSR true is good evidence of two things at once: the instrument is
+    powered, and the cable carries handshake lines rather than being a
+    three-wire TX/RX/GND lash-up.
+
+    CD here is the host's, from whatever the cable maps to it; the 350's own
+    DCD is an input to the 350 and cannot be read from this end.
+    """
+    try:
+        return {"CTS": ser.cts, "DSR": ser.dsr, "CD": ser.cd, "RI": ser.ri}
+    except Exception as exc:                                  # noqa: BLE001
+        return {"error": str(exc)}
+
+
 def listen(ser, seconds):
     """Whatever arrives with nothing sent, for talk-only detection."""
     import time
@@ -107,6 +130,23 @@ def probe(port):
     except serial.SerialException as exc:
         print("cannot open the port: %s" % exc)
         return 2
+    lines = control_lines(ser)
+    if "error" in lines:
+        print("could not read the control lines: %s\n" % lines["error"])
+    else:
+        print("control lines the adapter sees: %s"
+              % "  ".join("%s=%s" % (k, v) for k, v in lines.items()))
+        if lines.get("DSR"):
+            print("   DSR is true. The 350 asserts DTR whenever it is powered,"
+                  "\n   so the instrument is on and the cable carries "
+                  "handshake lines.\n")
+        else:
+            print("   DSR is false. Either the 350 is not powered, or the "
+                  "cable is\n   three-wire (TX/RX/GND) and carries no "
+                  "handshake lines at all.\n   The second case is survivable: "
+                  "the 350's own DCD, CTS and DSR\n   can be forced true by "
+                  "switches [22], [23] and [24] on its board,\n   and then it "
+                  "needs nothing from this end.\n")
     heard = listen(ser, 6.0)
     ser.close()
     if heard:
@@ -148,10 +188,19 @@ def probe(port):
     if not found:
         print("nothing answered on any of the %d combinations."
               % (len(BAUDS) * len(FRAMINGS)))
-        print("Either no bytes are getting through -- check the null modem "
-              "cable and that\nthe 350 is powered -- or the gauge is off in a "
-              "way that stops even DGS\nanswering, which would be unusual: DGS "
-              "answers 0 with no filament on.")
+        print("DGS answers 0 even with no filament on, so a live link should "
+              "have said\nsomething. Two causes to tell apart, from section "
+              "4.4:")
+        print("  - the 350's DCD false: it ignores every character as it "
+              "arrives and never\n    parses anything;")
+        print("  - its CTS or DSR false: it parses fine and waits for ever "
+              "before sending.")
+        print("Both are silence from here. Switches [22], [23] and [24] force "
+              "DCD, CTS and\nDSR true and take the cable out of the question; "
+              "that is how the 350 ships.\nCheck those first, then the cable, "
+              "then that the gauge is powered -- and note\nthe 350's connector "
+              "is a DB-25, so anything DE-9 in the chain is an adapter\nthat "
+              "may or may not carry pins 4, 5, 6, 8 and 20.")
         return 1
     good = [f for f in found if f[4] == "ok"]
     if good:

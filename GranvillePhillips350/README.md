@@ -62,6 +62,48 @@ be set to whatever that label says.
 On pi-leem the port is
 `/dev/serial/by-path/platform-3f980000.usb-usb-0:1.1.3:1.0-port0`.
 
+## The cable
+
+The 350's connector is a **DB-25**, and its control lines matter (manual,
+section 4.4):
+
+| Signal | Pin | Direction  |
+|--------|-----|------------|
+| TxD    | 2   | to computer |
+| RxD    | 3   | to 350      |
+| RTS    | 4   | to computer |
+| CTS    | 5   | to 350      |
+| DSR    | 6   | to 350      |
+| DCD    | 8   | to 350      |
+| DTR    | 20  | to computer |
+
+It transmits on pin 2, so it is wired as a DTE like the computer — hence the
+null modem cable. Anything DE-9 in the chain is an adapter, and whether it
+carries pins 4, 5, 6, 8 and 20 is exactly the question.
+
+Three of those lines can stop the exchange dead, in two different ways that
+both look like silence from this end:
+
+- **DCD is tested as each character arrives**, and the character is ignored
+  unless it is true. A false DCD means the 350 never parses anything. If DCD
+  drops only part way through a message, what is left does not parse and the
+  reply is `SYNTAX ERROR` — which is why that error is a wiring symptom here
+  and not a bug in the message.
+- **CTS and DSR are tested before each character it sends**, and it waits for
+  both before transmitting. A false CTS or DSR means it parsed the message
+  perfectly and will never reply.
+
+All three are forced true by switches **[22]**, **[23]** and **[24]** on the
+interface board, which is how it ships. With those set, the 350 needs nothing
+from this end and a three-wire cable is enough. Check them before suspecting
+the cable.
+
+The one line that helps from here is **DTR: the 350 asserts it whenever it is
+powered** and never negates it — the manual calls it a "power on" indication.
+On a null modem cable that lands on the host's DSR, so `DSR=True` at the
+adapter is evidence both that the instrument is on and that the cable carries
+handshake lines. The probe reports it.
+
 ## First connection
 
 Run the probe before registering anything. It is read-only — it sends `DS IG`
