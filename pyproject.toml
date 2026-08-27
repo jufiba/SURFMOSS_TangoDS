@@ -34,6 +34,8 @@ ElmitecUview = "ElmitecUview:main"
 FUGMCP = "FUGMCP:main"
 # GammaVacuumDigitel
 GammaVacuumDigitel = "GammaVacuumDigitel:main"
+# GranvillePhillips350
+GranvillePhillips350 = "GranvillePhillips350:main"
 # HuttingerPFG-DC
 HuttingerPFGDC = "HuttingerPFGDC:main"
 # HuttingerPFG-RF
@@ -91,6 +93,7 @@ packages = [
     "ElmitecUview",
     "FUGMCP",
     "GammaVacuumDigitel",
+    "GranvillePhillips350",
     "HuttingerPFGDC",
     "HuttingerPFGRF",
     "Hygrometer",
@@ -115,39 +118,40 @@ packages = [
 ]
 
 [tool.setuptools.package-dir]
-AGPolaritySwitch   = "AGPolaritySwitch/AGPolaritySwitch"
-AMLPGC1            = "AMLPGC1/AMLPGC1"
-AnalogInterlock    = "AnalogInterlock/AnalogInterlock"
-ArduinoDAC         = "ArduinoDAC/ArduinoDAC"
-ArduinoMotor       = "ArduinoMotor/ArduinoMotor"
-ArduinoPt          = "ArduinoPt/ArduinoPt"
-CenterOneGauge     = "CenterOneGauge/CenterOneGauge"
-CryoCon32          = "CryoCon32/CryoCon32"
-ElmitecLEEM2k      = "ElmitecLEEM2k/ElmitecLEEM2k"
-ElmitecUview       = "ElmitecUview/ElmitecUview"
-FUGMCP             = "FUGMCP/FUGMCP"
-GammaVacuumDigitel = "GammaVacuumDigitel/GammaVacuumDigitel"
-HuttingerPFGDC     = "HuttingerPFGDC/HuttingerPFGDC"
-HuttingerPFGRF     = "HuttingerPFGRF/HuttingerPFGRF"
-Hygrometer         = "Hygrometer/Hygrometer"
-Itech6000C         = "Itech6000C/Itech6000C"
-LeyboldIG3         = "LeyboldIG3/LeyboldIG3"
-MFC                = "MFC/MFC"
-MKSGauge           = "MKSGauge/MKSGauge"
-NetworkUPSTool     = "NetworkUPSTool/NetworkUPSTool"
-PIDController      = "PIDController/PIDController"
-PfeifferHiscroll   = "PfeifferHiscroll/PfeifferHiscroll"
-PfeifferTC100      = "PfeifferTC100/PfeifferTC100"
-PfeifferTU400      = "PfeifferTU400/PfeifferTU400"
-RaspberryButton    = "RaspberryButton/RaspberryButton"
-RaspberrySwitch    = "RaspberrySwitch/RaspberrySwitch"
-SEAWaterflowmeter  = "SEAWaterflowmeter/SEAWaterflowmeter"
-SRIlockin830       = "SRIlockin830/SRIlockin830"
-TempSensorDS18B20  = "TempSensorDS18B20/TempSensorDS18B20"
-Tti604             = "Tti604/Tti604"
-VarianTV301nav     = "VarianTV301nav/VarianTV301nav"
-WaterSwitch        = "WaterSwitch/WaterSwitch"
-WisselMCA          = "WisselMCA/WisselMCA"
+AGPolaritySwitch     = "AGPolaritySwitch/AGPolaritySwitch"
+AMLPGC1              = "AMLPGC1/AMLPGC1"
+AnalogInterlock      = "AnalogInterlock/AnalogInterlock"
+ArduinoDAC           = "ArduinoDAC/ArduinoDAC"
+ArduinoMotor         = "ArduinoMotor/ArduinoMotor"
+ArduinoPt            = "ArduinoPt/ArduinoPt"
+CenterOneGauge       = "CenterOneGauge/CenterOneGauge"
+CryoCon32            = "CryoCon32/CryoCon32"
+ElmitecLEEM2k        = "ElmitecLEEM2k/ElmitecLEEM2k"
+ElmitecUview         = "ElmitecUview/ElmitecUview"
+FUGMCP               = "FUGMCP/FUGMCP"
+GammaVacuumDigitel   = "GammaVacuumDigitel/GammaVacuumDigitel"
+GranvillePhillips350 = "GranvillePhillips350/GranvillePhillips350"
+HuttingerPFGDC       = "HuttingerPFGDC/HuttingerPFGDC"
+HuttingerPFGRF       = "HuttingerPFGRF/HuttingerPFGRF"
+Hygrometer           = "Hygrometer/Hygrometer"
+Itech6000C           = "Itech6000C/Itech6000C"
+LeyboldIG3           = "LeyboldIG3/LeyboldIG3"
+MFC                  = "MFC/MFC"
+MKSGauge             = "MKSGauge/MKSGauge"
+NetworkUPSTool       = "NetworkUPSTool/NetworkUPSTool"
+PIDController        = "PIDController/PIDController"
+PfeifferHiscroll     = "PfeifferHiscroll/PfeifferHiscroll"
+PfeifferTC100        = "PfeifferTC100/PfeifferTC100"
+PfeifferTU400        = "PfeifferTU400/PfeifferTU400"
+RaspberryButton      = "RaspberryButton/RaspberryButton"
+RaspberrySwitch      = "RaspberrySwitch/RaspberrySwitch"
+SEAWaterflowmeter    = "SEAWaterflowmeter/SEAWaterflowmeter"
+SRIlockin830         = "SRIlockin830/SRIlockin830"
+TempSensorDS18B20    = "TempSensorDS18B20/TempSensorDS18B20"
+Tti604               = "Tti604/Tti604"
+VarianTV301nav       = "VarianTV301nav/VarianTV301nav"
+WaterSwitch          = "WaterSwitch/WaterSwitch"
+WisselMCA            = "WisselMCA/WisselMCA"
 
 [tool.setuptools.package-data]
 "*" = ["*.xmi", "*.rst", "*.md"]

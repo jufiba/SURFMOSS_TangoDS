@@ -426,9 +426,10 @@ an interface change:
 python3 tools/check_xmi.py            # 0 if everything matches, 1 if there are divergences
 ```
 
-State at the time of writing: 41 in sync, 0 divergences, 2 with no model
-(AnalogInterlock and GammaVacuumDigitel) and 1 not comparable (PIDController, an old
-template using `DeviceClass`).
+State at the time of writing: 41 in sync, 0 divergences, 3 with no model
+(AnalogInterlock, GammaVacuumDigitel and GranvillePhillips350 — all three
+written by hand rather than with POGO) and 1 not comparable (PIDController, an
+old template using `DeviceClass`).
 
 ⚠️ And if *Generate* is ever run by mistake, the wreckage shows up at once:
 `python3 -m compileall` fails, because the file does not compile.
@@ -455,7 +456,7 @@ import fails at launch.
 
 **The live-server list below is what all three must agree on.**
 
-Tally: **33 live · 7 inactive · 4 deprecated** (= 44 entry-point servers).
+Tally: **34 live · 7 inactive · 4 deprecated** (= 45 entry-point servers).
 
 _RaspberryButton_old and PANIC used to be counted here as special cases; neither
 is in the repository any more. See the note below._
@@ -469,7 +470,7 @@ a reinstall should produce 32 wrappers, not 31.)_
 
 ## Server inventory
 
-### LIVE — install on the Trixie root (33)
+### LIVE — install on the Trixie root (34)
 
 Entry point in `[project.scripts]`, installed, registered in the new DB.
 
@@ -479,7 +480,7 @@ HuttingerPFGRF, Hygrometer, Itech6000C, CenterOneGauge (LeyboldCenterOne),
 LeyboldIG3, MKSGauge, NetworkUPSTool, PfeifferHiscroll, PfeifferTC100,
 PfeifferTU400, RaspberryButton, RaspberrySwitch, SEAWaterflowmeter, SRIlockin830,
 TempSensorDS18B20, VarianTV301nav, WaterSwitch, Tti604, **PIDController**,
-**WisselMCA**, **GammaVacuumDigitel**.
+**WisselMCA**, **GammaVacuumDigitel**, **GranvillePhillips350**.
 
 ### INACTIVE — keep in repo, do NOT install (7)
 
@@ -504,6 +505,18 @@ MitutoyoPostable, **Motor**, SpecsXRC1000, VarianMultiGauge.
 _(Motor came here on 18-Aug-2026, replaced by an Arduino with a DRV8825; its
 replacement is `ArduinoMotor`. Checked on 23-Aug-2026 that nothing of it is left
 in the DB — not as a server, not as a class, and with no devices.)_
+
+### ⏳ Written but never run against its instrument
+
+- **GranvillePhillips350** — added 27-Aug-2026 for the Granville Phillips 350
+  ion gauge on pi-leem, over a USB-serial adapter and a null modem cable. It is
+  in the install set, but the instrument was disconnected the day it was
+  written, so only its parsing has been exercised (over a stub, against the
+  real methods). The framing, the cable and DCD are all unverified. Run
+  `tools/gp350_probe.py` on pi-leem before registering it: nothing in the
+  protocol reports the baud rate or byte framing, which are DIP switches, so
+  the probe walks the manual's 8 x 8 table and prints the properties to set.
+  See `GranvillePhillips350/README.md`.
 
 ### Special cases
 
