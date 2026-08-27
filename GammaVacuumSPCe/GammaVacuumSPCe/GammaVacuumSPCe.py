@@ -62,6 +62,12 @@ class SPCeError(Exception):
 _HV_OFF_CURRENT  = "0.1E-09"
 _HV_OFF_PRESSURE = "0.1E-10"
 
+# The same literal again, in the setpoint's Off Point, where it means
+# something else: the manual says an Off Point of 0.1e-10 "will be ignored,
+# and once the Setpoint is active, the Setpoint will remain active independent
+# of the pressure thereafter". A marker, not a pressure.
+_SETPOINT_LATCHES = "0.1E-10"
+
 
 class GammaVacuumSPCe(Device):
     """
@@ -119,6 +125,28 @@ class GammaVacuumSPCe(Device):
     SupplyStatus = attribute(
         dtype='str',
         doc="Supply status message reported by the controller",
+    )
+
+    SetpointOn = attribute(
+        dtype='double',
+        unit="mbar",
+        standard_unit="mbar",
+        display_unit="mbar",
+        format="%4.2e",
+        doc="Pressure interlock On Point: the setpoint relay activates when "
+            "the pressure is equal to or above this value",
+    )
+
+    SetpointOff = attribute(
+        dtype='double',
+        unit="mbar",
+        standard_unit="mbar",
+        display_unit="mbar",
+        format="%4.2e",
+        doc="Pressure interlock Off Point: the setpoint relay deactivates "
+            "when the pressure is equal to or below this value. INVALID when "
+            "it is the 0.1E-10 marker, which means the relay latches on "
+            "instead of ever releasing",
     )
 
     # ---------------
@@ -339,6 +367,60 @@ class GammaVacuumSPCe(Device):
             self.set_status("Can't read the supply status: %s" % e)
             self.error_stream("Can't read the supply status: %s" % e)
             return ('', time.time(), tango.AttrQuality.ATTR_INVALID)
+
+    def _pressure_factor(self):
+        """The conversion to mbar of whatever unit the pump is set to.
+
+        There is no command that reports the unit on its own: 0B is the only
+        place it appears, and 0E only sets it. The setpoint values carry no
+        unit of their own, so they are in whatever 0B is reporting.
+        """
+        fields = self._fields('0b')
+        if (len(fields) < 2):
+            raise SPCeError("pressure reply carries no unit: %r" % fields)
+        if (fields[1] not in _UNIT_TO_MBAR):
+            raise SPCeError("unknown pressure unit %r: refusing to guess the "
+                            "conversion to mbar" % fields[1])
+        return _UNIT_TO_MBAR[fields[1]]
+
+    def _setpoint(self):
+        """The On and Off points, as the two strings the controller sends.
+
+        The manual documents 3C as answering "N, E, X.XE-XX, Y.YE-YY, O" --
+        setpoint number, enabled, on point, off point, and the live relay
+        state. This unit answers two comma-separated values and nothing else:
+
+            spc 3C 1  ->  OK 00 9.0E-08,2.0E-07
+
+        so the relay's own state is not readable over the protocol, and is not
+        exposed rather than being guessed from the pressure -- the manual has
+        it latching once active, and turning on for error conditions too.
+
+        There is exactly one setpoint on this supply: 3C 2 answers
+        "ER 08 *ERROR: PARAMETER 1: ILLEGAL RANGE (1 - 1)".
+        """
+        raw = ' '.join(self._fields('3c', '1')).split(',')
+        if (len(raw) < 2):
+            raise SPCeError("setpoint reply is not two values: %r" % raw)
+        return (raw[0].strip(), raw[1].strip())
+
+    def read_SetpointOn(self):
+        try:
+            (on, _off) = self._setpoint()
+            return float(on) * self._pressure_factor()
+        except (SPCeError, ValueError) as e:
+            return self._no_reading("setpoint On Point", e)
+
+    def read_SetpointOff(self):
+        try:
+            (_on, off) = self._setpoint()
+            if (off.upper() == _SETPOINT_LATCHES):
+                raise SPCeError("the Off Point is the %s marker, so the relay "
+                                "latches on instead of releasing: there is no "
+                                "off pressure to report" % off)
+            return float(off) * self._pressure_factor()
+        except (SPCeError, ValueError) as e:
+            return self._no_reading("setpoint Off Point", e)
 
     # --------
     # Commands
