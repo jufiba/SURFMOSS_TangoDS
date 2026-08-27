@@ -25,6 +25,7 @@ from tango import AttrWriteType
 # PROTECTED REGION ID(CenterOneGauge.additionnal_import) ENABLED START #
 import os
 import sys
+import time
 import serial
 # PROTECTED REGION END #    //  CenterOneGauge.additionnal_import
 
@@ -78,7 +79,7 @@ class CenterOneGauge(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(CenterOneGauge.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1)
+        self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=1)
         self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  CenterOneGauge.init_device
 
@@ -98,15 +99,49 @@ class CenterOneGauge(Device):
 
     def read_Pressure(self):
         # PROTECTED REGION ID(CenterOneGauge.Pressure_read) ENABLED START #
+        """Read the pressure, and make the state say what this read found.
+
+        The state used to be set ON once in init_device and moved to OFF by a
+        failed read, with nothing that could ever move it back. One transient
+        exchange therefore left the device reading pressure correctly and
+        reporting OFF for ever: leem/vacuum/gaugeEvap was found at 3.6 mbar,
+        ATTR_VALID, state OFF, and came back ON the moment it was restarted.
+        Every path here sets the state, in both directions.
+
+        0.0 on a pressure gauge reads as perfect vacuum, which is the most
+        dangerous value this attribute can hand to an interlock or an alarm:
+        it says the chamber is fine at exactly the moment nothing is known.
+        Every path with no reading returns INVALID instead. Same reasoning as
+        LeyboldIG3, SEAWaterflowmeter and TempSensorDS18B20.
+        """
         rcontrol = self.sendcommand("PR1 \r")
-
-        if rcontrol[0] == "\x06":
-            rdata = self.sendcommand("\x05")
-            status, data = self.formatdata(rdata)
-        else:
-            self.set_state(tango.DevState.OFF)
-            data = 0.0
-
+        if (not rcontrol.startswith("\x06")):
+            # rcontrol[0] on an empty string was an IndexError, which is what a
+            # read that times out now produces.
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("The gauge did not acknowledge PR1: %r"%rcontrol)
+            self.error_stream("The gauge did not acknowledge PR1: %r"%rcontrol)
+            return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
+        rdata = self.sendcommand("\x05")
+        try:
+            (status,data)=self.formatdata(rdata)
+        except (IndexError,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Unreadable answer to PR1: %r (%s)"%(rdata,e))
+            self.error_stream("Unreadable answer to PR1: %r"%rdata)
+            return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
+        # The first field is the measurement status, and 0 is the only value
+        # that means the number after it is a reading. Confirmed against the
+        # gauge: PR1 answers \x06, ENQ answers "0, 3.6000E+00". The non-zero
+        # codes are not told apart here because no manual for this gauge is in
+        # the repository; the code is reported verbatim so it can be looked up.
+        if (status!="0"):
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("The gauge reports measurement status %s, not 0, "
+                            "so there is no reading"%status)
+            self.debug_stream("The gauge reports measurement status %s"%status)
+            return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
+        self.set_state(tango.DevState.ON)
         return data
         # PROTECTED REGION END #    //  CenterOneGauge.Pressure_read
 
