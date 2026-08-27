@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 #
-# This file is part of the GammaVacuumSPCe project
+# This file is part of the GammaVacuumDigitel project
 #
 # Distributed under the terms of the GPL license.
 # See LICENSE.txt for more info.
 
 """Release information for Python Package"""
 
-name = """tangods-gammavacuumspce"""
+name = """tangods-gammavacuumdigitel"""
 version = "1.0.0"
 version_info = version.split(".")
 description = """Device server for the Gamma Vacuum DIGITEL SPCe ion pump power supply (Ethernet/Telnet)."""

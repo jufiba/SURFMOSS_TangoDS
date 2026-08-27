@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 #
-# This file is part of the GammaVacuumSPCe project
+# This file is part of the GammaVacuumDigitel project
 #
 # Distributed under the terms of the GPL license.
 # See LICENSE.txt for more info.
 
-"""GammaVacuumSPCe
+"""GammaVacuumDigitel
 
 Device server for the Gamma Vacuum DIGITEL SPCe ion pump power supply.
 Connects via Ethernet Telnet interface (TCP port 23).
@@ -29,7 +29,7 @@ import os
 import sys
 import time
 
-__all__ = ["GammaVacuumSPCe", "main"]
+__all__ = ["GammaVacuumDigitel", "main"]
 
 # Conversion factors from the device's pressure unit to mbar. MBA is what
 # this controller actually reports; it was missing, and an unknown unit used
@@ -47,7 +47,7 @@ _UNIT_TO_MBAR = {
 }
 
 
-class SPCeError(Exception):
+class DigitelError(Exception):
     """The controller did not answer, or answered something unusable.
 
     One exception for every way the exchange can fail, because to every caller
@@ -69,7 +69,7 @@ _HV_OFF_PRESSURE = "0.1E-10"
 _SETPOINT_LATCHES = "0.1E-10"
 
 
-class GammaVacuumSPCe(Device):
+class GammaVacuumDigitel(Device):
     """
     Device server for the Gamma Vacuum DIGITEL SPCe ion pump power supply.
     Connects via the Ethernet Telnet interface (default TCP port 23).
@@ -240,21 +240,21 @@ class GammaVacuumSPCe(Device):
             while not response.endswith(b">"):
                 c = self._sock.recv(1)
                 if not c:
-                    raise SPCeError("the controller closed the connection")
+                    raise DigitelError("the controller closed the connection")
                 if c == b'\xff':          # Telnet IAC: drop the two that follow
                     self._sock.recv(2)
                     continue
                 response += c
             return response[:-1].decode('ascii').strip()
-        except SPCeError:
+        except DigitelError:
             self._disconnect()
             raise
         except Exception as e:
             self._disconnect()
-            raise SPCeError("communication error: %s" % e)
+            raise DigitelError("communication error: %s" % e)
 
     def _fields(self, cmd, data=None):
-        """The data fields of one reply, or SPCeError.
+        """The data fields of one reply, or DigitelError.
 
         Over Telnet the reply is  STATUS CODE [data...]. The manual is
         explicit that, unlike the serial link, "no opening tilde, no address
@@ -265,18 +265,18 @@ class GammaVacuumSPCe(Device):
         resp = self._send_command(cmd, data)
         parts = resp.split()
         if (len(parts) < 2):
-            raise SPCeError("short reply to %s: %r" % (cmd, resp))
+            raise DigitelError("short reply to %s: %r" % (cmd, resp))
         if (parts[0] == 'ER'):
-            raise SPCeError("the controller refused %s, error code %s"
+            raise DigitelError("the controller refused %s, error code %s"
                             % (cmd, parts[1]))
         if (parts[0] != 'OK'):
-            raise SPCeError("reply to %s begins with neither OK nor ER: %r"
+            raise DigitelError("reply to %s begins with neither OK nor ER: %r"
                             % (cmd, resp))
         fields = parts[2:]
         # A command it will not run still answers OK, with the complaint in
         # the data: "OK 00 *ERROR: COMMAND DISABLED".
         if (fields and fields[0].startswith('*ERROR')):
-            raise SPCeError("the controller answered %s with %s"
+            raise DigitelError("the controller answered %s with %s"
                             % (cmd, ' '.join(fields)))
         return fields
 
@@ -289,7 +289,7 @@ class GammaVacuumSPCe(Device):
         """
         try:
             on = (self._fields('61')[:1] == ['YES'])
-        except SPCeError as e:
+        except DigitelError as e:
             self.set_state(DevState.FAULT)
             self.set_status("Can't tell whether the high voltage is on: %s" % e)
             self.error_stream("Can't tell whether the high voltage is on: %s" % e)
@@ -322,15 +322,15 @@ class GammaVacuumSPCe(Device):
         try:
             fields = self._fields('0b')
             if (len(fields) < 2):
-                raise SPCeError("pressure reply carries no unit: %r" % fields)
+                raise DigitelError("pressure reply carries no unit: %r" % fields)
             if (fields[0].upper() == _HV_OFF_PRESSURE):
-                raise SPCeError("the high voltage is off, so %s is the "
+                raise DigitelError("the high voltage is off, so %s is the "
                                 "HV-off marker and not a pressure" % fields[0])
             if (fields[1] not in _UNIT_TO_MBAR):
-                raise SPCeError("unknown pressure unit %r: refusing to guess "
+                raise DigitelError("unknown pressure unit %r: refusing to guess "
                                 "the conversion to mbar" % fields[1])
             return float(fields[0]) * _UNIT_TO_MBAR[fields[1]]
-        except (SPCeError, ValueError) as e:
+        except (DigitelError, ValueError) as e:
             return self._no_reading("pressure", e)
 
     def read_Current(self):
@@ -338,12 +338,12 @@ class GammaVacuumSPCe(Device):
         try:
             fields = self._fields('0a')
             if (not fields):
-                raise SPCeError("current reply carries no value")
+                raise DigitelError("current reply carries no value")
             if (fields[0].upper() == _HV_OFF_CURRENT):
-                raise SPCeError("the high voltage is off, so %s is the "
+                raise DigitelError("the high voltage is off, so %s is the "
                                 "HV-off marker and not a current" % fields[0])
             return float(fields[0])
-        except (SPCeError, ValueError) as e:
+        except (DigitelError, ValueError) as e:
             return self._no_reading("current", e)
 
     def read_Voltage(self):
@@ -351,9 +351,9 @@ class GammaVacuumSPCe(Device):
         try:
             fields = self._fields('0c')
             if (not fields):
-                raise SPCeError("voltage reply carries no value")
+                raise DigitelError("voltage reply carries no value")
             return float(fields[0])
-        except (SPCeError, ValueError) as e:
+        except (DigitelError, ValueError) as e:
             return self._no_reading("voltage", e)
 
     def read_SupplyStatus(self):
@@ -362,7 +362,7 @@ class GammaVacuumSPCe(Device):
         # the Telnet reply does not carry.
         try:
             return ' '.join(self._fields('0d'))
-        except SPCeError as e:
+        except DigitelError as e:
             self.set_state(DevState.FAULT)
             self.set_status("Can't read the supply status: %s" % e)
             self.error_stream("Can't read the supply status: %s" % e)
@@ -377,9 +377,9 @@ class GammaVacuumSPCe(Device):
         """
         fields = self._fields('0b')
         if (len(fields) < 2):
-            raise SPCeError("pressure reply carries no unit: %r" % fields)
+            raise DigitelError("pressure reply carries no unit: %r" % fields)
         if (fields[1] not in _UNIT_TO_MBAR):
-            raise SPCeError("unknown pressure unit %r: refusing to guess the "
+            raise DigitelError("unknown pressure unit %r: refusing to guess the "
                             "conversion to mbar" % fields[1])
         return _UNIT_TO_MBAR[fields[1]]
 
@@ -401,25 +401,25 @@ class GammaVacuumSPCe(Device):
         """
         raw = ' '.join(self._fields('3c', '1')).split(',')
         if (len(raw) < 2):
-            raise SPCeError("setpoint reply is not two values: %r" % raw)
+            raise DigitelError("setpoint reply is not two values: %r" % raw)
         return (raw[0].strip(), raw[1].strip())
 
     def read_SetpointOn(self):
         try:
             (on, _off) = self._setpoint()
             return float(on) * self._pressure_factor()
-        except (SPCeError, ValueError) as e:
+        except (DigitelError, ValueError) as e:
             return self._no_reading("setpoint On Point", e)
 
     def read_SetpointOff(self):
         try:
             (_on, off) = self._setpoint()
             if (off.upper() == _SETPOINT_LATCHES):
-                raise SPCeError("the Off Point is the %s marker, so the relay "
+                raise DigitelError("the Off Point is the %s marker, so the relay "
                                 "latches on instead of releasing: there is no "
                                 "off pressure to report" % off)
             return float(off) * self._pressure_factor()
-        except (SPCeError, ValueError) as e:
+        except (DigitelError, ValueError) as e:
             return self._no_reading("setpoint Off Point", e)
 
     # --------
@@ -455,9 +455,9 @@ class GammaVacuumSPCe(Device):
         data = parts[1] if len(parts) > 1 else None
         try:
             return self._send_command(cmd, data)
-        except SPCeError as e:
+        except DigitelError as e:
             tango.Except.throw_exception("SPCe_CommunicationFailed", str(e),
-                                         "GammaVacuumSPCe.send_command")
+                                         "GammaVacuumDigitel.send_command")
 
 
 # ----------
@@ -468,7 +468,7 @@ def main(args=None, **kwargs):
     # pip install -e leaves an absolute path in argv[0], and PyTango 10 uses
     # argv[0] as the server name, which the database registers as the bare name.
     sys.argv[0] = os.path.basename(sys.argv[0])
-    return run((GammaVacuumSPCe,), args=args, **kwargs)
+    return run((GammaVacuumDigitel,), args=args, **kwargs)
 
 if __name__ == '__main__':
     main()
