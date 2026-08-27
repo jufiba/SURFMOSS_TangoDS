@@ -27,21 +27,40 @@ from tango import DispLevel, DevState
 import socket
 import os
 import sys
+import time
 
 __all__ = ["GammaVacuumSPCe", "main"]
 
-# Conversion factors from the device's pressure unit to mbar
+# Conversion factors from the device's pressure unit to mbar. MBA is what
+# this controller actually reports; it was missing, and an unknown unit used
+# to fall back to 1.0, which happened to be right for mbar and would have been
+# a silent 1.33x error had the pump been switched to Torr. Unknown units are
+# refused now instead of assumed.
 _UNIT_TO_MBAR = {
-    'Torr': 1.33322,
+    'MBA':  1.0,
     'MBR':  1.0,
     'mbar': 1.0,
+    'Torr': 1.33322,
+    'TOR':  1.33322,
     'PA':   0.01,
     'Pa':   0.01,
 }
 
-# Sentinel values returned when HV is off
-_HV_OFF_CURRENT  = 0.1e-9   # "0.1E-09 AMPS" = HV off
-_HV_OFF_PRESSURE = 0.1e-10  # "0.1E-10 UUU"  = HV off
+
+class SPCeError(Exception):
+    """The controller did not answer, or answered something unusable.
+
+    One exception for every way the exchange can fail, because to every caller
+    they mean the same thing: there is no reading to be had.
+    """
+
+# What the controller sends instead of a reading when the high voltage is off
+# (manual, commands 0A and 0B). Compared as the literal text it sends, so no
+# float rounding can turn a sentinel into a plausible reading. These were
+# defined before and used nowhere: an HV-off pump reported 1e-11 mbar, which
+# reads as an outstanding vacuum.
+_HV_OFF_CURRENT  = "0.1E-09"
+_HV_OFF_PRESSURE = "0.1E-10"
 
 
 class GammaVacuumSPCe(Device):
@@ -135,9 +154,11 @@ class GammaVacuumSPCe(Device):
                 pass
             self._sock.settimeout(5.0)
             # Query HV state to set the Tango state
-            resp = self._send_command('61')
-            parts = resp.split()
-            if len(parts) >= 4 and parts[3] == 'YES':
+            # Over Telnet the answer is "OK 00 YES"; parts[3] is the serial
+            # layout's field and does not exist here, so this always fell
+            # through to OFF -- the pump read RUNNING with its HV on and the
+            # device server said OFF.
+            if (self._fields('61')[:1] == ['YES']):
                 self.set_state(DevState.ON)
             else:
                 self.set_state(DevState.OFF)
@@ -156,11 +177,19 @@ class GammaVacuumSPCe(Device):
             self._sock = None
 
     def _send_command(self, cmd, data=None):
-        """
-        Send a Telnet-format SPCe command and return the response string.
+        """Send one Telnet command and return its reply, prompt removed.
 
-        Command format:  spc <cmd> [data]\\r\\n
-        Response format: <ADDR> <OK|ER> <CODE> [fields...] <CHECKSUM>\\r
+        The controller ends a reply with CR CR LF and then its ">" prompt:
+
+            spc 0b\\r\\n  ->  b'OK 00 2.2E-09 MBA\\r\\r\\n>'
+
+        The old reader stopped at the first CR and then consumed exactly one
+        more byte, leaving the rest in the socket. Every exchange after that
+        returned the *previous* command's reply, with an empty read in
+        between, and the lag grew by one on every call: asking six times for
+        the pressure returned a voltage, nothing, a status, nothing, a
+        pressure, nothing. Reading up to the prompt keeps the stream in step
+        whatever the reply contains.
         """
         if self._sock is None:
             self._connect()
@@ -169,75 +198,147 @@ class GammaVacuumSPCe(Device):
         else:
             msg = ("spc %s\r\n" % cmd).encode('ascii')
         try:
+            # Anything still unread is the tail of an exchange that did not
+            # check out; left there it would be read as this reply.
+            self._sock.settimeout(0.0)
+            try:
+                while self._sock.recv(4096):
+                    pass
+            except (BlockingIOError, socket.timeout):
+                pass
+            self._sock.settimeout(5.0)
             self._sock.sendall(msg)
             response = b""
-            while True:
+            while not response.endswith(b">"):
                 c = self._sock.recv(1)
                 if not c:
-                    break
-                # Strip Telnet IAC bytes (0xFF and following two bytes)
-                if c == b'\xff':
+                    raise SPCeError("the controller closed the connection")
+                if c == b'\xff':          # Telnet IAC: drop the two that follow
                     self._sock.recv(2)
                     continue
                 response += c
-                if c in (b'\r', b'\n'):
-                    # Consume the paired LF or CR if present
-                    self._sock.settimeout(0.2)
-                    try:
-                        extra = self._sock.recv(1)
-                        if extra not in (b'\r', b'\n'):
-                            # Not a line-ending pair — put it back by re-reading
-                            pass
-                    except socket.timeout:
-                        pass
-                    self._sock.settimeout(5.0)
-                    break
-            return response.decode('ascii').strip()
+            return response[:-1].decode('ascii').strip()
+        except SPCeError:
+            self._disconnect()
+            raise
         except Exception as e:
             self._disconnect()
-            raise tango.DevFailed("Communication error: %s" % str(e))
+            raise SPCeError("communication error: %s" % e)
+
+    def _fields(self, cmd, data=None):
+        """The data fields of one reply, or SPCeError.
+
+        Over Telnet the reply is  STATUS CODE [data...]. The manual is
+        explicit that, unlike the serial link, "no opening tilde, no address
+        field, and no checksum are required" -- but this server was written to
+        the serial packet layout, so it read STATUS at parts[1] and the first
+        data field at parts[3], one place to the right of where they are.
+        """
+        resp = self._send_command(cmd, data)
+        parts = resp.split()
+        if (len(parts) < 2):
+            raise SPCeError("short reply to %s: %r" % (cmd, resp))
+        if (parts[0] == 'ER'):
+            raise SPCeError("the controller refused %s, error code %s"
+                            % (cmd, parts[1]))
+        if (parts[0] != 'OK'):
+            raise SPCeError("reply to %s begins with neither OK nor ER: %r"
+                            % (cmd, resp))
+        fields = parts[2:]
+        # A command it will not run still answers OK, with the complaint in
+        # the data: "OK 00 *ERROR: COMMAND DISABLED".
+        if (fields and fields[0].startswith('*ERROR')):
+            raise SPCeError("the controller answered %s with %s"
+                            % (cmd, ' '.join(fields)))
+        return fields
+
+    def _read_hv_state(self):
+        """Set the state from what command 61 reports, not from what was asked.
+
+        On and Off used to set the state themselves, so a command the
+        controller did not carry out left the state describing the request
+        rather than the pump.
+        """
+        try:
+            on = (self._fields('61')[:1] == ['YES'])
+        except SPCeError as e:
+            self.set_state(DevState.FAULT)
+            self.set_status("Can't tell whether the high voltage is on: %s" % e)
+            self.error_stream("Can't tell whether the high voltage is on: %s" % e)
+            return
+        self.set_state(DevState.ON if on else DevState.OFF)
+        self.set_status("Connected to SPCe at %s:%d, high voltage %s"
+                        % (self.IP, self.Port, "on" if on else "off"))
+
+    def _no_reading(self, what, why):
+        """FAULT with the reason, and an INVALID value rather than a number.
+
+        A made-up pressure or current is worse than none: read as a real
+        measurement it says the pump is fine at the moment nothing is known.
+        Same reasoning as LeyboldIG3 and CenterOneGauge.
+        """
+        self.set_state(DevState.FAULT)
+        self.set_status("Can't read the %s: %s" % (what, why))
+        self.error_stream("Can't read the %s: %s" % (what, why))
+        return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
 
     # ------------------
     # Attributes methods
     # ------------------
 
     def read_Pressure(self):
-        # Response: "<ADDR> OK 0B <value> <unit> <checksum>"
-        # HV off sentinel: 0.1E-10 (any unit)
-        resp = self._send_command('0b')
-        parts = resp.split()
-        if len(parts) < 5 or parts[1] != 'OK':
-            raise tango.DevFailed("Unexpected pressure response: %s" % resp)
-        value = float(parts[3])
-        unit = parts[4]
-        factor = _UNIT_TO_MBAR.get(unit, 1.0)
-        return value * factor
+        # "OK 00 2.2E-09 MBA". The manual documents the unit as Torr, MBR or
+        # PA; this controller actually sends MBA, which was in neither the
+        # manual nor the table, and an unknown unit used to be assumed to be
+        # mbar.
+        try:
+            fields = self._fields('0b')
+            if (len(fields) < 2):
+                raise SPCeError("pressure reply carries no unit: %r" % fields)
+            if (fields[0].upper() == _HV_OFF_PRESSURE):
+                raise SPCeError("the high voltage is off, so %s is the "
+                                "HV-off marker and not a pressure" % fields[0])
+            if (fields[1] not in _UNIT_TO_MBAR):
+                raise SPCeError("unknown pressure unit %r: refusing to guess "
+                                "the conversion to mbar" % fields[1])
+            return float(fields[0]) * _UNIT_TO_MBAR[fields[1]]
+        except (SPCeError, ValueError) as e:
+            return self._no_reading("pressure", e)
 
     def read_Current(self):
-        # Response: "<ADDR> OK 0A <value> AMPS <checksum>"
-        # HV off sentinel: 0.1E-09 AMPS
-        resp = self._send_command('0a')
-        parts = resp.split()
-        if len(parts) < 4 or parts[1] != 'OK':
-            raise tango.DevFailed("Unexpected current response: %s" % resp)
-        return float(parts[3])
+        # "OK 00 7.9E-07 AMPS"
+        try:
+            fields = self._fields('0a')
+            if (not fields):
+                raise SPCeError("current reply carries no value")
+            if (fields[0].upper() == _HV_OFF_CURRENT):
+                raise SPCeError("the high voltage is off, so %s is the "
+                                "HV-off marker and not a current" % fields[0])
+            return float(fields[0])
+        except (SPCeError, ValueError) as e:
+            return self._no_reading("current", e)
 
     def read_Voltage(self):
-        # Response: "<ADDR> OK 0C <value> <checksum>"
-        resp = self._send_command('0c')
-        parts = resp.split()
-        if len(parts) < 4 or parts[1] != 'OK':
-            raise tango.DevFailed("Unexpected voltage response: %s" % resp)
-        return float(parts[3])
+        # "OK 00 -3500"
+        try:
+            fields = self._fields('0c')
+            if (not fields):
+                raise SPCeError("voltage reply carries no value")
+            return float(fields[0])
+        except (SPCeError, ValueError) as e:
+            return self._no_reading("voltage", e)
 
     def read_SupplyStatus(self):
-        # Response: "<ADDR> OK 0D <message words...> <checksum>"
-        # The status message occupies all fields between index 3 and the last.
-        resp = self._send_command('0d')
-        parts = resp.split()
-        if len(parts) < 4 or parts[1] != 'OK':
-            return resp
-        return ' '.join(parts[3:-1])
+        # "OK 00 RUNNING", and the message can be several words. The old code
+        # joined parts[3:-1], dropping the last word to skip a checksum that
+        # the Telnet reply does not carry.
+        try:
+            return ' '.join(self._fields('0d'))
+        except SPCeError as e:
+            self.set_state(DevState.FAULT)
+            self.set_status("Can't read the supply status: %s" % e)
+            self.error_stream("Can't read the supply status: %s" % e)
+            return ('', time.time(), tango.AttrQuality.ATTR_INVALID)
 
     # --------
     # Commands
@@ -248,14 +349,14 @@ class GammaVacuumSPCe(Device):
     def On(self):
         """Enable high voltage (start ion pump)."""
         self._send_command('37')
-        self.set_state(DevState.ON)
+        self._read_hv_state()
 
     @command()
     @DebugIt()
     def Off(self):
         """Disable high voltage (stop ion pump)."""
         self._send_command('38')
-        self.set_state(DevState.OFF)
+        self._read_hv_state()
 
     @command(
         dtype_in='str',
@@ -270,7 +371,11 @@ class GammaVacuumSPCe(Device):
         parts = argin.split(None, 1)
         cmd = parts[0]
         data = parts[1] if len(parts) > 1 else None
-        return self._send_command(cmd, data)
+        try:
+            return self._send_command(cmd, data)
+        except SPCeError as e:
+            tango.Except.throw_exception("SPCe_CommunicationFailed", str(e),
+                                         "GammaVacuumSPCe.send_command")
 
 
 # ----------
