@@ -37,7 +37,8 @@ __all__ = ["GammaVacuumDigitel", "main"]
 # a silent 1.33x error had the pump been switched to Torr. Unknown units are
 # refused now instead of assumed.
 _UNIT_TO_MBAR = {
-    'MBA':  1.0,
+    'MBA':  1.0,       # what the SPCe sends
+    'MBAR': 1.0,       # what the QPC sends
     'MBR':  1.0,
     'mbar': 1.0,
     'Torr': 1.33322,
@@ -68,11 +69,28 @@ _HV_OFF_PRESSURE = "0.1E-10"
 # of the pressure thereafter". A marker, not a pressure.
 _SETPOINT_LATCHES = "0.1E-10"
 
+# The QPC will not take commands back to back. Measured against XPSIonPump.lab:
+# 30 reads with no gap gave 24 timeouts in 252 s; the same 30 with 0.2 s between
+# them gave none in 6.4 s. The SPCe tolerates back-to-back exchanges, so this
+# costs it a little time and nothing else. A full sweep of the seven attributes
+# is about 1.4 s.
+_MIN_GAP = 0.2
+
 
 class GammaVacuumDigitel(Device):
     """
-    Device server for the Gamma Vacuum DIGITEL SPCe ion pump power supply.
-    Connects via the Ethernet Telnet interface (default TCP port 23).
+    Device server for a Gamma Vacuum DIGITEL ion pump power supply, over the
+    Ethernet Telnet interface (default TCP port 23).
+
+    Confirmed against two models of the family, which share the transport, the
+    prompt, the framing and the command codes:
+
+        SPCe  ("SPC2")          one pump,  pressure unit MBA
+        QPC   ("DIGITEL QPC")   four pumps, pressure unit MBAR
+
+    The difference that matters is the supply number: the QPC requires it on
+    every command and the SPCe ignores it, so it is always sent. One Tango
+    device per pump, selected by the Supply property.
     """
 
     # -----------------
@@ -81,14 +99,23 @@ class GammaVacuumDigitel(Device):
 
     IP = device_property(
         dtype='str',
-        doc='IP address or hostname of the SPCe controller. No default: it '
-            'must be set in the Tango database when the device is registered.',
+        doc='IP address or hostname of the controller. No default: it must '
+            'be set in the Tango database when the device is registered.',
     )
 
     Port = device_property(
         dtype='int',
         default_value=23,
         doc='TCP port for the Telnet interface (default 23)',
+    )
+
+    Supply = device_property(
+        dtype='int',
+        default_value=1,
+        doc='Which pump on the controller this device is. The QPC has four '
+            'and requires the number on every command; the SPCe has one and '
+            'ignores it, so 1 is right for a single-pump supply. One Tango '
+            'device per pump.',
     )
 
     # ----------
@@ -137,6 +164,15 @@ class GammaVacuumDigitel(Device):
             "the pressure is equal to or above this value",
     )
 
+    SetpointActive = attribute(
+        dtype='bool',
+        doc="Whether the pressure interlock relay is currently active, as the "
+            "controller reports it. INVALID on a supply that does not report "
+            "it -- the SPCe answers only the two thresholds -- because "
+            "deriving it from the pressure would be a guess: the relay latches "
+            "once active and also turns on for error conditions",
+    )
+
     SetpointOff = attribute(
         dtype='double',
         unit="mbar",
@@ -156,6 +192,8 @@ class GammaVacuumDigitel(Device):
     def init_device(self):
         Device.init_device(self)
         self._sock = None
+        self._factor = None
+        self._last = 0.0
         self._connect()
 
     def delete_device(self):
@@ -169,7 +207,14 @@ class GammaVacuumDigitel(Device):
     # ------------------
 
     def _connect(self):
-        """Open the TCP/Telnet connection and set initial device state."""
+        """Open the TCP/Telnet connection and set initial device state.
+
+        The pacing clock and the cached unit belong to the connection, so they
+        are (re)set here rather than only in init_device: _send_command calls
+        this itself whenever the socket has been dropped.
+        """
+        self._factor = None
+        self._last = 0.0
         try:
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._sock.settimeout(5.0)
@@ -197,6 +242,7 @@ class GammaVacuumDigitel(Device):
             self.set_status("Connection failed: %s" % str(e))
 
     def _disconnect(self):
+        self._factor = None
         if self._sock is not None:
             try:
                 self._sock.close()
@@ -234,8 +280,13 @@ class GammaVacuumDigitel(Device):
                     pass
             except (BlockingIOError, socket.timeout):
                 pass
+            # The controller needs a gap between exchanges; see _MIN_GAP.
+            gap = _MIN_GAP - (time.monotonic() - self._last)
+            if (gap > 0):
+                time.sleep(gap)
             self._sock.settimeout(5.0)
             self._sock.sendall(msg)
+            self._last = time.monotonic()
             response = b""
             while not response.endswith(b">"):
                 c = self._sock.recv(1)
@@ -256,6 +307,18 @@ class GammaVacuumDigitel(Device):
     def _fields(self, cmd, data=None):
         """The data fields of one reply, or DigitelError.
 
+        The supply number goes on every command unless the caller passes
+        something else. The QPC refuses a bare command with
+        "ER 08 *ERROR: ILLEGAL FORMAT"; the SPCe accepts the number and
+        ignores it, so one code path serves both.
+        """
+        if data is None:
+            data = str(self.Supply)
+        return self._checked(cmd, data)
+
+    def _checked(self, cmd, data):
+        """Send and validate one reply.
+
         Over Telnet the reply is  STATUS CODE [data...]. The manual is
         explicit that, unlike the serial link, "no opening tilde, no address
         field, and no checksum are required" -- but this server was written to
@@ -268,16 +331,16 @@ class GammaVacuumDigitel(Device):
             raise DigitelError("short reply to %s: %r" % (cmd, resp))
         if (parts[0] == 'ER'):
             raise DigitelError("the controller refused %s, error code %s"
-                            % (cmd, parts[1]))
+                           % (cmd, parts[1]))
         if (parts[0] != 'OK'):
             raise DigitelError("reply to %s begins with neither OK nor ER: %r"
-                            % (cmd, resp))
+                           % (cmd, resp))
         fields = parts[2:]
         # A command it will not run still answers OK, with the complaint in
         # the data: "OK 00 *ERROR: COMMAND DISABLED".
         if (fields and fields[0].startswith('*ERROR')):
             raise DigitelError("the controller answered %s with %s"
-                            % (cmd, ' '.join(fields)))
+                           % (cmd, ' '.join(fields)))
         return fields
 
     def _read_hv_state(self):
@@ -326,10 +389,8 @@ class GammaVacuumDigitel(Device):
             if (fields[0].upper() == _HV_OFF_PRESSURE):
                 raise DigitelError("the high voltage is off, so %s is the "
                                 "HV-off marker and not a pressure" % fields[0])
-            if (fields[1] not in _UNIT_TO_MBAR):
-                raise DigitelError("unknown pressure unit %r: refusing to guess "
-                                "the conversion to mbar" % fields[1])
-            return float(fields[0]) * _UNIT_TO_MBAR[fields[1]]
+            self._factor = self._unit_factor(fields[1])
+            return float(fields[0]) * self._factor
         except (DigitelError, ValueError) as e:
             return self._no_reading("pressure", e)
 
@@ -368,52 +429,74 @@ class GammaVacuumDigitel(Device):
             self.error_stream("Can't read the supply status: %s" % e)
             return ('', time.time(), tango.AttrQuality.ATTR_INVALID)
 
+    def _unit_factor(self, unit):
+        """The conversion to mbar of the unit the controller just reported."""
+        if (unit not in _UNIT_TO_MBAR):
+            raise DigitelError("unknown pressure unit %r: refusing to guess "
+                               "the conversion to mbar" % unit)
+        return _UNIT_TO_MBAR[unit]
+
     def _pressure_factor(self):
-        """The conversion to mbar of whatever unit the pump is set to.
+        """The conversion to mbar of whatever unit this supply is set to.
 
         There is no command that reports the unit on its own: 0B is the only
         place it appears, and 0E only sets it. The setpoint values carry no
-        unit of their own, so they are in whatever 0B is reporting.
+        unit of their own, so they are in whatever 0B reports -- which meant
+        reading the pressure and throwing it away on every setpoint access,
+        doubling the traffic to the controller. It is remembered instead, and
+        forgotten on reconnect; changing the unit needs an Init anyway.
         """
-        fields = self._fields('0b')
-        if (len(fields) < 2):
-            raise DigitelError("pressure reply carries no unit: %r" % fields)
-        if (fields[1] not in _UNIT_TO_MBAR):
-            raise DigitelError("unknown pressure unit %r: refusing to guess the "
-                            "conversion to mbar" % fields[1])
-        return _UNIT_TO_MBAR[fields[1]]
-
+        if (self._factor is None):
+            fields = self._fields('0b')
+            if (len(fields) < 2):
+                raise DigitelError("pressure reply carries no unit: %r"
+                                   % fields)
+            self._factor = self._unit_factor(fields[1])
+        return self._factor
     def _setpoint(self):
-        """The On and Off points, as the two strings the controller sends.
+        """(on, off, active) as strings; active is None when not reported.
 
-        The manual documents 3C as answering "N, E, X.XE-XX, Y.YE-YY, O" --
-        setpoint number, enabled, on point, off point, and the live relay
-        state. This unit answers two comma-separated values and nothing else:
+        The same command answers in two shapes:
 
-            spc 3C 1  ->  OK 00 9.0E-08,2.0E-07
+            SPCe:  OK 00 9.0E-08,2.0E-07              on, off
+            QPC:   OK 00 1,1,5.0e-08,4.0e-07,1        number, enabled, on,
+                                                      off, relay active
 
-        so the relay's own state is not readable over the protocol, and is not
-        exposed rather than being guessed from the pressure -- the manual has
-        it latching once active, and turning on for error conditions too.
-
-        There is exactly one setpoint on this supply: 3C 2 answers
-        "ER 08 *ERROR: PARAMETER 1: ILLEGAL RANGE (1 - 1)".
+        The five-field form is the one the SPCe manual documents, and the SPCe
+        is the model that does not send it. On a QPC the last field is the
+        live interlock state, which is why SetpointActive exists.
         """
-        raw = ' '.join(self._fields('3c', '1')).split(',')
-        if (len(raw) < 2):
-            raise DigitelError("setpoint reply is not two values: %r" % raw)
-        return (raw[0].strip(), raw[1].strip())
+        raw = [f.strip() for f in ' '.join(self._fields('3c')).split(',')]
+        if (len(raw) == 2):
+            return (raw[0], raw[1], None)
+        if (len(raw) >= 5):
+            return (raw[2], raw[3], raw[4])
+        raise DigitelError("setpoint reply is neither two nor five values: %r"
+                           % raw)
+
+    def read_SetpointActive(self):
+        try:
+            (_on, _off, active) = self._setpoint()
+            if (active is None):
+                raise DigitelError("this supply reports only the two "
+                                   "thresholds, not the relay state")
+            return (active == '1')
+        except (DigitelError, ValueError) as e:
+            self.set_state(DevState.FAULT)
+            self.set_status("Can't read the setpoint state: %s" % e)
+            self.error_stream("Can't read the setpoint state: %s" % e)
+            return (False, time.time(), tango.AttrQuality.ATTR_INVALID)
 
     def read_SetpointOn(self):
         try:
-            (on, _off) = self._setpoint()
+            (on, _off, _active) = self._setpoint()
             return float(on) * self._pressure_factor()
         except (DigitelError, ValueError) as e:
             return self._no_reading("setpoint On Point", e)
 
     def read_SetpointOff(self):
         try:
-            (_on, off) = self._setpoint()
+            (_on, off, _active) = self._setpoint()
             if (off.upper() == _SETPOINT_LATCHES):
                 raise DigitelError("the Off Point is the %s marker, so the relay "
                                 "latches on instead of releasing: there is no "
@@ -430,14 +513,14 @@ class GammaVacuumDigitel(Device):
     @DebugIt()
     def On(self):
         """Enable high voltage (start ion pump)."""
-        self._send_command('37')
+        self._send_command('37', str(self.Supply))
         self._read_hv_state()
 
     @command()
     @DebugIt()
     def Off(self):
         """Disable high voltage (stop ion pump)."""
-        self._send_command('38')
+        self._send_command('38', str(self.Supply))
         self._read_hv_state()
 
     @command(
