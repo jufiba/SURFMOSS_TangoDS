@@ -148,7 +148,7 @@ JDFile v11 {
     origin:173,82
     fillStyle:1
     lineWidth:0
-    name:"leem/vacuum/gaugeMCH/Pressure_IG1"
+    name:"leem/vacuum/gaugeMCH/Pressure"
     extensions:{
       unitVisible:"true"
       userFormat:""
