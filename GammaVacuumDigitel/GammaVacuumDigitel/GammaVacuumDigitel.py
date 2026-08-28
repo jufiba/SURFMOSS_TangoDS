@@ -55,6 +55,20 @@ class DigitelError(Exception):
     they mean the same thing: there is no reading to be had.
     """
 
+
+class HVOff(DigitelError):
+    """The controller answered with its HV-off marker instead of a reading.
+
+    A subclass, so anything that only cares that there is no number keeps
+    working, while the attribute readers can tell this case apart: a pump with
+    its high voltage off is in a state, not in a fault. Reporting FAULT for it
+    made a deliberately idle pump indistinguishable from a broken one -- red in
+    Astor, and an alarm mail that could not say which of the two it was.
+
+    Same distinction _setpoint makes for the relay: what a supply cannot or
+    will not give right now is not the same as an exchange that failed.
+    """
+
 # What the controller sends instead of a reading when the high voltage is off
 # (manual, commands 0A and 0B). Compared as the literal text it sends, so no
 # float rounding can turn a sentinel into a plausible reading. These were
@@ -396,6 +410,20 @@ class GammaVacuumDigitel(Device):
         self.error_stream("Can't read the %s: %s" % (what, why))
         return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
 
+    def _hv_off(self, what):
+        """No reading, but no fault either.
+
+        The controller has just answered, so the link is fine and the pump is
+        simply off. Setting OFF here is not a guess: the HV-off marker is the
+        supply saying so, and it is fresher than whatever _read_hv_state left
+        behind. The value is still INVALID -- a made-up 1e-11 mbar reads as an
+        excellent vacuum at the moment there is none being measured.
+        """
+        self.set_state(DevState.OFF)
+        self.set_status("High voltage off at %s:%d, supply %d, so there is no "
+                        "%s to read" % (self.IP, self.Port, self.Supply, what))
+        return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
+
     # ------------------
     # Attributes methods
     # ------------------
@@ -410,10 +438,12 @@ class GammaVacuumDigitel(Device):
             if (len(fields) < 2):
                 raise DigitelError("pressure reply carries no unit: %r" % fields)
             if (fields[0].upper() == _HV_OFF_PRESSURE):
-                raise DigitelError("the high voltage is off, so %s is the "
-                                "HV-off marker and not a pressure" % fields[0])
+                raise HVOff("the high voltage is off, so %s is the "
+                            "HV-off marker and not a pressure" % fields[0])
             self._factor = self._unit_factor(fields[1])
             return float(fields[0]) * self._factor
+        except HVOff:
+            return self._hv_off("pressure")
         except (DigitelError, ValueError) as e:
             return self._no_reading("pressure", e)
 
@@ -424,9 +454,11 @@ class GammaVacuumDigitel(Device):
             if (not fields):
                 raise DigitelError("current reply carries no value")
             if (fields[0].upper() == _HV_OFF_CURRENT):
-                raise DigitelError("the high voltage is off, so %s is the "
-                                "HV-off marker and not a current" % fields[0])
+                raise HVOff("the high voltage is off, so %s is the "
+                            "HV-off marker and not a current" % fields[0])
             return float(fields[0])
+        except HVOff:
+            return self._hv_off("current")
         except (DigitelError, ValueError) as e:
             return self._no_reading("current", e)
 
