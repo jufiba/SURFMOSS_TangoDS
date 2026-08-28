@@ -142,10 +142,17 @@ def probe(port):
     else:
         print("control lines the adapter sees: %s"
               % "  ".join("%s=%s" % (k, v) for k, v in lines.items()))
-        print("   Measured with nothing plugged in, this adapter reads "
-              "CTS=True DSR=True\n   CD=True RI=False: the inputs float high. "
-              "So true here proves nothing.\n   A line reading FALSE does mean "
-              "something is pulling it down.\n")
+        print("   Baselines measured on this adapter, for comparison:")
+        print("     nothing plugged in : CTS=True  DSR=True  CD=True  (float "
+              "high, so true\n                          proves nothing on its "
+              "own)")
+        print("     350 on the cable   : CTS=True  DSR=False CD=False (28-Aug-"
+              "2026, with the\n                          gauge powered and "
+              "answering nothing)")
+        print("   A line that CHANGES between those two is carried by the "
+              "cable. DSR false\n   is the interesting one: the 350 asserts "
+              "DTR whenever it is powered, so\n   if the cable mapped pin 20 "
+              "to this end DSR would read true.\n")
     heard = listen(ser, 6.0)
     ser.close()
     if heard:
@@ -318,6 +325,14 @@ DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def main(argv):
+    # The sweep prints a line per combination so it can be watched, and it can
+    # take minutes. Python block-buffers stdout when it is a pipe rather than a
+    # terminal, which over ssh means nothing appears until the end -- exactly
+    # when the progress is no longer useful.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:                      # pragma: no cover
+        pass
     args = argv[1:]
     repo = DEFAULT_ROOT
     if "--root" in args:
