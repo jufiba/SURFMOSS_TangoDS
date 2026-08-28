@@ -62,10 +62,11 @@ class GranvillePhillips350(Device):
     Nothing in the protocol reports the byte framing or the pressure unit, so
     both are device properties:
 
-    - Framing is set by DIP switches on the RS-232 board. The factory defaults
-      are 300 baud, 7 data bits, no parity, 2 stop bits, and those are the
-      defaults here, but there is no way to ask the instrument what it is
-      actually set to. tools/gp350_probe.py finds the working combination.
+    - Framing is set by DIP switches on the RS-232 board, and there is no way
+      to ask the instrument what it is on. The LEEM one was measured at 9600
+      7N2 on 28-Aug-2026 -- the factory framing, but at 9600 rather than the
+      factory 300 -- and those are the defaults here.
+      tools/gp350_probe.py finds the combination on any other.
     - The unit is set by a switch on the electrometer module and printed on
       the front panel label. The 350 sends a bare number, so the unit is
       whatever that label says. It is declared, not guessed.
@@ -82,14 +83,17 @@ class GranvillePhillips350(Device):
     )
 
     Baudrate = device_property(
-        dtype='int', default_value=300,
+        dtype='int', default_value=9600,
         doc='DIP switches S6-S8 on the RS-232 board select 75 to 9600. The '
-            'factory default is 300.',
+            'factory default is 300; the LEEM instrument was measured at 9600 '
+            'on 28-Aug-2026 and that is what this defaults to, so a device '
+            'registered without setting it works on that one.',
     )
 
     Bytesize = device_property(
         dtype='int', default_value=7,
-        doc='7 or 8, from DIP switches S3-S5. Factory default 7.',
+        doc='7 or 8, from DIP switches S3-S5. Factory default 7, and what the '
+            'LEEM instrument was measured at.',
     )
 
     Parity = device_property(
@@ -99,7 +103,8 @@ class GranvillePhillips350(Device):
 
     Stopbits = device_property(
         dtype='int', default_value=2,
-        doc='1 or 2, from DIP switches S3-S5. Factory default 2.',
+        doc='1 or 2, from DIP switches S3-S5. Factory default 2, and what the '
+            'LEEM instrument was measured at.',
     )
 
     PressureUnit = device_property(

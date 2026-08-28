@@ -3,10 +3,13 @@
 Pressure from a Granville Phillips 350 ion gauge controller, through its RS-232
 interface module. On pi-leem, over a USB-serial adapter and a null modem cable.
 
-**Written from the manual on 27-Aug-2026 and not yet run against the
-instrument**, which was disconnected that day. The parsing is exercised against
-the real methods over a stub (`tools/gp350_probe.py --self-test`); nothing here
-has seen a byte from a 350.
+Run against the instrument on 28-Aug-2026: it reads **4.10E-10** with filament
+2 lit, and 45 consecutive reads gave no errors.
+
+**Measured settings on the LEEM instrument: 9600 baud, 7 data bits, no parity,
+2 stop bits** — the factory framing, but at 9600 rather than the factory 300.
+Those are now the property defaults, so a device registered without setting
+them works on this one.
 
 ## The protocol
 
@@ -52,11 +55,11 @@ be set to whatever that label says.
 | Property       | Default | Notes                                    |
 |----------------|---------|------------------------------------------|
 | `SerialPort`   | none    | must be set                              |
-| `Baudrate`     | 300     | S6-S8; 75 to 9600                        |
+| `Baudrate`     | 9600    | S6-S8; measured on the LEEM instrument   |
 | `Bytesize`     | 7       | S3-S5; 7 or 8                            |
 | `Parity`       | `N`     | S3-S5; N, E or O                         |
 | `Stopbits`     | 2       | S3-S5; 1 or 2                            |
-| `PressureUnit` | `Torr`  | label only, read it off the front panel  |
+| `PressureUnit` | `Torr`  | label only — **still to be confirmed off the front panel** |
 | `Timeout`      | 3.0     | s; generous because 300 baud is slow     |
 
 On pi-leem the port is
@@ -109,6 +112,29 @@ pl2303's inputs float high. True therefore proves nothing. A line reading
 *false* still means something is actively pulling it down, so the probe
 reports all four, but do not read anything into them being true.
 
+## What the first connection turned out to be
+
+Nothing answered, on any of the 64 combinations, while the instrument was
+plainly powered and driving control lines. The cause was neither the framing
+nor the switches: **the cable was already a null modem cable and an additional
+null modem adapter had been fitted in series**. Two cross-overs cancel, the
+link becomes straight through, and the 350's transmit pin ends up wired to the
+computer's transmit pin — two outputs facing each other, so neither side ever
+receives anything, at any baud rate or framing.
+
+Removing the extra adapter fixed it immediately.
+
+Worth knowing for next time, because the symptom is total silence and it looks
+exactly like a wrong baud rate. If the sweep finds nothing at all, check the
+cable for a double cross-over before touching the DIP switches: with a
+continuity meter across the whole assembly, pin 2 to pin 3 means it is a null
+modem, pin 2 to pin 2 means the crossings have cancelled.
+
+One `OVERRUN ERROR` appeared on the first read afterwards and never came back.
+It was left over from probing at the wrong framing, which had put bytes in the
+350's buffer. The instrument needs no pacing between messages: 45 back-to-back
+reads with no gap at all gave no errors, unlike the Gamma Vacuum QPC.
+
 ## First connection
 
 Run the probe before registering anything. It is read-only — it sends `DS IG`
@@ -152,8 +178,10 @@ rather than taking the server down with it.
 
 ## Not done
 
-- Never run against the instrument. Everything below the parsing is untested:
-  the framing, the cable, DCD, and whether the unit is in talk-only mode.
+- `PressureUnit` is unconfirmed. The 350 sends a bare number and cannot be
+  asked; read the front panel label and set the property to match. Nothing
+  converts it, so getting it wrong mislabels the attribute rather than
+  corrupting the value.
 - `StartFilament1` / `StopFilament1`, the filament 2 pair and
   `DegasStart` / `DegasStop` are implemented from the manual and have never
   been sent. They energise a filament and a degas cycle. Read the pressure
