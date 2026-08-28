@@ -80,30 +80,42 @@ class Hygrometer(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(Hygrometer.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,baudrate=9600,timeout=5.5)
+        # The exchange below was already guarded; opening the port was not,
+        # and that is the call that fails when the adapter is unplugged.
+        self.ser=None
+        try:
+            self.ser=serial.Serial(self.SerialPort,baudrate=9600,timeout=5.5)
+        except (serial.SerialException,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
         try:
             for i in range(0,2):
                 self.ser.flushInput()
                 self.ser.write(bytes("id","ascii"))
                 self.ser.inWaiting()
                 resp=self.ser.readline()
-        except:
+        except Exception as e:
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Can't connect to Hygrometer")
-            self.debug_stream("Can't connect to Hygrometer")
+            self.set_status("Can't connect to Hygrometer on %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't connect to Hygrometer on %s: %s"%(self.SerialPort,e))
             return
-        self.set_status("Connected to Arduino Hygrometer")
-        self.debug_stream("Connected to Arduino Hygrometer")
         if (resp==bytes("Flood sensor above XPS\r\n","ascii")):
+            self.set_status("Connected to Arduino Hygrometer")
+            self.debug_stream("Connected to Arduino Hygrometer")
             self.set_state(tango.DevState.ON)
             self.running=True
             ctrlloop = ControlThread(self)
             ctrlloop.start()
         else:
+            # An empty line is what a silent board gives, and it used to be
+            # announced as "Connected" before failing the comparison.
             self.set_state(tango.DevState.FAULT)
-        
+            self.set_status("The board on %s did not identify itself as the "
+                            "hygrometer: %r"%(self.SerialPort,resp))
+            self.error_stream("Unexpected identity on %s: %r"%(self.SerialPort,resp))
         # PROTECTED REGION END #    //  Hygrometer.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(Hygrometer.always_executed_hook) ENABLED START #
         pass
@@ -111,7 +123,8 @@ class Hygrometer(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(Hygrometer.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         self.running=False
         # PROTECTED REGION END #    //  Hygrometer.delete_device
 

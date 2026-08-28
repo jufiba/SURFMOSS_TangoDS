@@ -118,14 +118,15 @@ class FUGMCP(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(FUGMCP.init_device) ENABLED START #
+        self.ser=None
         try:
             self.ser=serial.Serial(port=self.SerialPort,baudrate=self.Speed,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=1,timeout=0.5)
             self.ser.write(bytes("*IDN?\n","ascii"))
             self.identification=self.ser.readline()
-        except:
+        except Exception as e:
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Can't connect to FUG MCP")
-            self.debug_stream("Can't connect to FUG MCP")
+            self.set_status("Can't connect to FUG MCP on %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't connect to FUG MCP on %s: %s"%(self.SerialPort,e))
             return
         if  (self.identification[0:16]!=bytes("FUG HCP 140-1250","ascii") and self.identification[0:15]!=bytes("FUG MCP140-1250","ascii")):
             self.set_state(tango.DevState.FAULT)
@@ -134,14 +135,23 @@ class FUGMCP(Device):
             return
         self.set_status("Connected to FUG MCP")
         self.debug_stream("Connected to FUG MCP")
-        self.ser.write(bytes(">BON?\n","ascii"))
-        resp=self.ser.readline()
+        # Asking whether the output is on was outside any try. OFF here means
+        # the output is disabled, which is the supply answering -- not the
+        # supply being unreachable, which is FAULT above.
+        try:
+            self.ser.write(bytes(">BON?\n","ascii"))
+            resp=self.ser.readline()
+        except Exception as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("The FUG MCP identified itself and then stopped "
+                            "answering on %s: %s"%(self.SerialPort,e))
+            self.error_stream("FUG MCP stopped answering on %s: %s"%(self.SerialPort,e))
+            return
         if (resp[:-1]==bytes("BON:1","ascii")):
             self.set_state(tango.DevState.ON)
         else:
-            self.set_state(tango.DevState.OFF)        
+            self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  FUGMCP.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(FUGMCP.always_executed_hook) ENABLED START #
         pass
@@ -149,7 +159,8 @@ class FUGMCP(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(FUGMCP.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         # PROTECTED REGION END #    //  FUGMCP.delete_device
 
     # ------------------

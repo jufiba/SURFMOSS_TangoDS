@@ -79,10 +79,19 @@ class CenterOneGauge(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(CenterOneGauge.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=1)
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead. FAULT with the
+        # reason instead, so an unplugged gauge leaves a device that says so.
+        self.ser=None
+        try:
+            self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=1)
+        except (serial.SerialException,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
         self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  CenterOneGauge.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(CenterOneGauge.always_executed_hook) ENABLED START #
         pass
@@ -90,7 +99,8 @@ class CenterOneGauge(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(CenterOneGauge.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         # PROTECTED REGION END #    //  CenterOneGauge.delete_device
 
     # ------------------
