@@ -23,14 +23,25 @@ recovering one is `git show <commit>:synoptics/LEEM_v3.jdw`. **Do not add
 ## Device references need checking against the DB
 
 A drawing referring to a device that no longer exists shows up only as a dead
-element at runtime. As of 19-ago-2026 `leem.jdw` names 11 devices, of which two
-are **not in the Tango database**:
+element at runtime, so it is worth checking rather than noticing by eye:
 
-| Referenced | Status |
-|---|---|
-| `leem/vacuum/gaugeMCH` | missing — the DB has `gaugePCH` and `gaugeEvap`, no MCH |
-| `leem/measurement/positionXY` | missing — the DB has `LEEM2k`, `Uview`, `sampleDVM` |
+```bash
+python3 tools/check_synoptics.py
+```
 
-Both are long-standing: `gaugeMCH` is referenced as far back as the original
-`LEEM.jdw`. Either the devices are yet to be registered on the new DB or the
-drawing needs updating to the current names.
+It reads every reference out of the `.jdw` files and checks the device against
+the Tango database and the attribute or command against the device itself.
+
+**Resolved on 28-Aug-2026.** All 119 references across the eight drawings were
+checked and six were broken:
+
+| Referenced | What it was | Done |
+|---|---|---|
+| `leem/vacuum/gaugeMCH/Pressure_IG1` | the retired VarianMultiGauge's attribute | now `Pressure`, on the Granville Phillips 350 that replaced it |
+| `mossbauer/termperature/criostat` | a misspelling, in two places | corrected to `temperature` |
+| `leem/measurement/PositionXY` | retired hardware, twice and with two capitalisations | elements removed |
+| `xps/measurement/xraygun` | retired hardware, twice | elements removed |
+
+The remaining references all resolve, except those on `sputtering.jdw` and the
+UPS on `leem.jdw`, whose devices are registered but not running — the drawings
+are right, the instruments are switched off.

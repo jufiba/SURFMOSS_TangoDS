@@ -42,22 +42,6 @@ JDFile v11 {
     text:"X-ray gun"
   }
   JDSwingObject {
-    summit:401,471,609,541
-    origin:495,492
-    fillStyle:1
-    lineWidth:0
-    name:"xps/measurement/xraygun/Power"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,38
-  }
-  JDSwingObject {
     summit:401,550,610,631
     origin:490,571
     fillStyle:1
@@ -130,12 +114,6 @@ JDFile v11 {
     origin:182,256
     fillStyle:1
     name:"xps/vacuum/ionpump/State"
-  }
-  JDBar {
-    summit:431,429,529,452
-    origin:457,420
-    fillStyle:1
-    name:"xps/measurement/xraygun/State"
   }
   JDLabel {
     summit:658,41,1064,127
