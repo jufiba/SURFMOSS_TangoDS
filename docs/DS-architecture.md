@@ -51,12 +51,19 @@ Two details that are easy to miss:
 - **`delete_device` has to cope with a port that never opened.** Once the
   device survives `init_device`, `delete_device` is reached in a state it never
   used to be, and a bare `self.ser.close()` is then an `AttributeError`.
-- **FAULT is not OFF.** FAULT means "I cannot talk to it"; OFF means "it is
-  switched off, and it told me so". From software the two are usually
-  indistinguishable — a switched-off instrument and an unplugged cable both
-  give silence — so FAULT with the reason in the status is the honest default.
-  Use OFF only where the instrument says so explicitly, as
-  `GranvillePhillips350` does when it reads the `9.90E+09` gauge-off marker.
+- **FAULT is not OFF, and the difference is decided.** FAULT means "I cannot
+  talk to it". **OFF already means something else in this installation: on the
+  FUG supplies it means the output is disabled.** An unreachable instrument
+  reported as OFF would therefore read, on a synoptic, as a supply someone had
+  switched off deliberately — which is a different fact and a dangerous one to
+  confuse.
+
+  So: **FAULT, with the reason in the status, whenever the instrument cannot be
+  reached.** From software a switched-off instrument and an unplugged cable
+  both give silence anyway, and FAULT is honest about that. OFF is reserved for
+  when the instrument says so itself — as `GranvillePhillips350` does on its
+  `9.90E+09` gauge-off marker, or `GammaVacuumDigitel` when command 61 answers
+  NO.
 
 ### Which servers still have the defect
 
@@ -210,11 +217,20 @@ tractable in batches.
 
 **Robustness**, in order of who is asking for it:
 
-- **Sputtering (4)** — HuttingerPFGDC, HuttingerPFGRF, VarianTV301nav, and the
-  temperature server. This is what raised the question, and the hardware is
-  switched off, which is the one time the failure path can actually be tested.
-- **Simple serial (7)** — MKSGauge, MFC, Hygrometer, ArduinoPt, ArduinoMotor,
-  FUGMCP, CenterOneGauge. Nearly mechanical.
+- **Sputtering (7)** — the whole rig bar one. Mapping the devices to their
+  servers turned up more than the four the synoptic shows: HuttingerPFGDC
+  (`power/magDC`), HuttingerPFGRF (`power/magRFmag` **and** `power/magRFnonmag`),
+  VarianTV301nav (`vacuum/turbo`), ArduinoPt (`measurement/temperature`),
+  ArduinoMotor (`motion/sample`), MKSGauge (`vacuum/gauge`) and MFC (`vacuum/mfc_Ar`
+  and `vacuum/mfc_O2`). Only ArduinoDAC (`power/heating`) is already protected.
+
+  Note HuttingerPFGRF and MFC each serve **two devices**: an exception raised
+  while initialising one takes the other down with it, since it is one process.
+
+  This is what raised the question, and the hardware is switched off, which is
+  the one time the failure path can actually be tested rather than reasoned
+  about.
+- **The rest of the simple serial (3)** — Hygrometer, FUGMCP, CenterOneGauge.
 - **Networked (3)** — ElmitecLEEM2k, ElmitecUview, Itech6000C. In production on
   the LEEM; more care.
 - **GPIO (3)** — RaspberryButton, RaspberrySwitch, WaterSwitch. Different in

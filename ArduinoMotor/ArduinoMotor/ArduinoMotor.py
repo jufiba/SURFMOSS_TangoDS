@@ -73,34 +73,39 @@ class ArduinoMotor(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(ArduinoMotor.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=1)
-        #self.ser=serial.Serial(self.SerialPort,baudrate=9600)
-        #except:
-            #self.set_state(PyTango.DevState.FAULT)
-            #self.set_status("Can't connect to ArduinoMotor")
-            #self.debug_stream("Can't connect to ArduinoMotor")
-            #return
-        self.set_status("Connected to Arduino")
-        self.debug_stream("Connected to Arduino")
-        for i in range(0,10):
-            self.ser.write(bytes("IDN?\n","ascii"))
-            b=self.ser.readline()
-            print(b)
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead. FAULT with the
+        # reason, not OFF: OFF means an instrument that answered and has
+        # its output disabled.
+        self.ser=None
+        try:
+            self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=1)
+        except (serial.SerialException,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
+        # The Arduino is asked to identify itself; it needs a few tries
+        # after the port opens, because opening it resets the board.
+        b=b""
+        try:
+            for i in range(0,10):
+                self.ser.write(bytes("IDN?\n","ascii"))
+                b=self.ser.readline()
+                self.debug_stream("IDN? -> %r"%b)
+        except Exception as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No response from the Arduino on %s: %s"%(self.SerialPort,e))
+            self.error_stream("No response from the Arduino on %s: %s"%(self.SerialPort,e))
+            return
         if (b[0:16]==bytes("Motor Sputtering","ascii")):
-            # decode with "replace", not the strict decode used elsewhere
-            # in this repository: this runs when the instrument answered
-            # something unexpected, so the bytes may not be ASCII at all,
-            # and a decode that raises would lose the one message that
-            # says what went wrong.
             self.set_status("Connected to %s"%b.decode("ascii","replace"))
             self.set_state(tango.DevState.ON)
         else:
             self.set_state(tango.DevState.FAULT)
-            self.set_status("ArduinoMotor IDN? returned %s"%b.decode("ascii","replace"))
-        for i in range(0,4):
-            print(self.ser.readline())
+            self.set_status("The board on %s did not identify itself as the "
+                            "sputtering motor: %r"%(self.SerialPort,b))
         # PROTECTED REGION END #    //  ArduinoMotor.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(ArduinoMotor.always_executed_hook) ENABLED START #
         pass
@@ -108,7 +113,8 @@ class ArduinoMotor(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(ArduinoMotor.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         # PROTECTED REGION END #    //  ArduinoMotor.delete_device
 
     # ------------------

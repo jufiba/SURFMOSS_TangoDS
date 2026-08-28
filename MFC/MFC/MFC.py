@@ -81,10 +81,20 @@ class MFC(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(MFC.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,baudrate=38400,bytesize=8,parity="N",stopbits=1)
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead. FAULT with the
+        # reason, not OFF: OFF means an instrument that answered and has
+        # its output disabled.
+        self.ser=None
+        try:
+            self.ser=serial.Serial(self.SerialPort,baudrate=38400,bytesize=8,parity="N",stopbits=1,timeout=1)
+        except (serial.SerialException,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
         self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  MFC.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(MFC.always_executed_hook) ENABLED START #
         pass
@@ -92,7 +102,8 @@ class MFC(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(MFC.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         pass
         # PROTECTED REGION END #    //  MFC.delete_device
 

@@ -209,11 +209,28 @@ class HuttingerPFGRF(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(HuttingerPFGRF.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
-        (address,command,data)=self.parse_response(self.sendcommand(0,"CE",0))
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead: a switched-off
+        # instrument took the process with it instead of leaving a device that
+        # says why. FAULT, not OFF -- OFF is used below for an instrument that
+        # answers and has its output disabled, which is a different fact.
+        self.ser=None
+        try:
+            self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
+        except (serial.SerialException,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
+        try:
+            (address,command,data)=self.parse_response(self.sendcommand(0,"CE",0))
+        except Exception as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No usable answer on %s: %s"%(self.SerialPort,e))
+            self.error_stream("No usable answer on %s: %s"%(self.SerialPort,e))
+            return
         self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  HuttingerPFGRF.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(HuttingerPFGRF.always_executed_hook) ENABLED START #
         pass
@@ -221,13 +238,9 @@ class HuttingerPFGRF(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(HuttingerPFGRF.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         # PROTECTED REGION END #    //  HuttingerPFGRF.delete_device
-
-    # ------------------
-    # Attributes methods
-    # ------------------
-
     def read_NominalPower(self):
         # PROTECTED REGION ID(HuttingerPFGRF.NominalPower_read) ENABLED START #
         (address,command,data)=self.parse_response(self.sendcommand(0,"C1",0))

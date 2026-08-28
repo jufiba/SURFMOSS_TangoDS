@@ -179,19 +179,37 @@ class VarianTV301nav(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(VarianTV301nav.init_device) ENABLED START #
-        self.ser=serial.Serial(self.serialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
-        if (self.read_running()==True):
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead: a switched-off
+        # instrument took the process with it instead of leaving a device that
+        # says why. FAULT, not OFF -- OFF is used below for an instrument that
+        # answers and has its output disabled, which is a different fact.
+        self.ser=None
+        try:
+            self.ser=serial.Serial(self.serialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
+        except (serial.SerialException,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.serialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.serialPort,e))
+            return
+        # read_running() does int(...[6:7]) on the reply, which is a
+        # ValueError on the empty string a silent pump returns.
+        try:
+            running=self.read_running()
             self.setSerialMode() # Set comunicacion mode, not "remote"
-            self.sendcommand("000","1")
+            self.sendcommand("000","1" if running else "0")
+        except Exception as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No usable answer on %s: %s"%(self.serialPort,e))
+            self.error_stream("No usable answer on %s: %s"%(self.serialPort,e))
+            return
+        if (running):
             self.set_state(tango.DevState.ON)
             self.set_status("VarianTV301 connected and running")
         else:
-            self.setSerialMode() # Set serial comunicacion mode, not "remote"
-            self.sendcommand("000","0")
             self.set_state(tango.DevState.OFF)
             self.set_status("VarianTV301 connected")
         # PROTECTED REGION END #    //  VarianTV301nav.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(VarianTV301nav.always_executed_hook) ENABLED START #
         pass
@@ -199,15 +217,14 @@ class VarianTV301nav(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(VarianTV301nav.delete_device) ENABLED START #
-        self.setRemoteMode()
-        # Set "Remote" read-only mode. Just in case.
+        if (self.ser is None):
+            return
+        try:
+            self.setRemoteMode() # Set "Remote" read-only mode. Just in case.
+        except Exception as e:
+            self.debug_stream("Could not return the pump to remote mode: %s"%e)
         self.ser.close()
         # PROTECTED REGION END #    //  VarianTV301nav.delete_device
-
-    # ------------------
-    # Attributes methods
-    # ------------------
-
     def read_setSpeed(self):
         # PROTECTED REGION ID(VarianTV301nav.setSpeed_read) ENABLED START #
         response=self.readcommand("120",15)

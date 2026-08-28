@@ -61,24 +61,45 @@ class ArduinoPt(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(ArduinoPt.init_device) ENABLED START #
-        self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=5)
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and the Starter then leaves it for dead. FAULT with the
+        # reason, not OFF: OFF means an instrument that answered and has
+        # its output disabled.
+        self.ser=None
+        try:
+            self.ser=serial.Serial(self.SerialPort,9600,bytesize=8,parity="N",stopbits=1,timeout=5)
+        except (serial.SerialException,ValueError) as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't open %s: %s"%(self.SerialPort,e))
+            self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
+            return
         try:
             self.ser.write(b"*PT\n")
             pt=self.ser.readline().decode("ascii").strip()
-            if (pt=="Fault"):
-                self.set_state(tango.DevState.FAULT)
-                self.set_status("No Pt resistor connected")
-                self.debug_stream("No Pt resistor connected to Arduino")
-            else:
-                self.set_state(tango.DevState.ON)
-                self.set_status("Pt resistor connected")
-                self.debug_stream("Pt resistor connected to Arduino")
-        except:
-            self.set_state(tango.DevState.OFF)
-            self.set_status("No response from Arduino")
-            self.debug_stream("No response from Arduino")
+        except Exception as e:
+            # Was OFF, which on these supplies means "output disabled".
+            # Not being able to reach the Arduino is a different fact.
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No response from the Arduino on %s: %s"%(self.SerialPort,e))
+            self.error_stream("No response from the Arduino on %s: %s"%(self.SerialPort,e))
+            return
+        if (not pt):
+            # An empty line is what an absent board gives: readline() times out
+            # and returns nothing, which raises nothing. Falling through to the
+            # else below made silence read as "Pt resistor connected".
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No response from the Arduino on %s: it answered "
+                            "*PT with an empty line"%self.SerialPort)
+            self.error_stream("Empty answer to *PT on %s"%self.SerialPort)
+        elif (pt=="Fault"):
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No Pt resistor connected")
+            self.debug_stream("No Pt resistor connected to Arduino")
+        else:
+            self.set_state(tango.DevState.ON)
+            self.set_status("Pt resistor connected")
+            self.debug_stream("Pt resistor connected to Arduino")
         # PROTECTED REGION END #    //  ArduinoPt.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(ArduinoPt.always_executed_hook) ENABLED START #
         pass
@@ -86,7 +107,8 @@ class ArduinoPt(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(ArduinoPt.delete_device) ENABLED START #
-        self.ser.close()
+        if (self.ser is not None):
+            self.ser.close()
         # PROTECTED REGION END #    //  ArduinoPt.delete_device
 
     # ------------------
