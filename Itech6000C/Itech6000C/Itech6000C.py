@@ -47,37 +47,33 @@ class Itech6000C(Device):
     ItechConnected = False
 
     def TCPBlockingReceive(self):
-        Bytereceived = b'0'
-        szData = ''
-        szData=self.s.recv(1024).decode("ascii")
-        return szData
-        while ord(Bytereceived) != 0:
-            ReceivedLength = 0
-            while ReceivedLength == 0:
-                Bytereceived = self.s.recv(1)
-                #print 'Bytereceived=',Bytereceived,'ord(Bytereceived)=',ord(Bytereceived)
-                ReceivedLength = len(Bytereceived)
-            if ord(Bytereceived) != 0:
-                szData = szData + Bytereceived
-            print(szData,"test")
-        return szData
+        """One reply. Everything after the return was dead code -- the older
+        byte-at-a-time loop, unreachable behind it -- and it is gone."""
+        return self.s.recv(1024).decode("ascii")
 
     def connect(self):
+        """Open the link. True if it is up, so the caller can stop."""
         if self.ItechConnected:
-            return
-        else:
+            return True
+        try:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.s.settimeout(self.Timeout)
+            self.s.connect((self.IP, self.Port))
+        except OSError as e:
+            self.ItechConnected = False
             try:
-                self.s.connect((self.IP, self.Port))
-            except:
-                self.ItechConnected = False
-                self.set_state(tango.DevState.FAULT)
-                self.set_status("Can't connect to Itech6000C")
-                self.debug_stream("Can't connect to Itech6000C")
-                return
-            self.ItechConnected = True
-            self.set_status("Connected to Itech6000C")
-            self.debug_stream("Connected to Itech6000C")
+                self.s.close()
+            except Exception:                                 # noqa: BLE001
+                pass
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't connect to Itech6000C at %s:%d: %s"
+                            % (self.IP, self.Port, e))
+            self.debug_stream("Can't connect to Itech6000C: %s" % e)
+            return False
+        self.ItechConnected = True
+        self.set_status("Connected to Itech6000C at %s:%d" % (self.IP, self.Port))
+        self.debug_stream("Connected to Itech6000C")
+        return True
 
     def disconnect(self):
         if self.ItechConnected:
@@ -97,6 +93,12 @@ class Itech6000C(Device):
 
     Port = device_property(
         dtype='uint', default_value=30000
+    )
+
+    Timeout = device_property(
+        dtype='float', default_value=5.0,
+        doc='Seconds to wait on the socket. Without one, a supply that is '
+            'reachable but silent blocks a read for ever.',
     )
 
     # ----------
@@ -140,11 +142,31 @@ class Itech6000C(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(Itech6000C.init_device) ENABLED START #
-        self.connect()
-        self.s.send(b"OUTPUT?\n")
-        data = self.TCPBlockingReceive()
-        print(data)
-        if (data[0]=="1"):
+        # An exception escaping init_device makes PyTango exit the whole
+        # server. connect() used to report FAULT and return, and then this went
+        # on to send on a socket that had never connected. FAULT here means the
+        # supply cannot be reached; OFF below means it answered and its output
+        # is off, which is a different fact.
+        if (not self.connect()):
+            return
+        try:
+            self.s.send(b"OUTPUT?\n")
+            data = self.TCPBlockingReceive()
+        except OSError as e:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Itech6000C at %s:%d accepted the connection and "
+                            "then stopped answering: %s" % (self.IP, self.Port, e))
+            self.error_stream("Itech6000C stopped answering: %s" % e)
+            return
+        self.debug_stream("OUTPUT? -> %r" % data)
+        if (not data):
+            # data[0] on the empty string a silent supply returns was an
+            # IndexError, and it took the server with it.
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Itech6000C at %s:%d answered OUTPUT? with nothing"
+                            % (self.IP, self.Port))
+            self.error_stream("Empty answer to OUTPUT?")
+        elif (data[0]=="1"):
             self.set_state(tango.DevState.ON)
         else:
             self.set_state(tango.DevState.OFF)
