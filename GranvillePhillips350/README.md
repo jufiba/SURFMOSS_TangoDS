@@ -59,7 +59,7 @@ be set to whatever that label says.
 | `Bytesize`     | 7       | S3-S5; 7 or 8                            |
 | `Parity`       | `N`     | S3-S5; N, E or O                         |
 | `Stopbits`     | 2       | S3-S5; 1 or 2                            |
-| `PressureUnit` | `Torr`  | label only — **still to be confirmed off the front panel** |
+| `PressureUnit` | `mbar`  | label only; confirmed off the front panel 28-Aug-2026 |
 | `Timeout`      | 3.0     | s; generous because 300 baud is slow     |
 
 On pi-leem the port is
@@ -168,9 +168,16 @@ What the outcomes mean:
 
 ## Registration
 
-Server `GranvillePhillips350/1`, class `GranvillePhillips350`, device to be
-chosen (`leem/vacuum/iongauge` would match the naming of the others), host
-pi-leem.
+Server `GranvillePhillips350/1`, class `GranvillePhillips350`, device
+`leem/vacuum/gaugeMCH` (main chamber), host pi-leem.
+
+| Property       | Value                                                    |
+|----------------|----------------------------------------------------------|
+| `SerialPort`   | `/dev/serial/by-path/platform-3f980000.usb-usb-0:1.1.3:1.0-port0` |
+| `PressureUnit` | `mbar`                                                   |
+
+The framing properties can be left unset: their defaults are the measured
+9600 7N2.
 
 Set `SerialPort` and the framing properties **before** the first start:
 `init_device` asks `DGS` and goes FAULT with the reason if there is no answer,
@@ -178,10 +185,8 @@ rather than taking the server down with it.
 
 ## Not done
 
-- `PressureUnit` is unconfirmed. The 350 sends a bare number and cannot be
-  asked; read the front panel label and set the property to match. Nothing
-  converts it, so getting it wrong mislabels the attribute rather than
-  corrupting the value.
+- Never run as a registered Tango device: everything so far has been the
+  server's own methods driven against the instrument from a test harness.
 - `StartFilament1` / `StopFilament1`, the filament 2 pair and
   `DegasStart` / `DegasStop` are implemented from the manual and have never
   been sent. They energise a filament and a degas cycle. Read the pressure

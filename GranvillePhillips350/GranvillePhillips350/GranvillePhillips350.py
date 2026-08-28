@@ -108,10 +108,12 @@ class GranvillePhillips350(Device):
     )
 
     PressureUnit = device_property(
-        dtype='str', default_value='Torr',
+        dtype='str', default_value='mbar',
         doc='The unit the electrometer module is switched to, as printed on '
             'the front panel label. The 350 sends a bare number and cannot be '
-            'asked, so this is only a label: it is not converted.',
+            'asked, so this is only a label: it is not converted. The LEEM '
+            'instrument was on mbar on 28-Aug-2026; a 350 switched to Torr '
+            'needs this set, or the attribute is mislabelled.',
     )
 
     Timeout = device_property(
@@ -127,11 +129,12 @@ class GranvillePhillips350(Device):
     Pressure = attribute(
         dtype='double',
         label="Pressure",
-        unit="Torr",
+        unit="mbar",
         format="%4.2e",
-        doc="Ion gauge pressure, in whatever unit PressureUnit names. INVALID "
-            "when no filament is on: the 350 answers 9.90E+09 then, which is "
-            "a marker and not a reading.",
+        doc="Ion gauge pressure, in whatever unit PressureUnit names, which "
+            "init_device copies over this declared one. INVALID when no "
+            "filament is on: the 350 answers 9.90E+09 then, which is a marker "
+            "and not a reading.",
     )
 
     Filament1On = attribute(
