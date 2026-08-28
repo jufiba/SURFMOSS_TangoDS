@@ -111,8 +111,14 @@ STR_METHODS = {"split", "rsplit", "startswith", "endswith", "find", "rfind",
                "index", "replace", "strip", "lstrip", "rstrip", "join",
                "partition", "count"}
 
-# %s and %r accept anything; the rest need a number, so bytes there raises.
-TEXT_SPEC = re.compile(r"%[-+ #0-9.*]*[sr]")
+# %s and %r both accept anything; the rest need a number, so bytes there
+# raises. But the two are not the same mistake: %r on bytes is how you show raw
+# bytes on purpose, in a debug line or an error message, and reporting it as a
+# wart made the audit cry wolf on correct code. Only %s is cosmetic -- it is
+# the one that leaves a b'...' embedded in a sentence meant for a human.
+TEXT_SPEC = re.compile(r"%[-+ #0-9.*]*s")
+NUMERIC_SPEC = re.compile(r"%[-+ #0-9.*]*[diouxXeEfgG]")
+REPR_SPEC = re.compile(r"%[-+ #0-9.*]*r")
 
 
 def is_str_const(node):
@@ -296,6 +302,8 @@ class Scan(ast.NodeVisitor):
             if TEXT_SPEC.search(node.left.value):
                 self.report(node, "bytes formatted into a str with %s",
                             "cosmetic: shows b'...'", raises=False)
+            elif REPR_SPEC.search(node.left.value):
+                pass          # %r on bytes is deliberate, and correct
             else:
                 self.report(node, "bytes formatted with a numeric conversion",
                             "runtime: TypeError", raises=True)
