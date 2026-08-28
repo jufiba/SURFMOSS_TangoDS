@@ -31,8 +31,8 @@ JDFile v11 {
     font:"Dialog",0,38
   }
   JDRoundRectangle {
-    summit:377,293,722,572
-    origin:550,376
+    summit:451,293,796,572
+    origin:624,376
     name:"RoundRectangle"
   }
   JDRoundRectangle {
@@ -106,37 +106,37 @@ JDFile v11 {
     text:"LEEM Status"
   }
   JDRoundRectangle {
-    summit:386,68,719,213
-    origin:553,180
+    summit:460,68,793,213
+    origin:627,180
     name:"RoundRectangle"
   }
   JDRoundRectangle {
-    summit:762,68,1086,282
-    origin:924,185
+    summit:929,68,1253,282
+    origin:1091,185
     name:"RoundRectangle"
   }
   JDLabel {
-    summit:468,84,649,116
-    origin:554,95
+    summit:542,84,723,116
+    origin:628,95
     lineWidth:0
     name:"Label"
     font:"Dialog",0,24
     text:"Main Chamber"
   }
   JDLabel {
-    summit:833,83,1018,115
-    origin:919,94
+    summit:1000,83,1185,115
+    origin:1086,94
     lineWidth:0
     name:"Label"
     font:"Dialog",0,24
     text:"Electron optics"
   }
   JDSwingObject {
-    summit:399,124,708,197
-    origin:433,132
+    summit:473,124,782,197
+    origin:507,132
     fillStyle:1
     lineWidth:0
-    name:"leem/vacuum/gaugeMCH/Pressure_IG1"
+    name:"leem/vacuum/gaugeMCH/Pressure"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -148,11 +148,11 @@ JDFile v11 {
     font:"Dialog",0,38
   }
   JDSwingObject {
-    summit:770,125,1079,198
-    origin:804,133
+    summit:937,125,1246,198
+    origin:971,133
     fillStyle:1
     lineWidth:0
-    name:"leem/vacuum/gaugeMCH/Pressure_IG2"
+    name:"leem/vacuum/ColumnsIonPump/Pressure"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -164,26 +164,26 @@ JDFile v11 {
     font:"Dialog",0,38
   }
   JDLine {
-    summit:425,68,425,68
-    origin:425,68
+    summit:499,68,499,68
+    origin:499,68
     name:"Line"
   }
   JDLabel {
-    summit:779,393,833,425
-    origin:876,404
+    summit:946,393,1000,425
+    origin:1043,404
     lineWidth:0
     name:"Label"
     font:"Dialog",0,24
     text:"UPS"
   }
   JDRoundRectangle {
-    summit:755,378,1100,735
-    origin:928,461
+    summit:922,378,1267,735
+    origin:1095,461
     name:"RoundRectangle"
   }
   JDSwingObject {
-    summit:813,438,1044,509
-    origin:847,446
+    summit:980,438,1211,509
+    origin:1014,446
     fillStyle:1
     lineWidth:0
     name:"leem/safety/ups/charge"
@@ -198,8 +198,8 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDSwingObject {
-    summit:815,537,1046,608
-    origin:849,545
+    summit:982,537,1213,608
+    origin:1016,545
     fillStyle:1
     lineWidth:0
     name:"leem/safety/ups/load"
@@ -214,8 +214,8 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDSwingObject {
-    summit:816,640,1048,714
-    origin:894,651
+    summit:983,640,1215,714
+    origin:1061,651
     fillStyle:1
     lineWidth:0
     name:"leem/safety/ups/UpsStatus"
@@ -230,24 +230,24 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:998,513,1048,538
-    origin:1095,524
+    summit:1165,513,1215,538
+    origin:1262,524
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"Load"
   }
   JDLabel {
-    summit:905,414,1049,439
-    origin:1002,425
+    summit:1072,414,1216,439
+    origin:1169,425
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"Battery Charge"
   }
   JDLabel {
-    summit:987,618,1051,643
-    origin:1084,629
+    summit:1154,618,1218,643
+    origin:1251,629
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
@@ -292,22 +292,22 @@ JDFile v11 {
     text:"Power"
   }
   JDBar {
-    summit:804,336,846,358
-    origin:856,323
+    summit:971,336,1013,358
+    origin:1023,323
     fillStyle:1
     name:"leem/power/xps/State"
   }
   JDLabel {
-    summit:774,311,876,336
-    origin:871,322
+    summit:941,311,1043,336
+    origin:1038,322
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"XPS power"
   }
   JDSwingObject {
-    summit:531,403,701,477
-    origin:547,414
+    summit:605,403,775,477
+    origin:621,414
     fillStyle:1
     lineWidth:0
     name:"leem/power/hv1/Power"
@@ -322,29 +322,13 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:434,414,510,460
-    origin:531,425
+    summit:508,414,584,460
+    origin:605,425
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"Doser1 ",
          "power"
-  }
-  JDSwingObject {
-    summit:378,12,655,55
-    origin:490,23
-    fillStyle:1
-    lineWidth:0
-    name:"leem/measurement/positionXY/Position"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,18
   }
   JDSwingObject {
     summit:797,11,907,56
@@ -379,14 +363,6 @@ JDFile v11 {
     font:"Dialog",0,18
   }
   JDLabel {
-    summit:298,20,375,45
-    origin:395,31
-    lineWidth:0
-    name:"Label"
-    font:"Dialog",0,18
-    text:"Position"
-  }
-  JDLabel {
     summit:670,12,794,58
     origin:767,23
     lineWidth:0
@@ -404,8 +380,8 @@ JDFile v11 {
     text:"Obj"
   }
   JDSwingObject {
-    summit:531,483,701,557
-    origin:547,494
+    summit:605,483,775,557
+    origin:621,494
     fillStyle:1
     lineWidth:0
     name:"leem/power/hv2/Power"
@@ -420,8 +396,8 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:436,492,507,538
-    origin:533,503
+    summit:510,492,581,538
+    origin:607,503
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
@@ -433,7 +409,7 @@ JDFile v11 {
     origin:199,626
     fillStyle:1
     lineWidth:0
-    name:"leem/safety/water/channel0"
+    name:"leem/safety/water/turbo"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -454,11 +430,11 @@ JDFile v11 {
          "flow"
   }
   JDSwingObject {
-    summit:924,223,1074,271
-    origin:958,212
+    summit:1091,223,1241,271
+    origin:1125,212
     fillStyle:1
     lineWidth:0
-    name:"leem/safety/water/channel3"
+    name:"leem/safety/water/p2lens"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -470,8 +446,8 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:795,223,904,269
-    origin:892,234
+    summit:962,223,1071,269
+    origin:1059,234
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
@@ -479,19 +455,19 @@ JDFile v11 {
          "P2"
   }
   JDLabel {
-    summit:894,290,1078,315
-    origin:991,301
+    summit:1061,290,1245,315
+    origin:1158,301
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"xray gun water flow"
   }
   JDSwingObject {
-    summit:909,320,1059,368
-    origin:943,309
+    summit:1076,320,1226,368
+    origin:1110,309
     fillStyle:1
     lineWidth:0
-    name:"leem/safety/water/channel1"
+    name:"leem/safety/water/xraygun"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -503,11 +479,11 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDSwingObject {
-    summit:531,308,701,382
-    origin:547,319
+    summit:605,308,775,382
+    origin:621,319
     fillStyle:1
     lineWidth:0
-    name:"leem/safety/water/channel2"
+    name:"leem/safety/water/doser"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -519,8 +495,8 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:397,325,513,371
-    origin:494,336
+    summit:471,325,587,371
+    origin:568,336
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
@@ -528,13 +504,13 @@ JDFile v11 {
          "flow"
   }
   JDRoundRectangle {
-    summit:374,586,719,808
-    origin:553,724
+    summit:448,586,793,808
+    origin:627,724
     name:"RoundRectangle"
   }
   JDSwingObject {
-    summit:553,687,702,737
-    origin:548,698
+    summit:627,687,776,737
+    origin:622,698
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/scrollPump/TemperatureMotor"
@@ -549,8 +525,8 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDSwingObject {
-    summit:552,746,701,796
-    origin:547,757
+    summit:626,746,775,796
+    origin:621,757
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/scrollPump/Power"
@@ -565,16 +541,16 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:396,595,491,627
-    origin:493,606
+    summit:470,595,565,627
+    origin:567,606
     lineWidth:0
     name:"Label"
     font:"Dialog",0,24
     text:"Hiscroll"
   }
   JDSwingObject {
-    summit:554,627,703,677
-    origin:549,638
+    summit:628,627,777,677
+    origin:623,638
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/scrollPump/ActualSpeed"
@@ -589,52 +565,52 @@ JDFile v11 {
     font:"Dialog",0,24
   }
   JDLabel {
-    summit:416,696,540,721
-    origin:513,707
+    summit:490,696,614,721
+    origin:587,707
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"Temperature"
   }
   JDLabel {
-    summit:444,755,506,780
-    origin:541,766
+    summit:518,755,580,780
+    origin:615,766
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"Power"
   }
   JDImage {
-    summit:770,722,1055,803
-    origin:1130,823
+    summit:952,745,1237,826
+    origin:1312,846
     lineWidth:0
     name:"Image"
     file_name:"logo.png"
   }
   JDLabel {
-    summit:445,645,508,670
-    origin:542,656
+    summit:519,645,582,670
+    origin:616,656
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"Speed"
   }
   JDLine {
-    summit:1013,563,1013,563
-    origin:1013,563
+    summit:1180,563,1180,563
+    origin:1180,563
     name:"Line"
   }
   JDLabel {
-    summit:407,245,504,270
-    origin:504,256
+    summit:481,245,578,270
+    origin:578,256
     lineWidth:0
     name:"Label"
     font:"Dialog",0,18
     text:"Doser line"
   }
   JDSwingObject {
-    summit:530,232,713,277
-    origin:595,243
+    summit:604,232,787,277
+    origin:669,243
     fillStyle:1
     lineWidth:0
     name:"leem/vacuum/gaugeEvap/Pressure"
@@ -697,8 +673,8 @@ JDFile v11 {
     font:"Dialog",0,18
   }
   JDSwingObject {
-    summit:507,601,581,619
-    origin:564,610
+    summit:581,601,655,619
+    origin:638,610
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -712,8 +688,8 @@ JDFile v11 {
     border:3
   }
   JDSwingObject {
-    summit:601,601,675,619
-    origin:658,610
+    summit:675,601,749,619
+    origin:732,610
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
