@@ -166,18 +166,34 @@ class RaspberryButton(Device):
         self.deadman_tripped = False
         self.last_keepalive = time.monotonic()
 
-        # The pin is deliberately left claimed as an output across device
-        # restarts (see delete_device), so RPi.GPIO would warn about it being
-        # already in use. That is the intended state, not a mistake.
-        GPIO.setwarnings(False)
-        GPIO.setmode(GPIO.BCM)
+        # An exception escaping init_device makes PyTango exit the whole
+        # server. Taking the pin can fail for a reason that has nothing to do
+        # with this device -- the kernel holding the line for an overlay, as
+        # w1-gpio held GPIO 4 on pi-leem, gives lgpio.error: 'GPIO busy'.
+        try:
+            # The pin is deliberately left claimed as an output across device
+            # restarts (see delete_device), so RPi.GPIO would warn about it
+            # being already in use. That is the intended state, not a mistake.
+            GPIO.setwarnings(False)
+            GPIO.setmode(GPIO.BCM)
 
-        # initial= makes claiming the pin and setting its inactive level a
-        # single operation. Without it there is a window between setup() and
-        # output() in which the level is whatever the previous configuration
-        # left behind.
-        inactive = GPIO.LOW if self.TrueHigh else GPIO.HIGH
-        GPIO.setup(self.Pin, GPIO.OUT, initial=inactive)
+            # initial= makes claiming the pin and setting its inactive level a
+            # single operation. Without it there is a window between setup()
+            # and output() in which the level is whatever the previous
+            # configuration left behind.
+            inactive = GPIO.LOW if self.TrueHigh else GPIO.HIGH
+            GPIO.setup(self.Pin, GPIO.OUT, initial=inactive)
+        except Exception as e:                                # noqa: BLE001
+            # Failing here is safe in the direction that matters: the pin was
+            # never claimed, so this server is not driving the permissive and
+            # cannot assert it. The deadman is left unarmed for the same
+            # reason -- there would be nothing for it to drop.
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't take GPIO %d: %s. The output is not being "
+                            "driven, so the permissive is not asserted."
+                            % (self.Pin, e))
+            self.error_stream("Can't take GPIO %d: %s" % (self.Pin, e))
+            return
 
         self.set_state(tango.DevState.OFF)
         self.set_status("Output de-asserted")
@@ -189,8 +205,6 @@ class RaspberryButton(Device):
             self.set_status("Output de-asserted; deadman armed (%.1f s)"
                             % self.DeadmanTimeout)
         # PROTECTED REGION END #    //  RaspberryButton.init_device
-
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(RaspberryButton.always_executed_hook) ENABLED START #
         pass

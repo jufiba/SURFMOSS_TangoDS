@@ -63,10 +63,23 @@ class WaterSwitch(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(WaterSwitch.init_device) ENABLED START #
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(21, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        # An exception escaping init_device makes PyTango exit the whole
+        # server, and taking a pin fails for reasons outside this device:
+        # the kernel holding the line for an overlay gives lgpio.error:
+        # 'GPIO busy', as w1-gpio did for GPIO 4 on pi-leem.
+        try:
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(21, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        except Exception as e:                                # noqa: BLE001
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't take GPIO %s: %s" % (21, e))
+            self.error_stream("Can't take GPIO %s: %s" % (21, e))
+            return
+        # The input is readable, which is all this server needs. It set
+        # no state at all before, so it sat in UNKNOWN even when working,
+        # and FAULT would have been its only meaningful state.
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  WaterSwitch.init_device
-
     def always_executed_hook(self):
         # PROTECTED REGION ID(WaterSwitch.always_executed_hook) ENABLED START #
         pass
