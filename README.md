@@ -202,6 +202,7 @@ The `docs/` directory holds the longer-form documentation:
 
 | File | Contents |
 |---|---|
+| `DS-architecture.md` | Two failure modes shared by the device servers: an exception in `init_device` taking the whole server down, and attributes read live from the instrument on every client request. Audits, measurements and what to do |
 | `LEEMmacros.md` | LEEM acquisition macros: versioning, change history with reasoning, invariants to preserve |
 | `LEEMgui.md` | Acquisition GUI: architecture, layout decisions, how to add an acquisition, testing |
 | `netboot-shared-root.md` | How the Pis netboot from one shared read-only NFS root on wolframite: exports, per-Pi `/var`, machine-id, per-host service activation, recovery |
