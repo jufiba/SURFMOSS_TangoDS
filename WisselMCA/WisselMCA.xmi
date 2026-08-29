@@ -15,6 +15,11 @@
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
       <DefaultPropValue>0x0035</DefaultPropValue>
     </deviceProperties>
+    <deviceProperties name="DevicePath" description="Which card, when more than one is connected. The hidapi path, as hid.enumerate() reports it. Empty picks the first matching VendorID and InstrumentID. The serial number cannot be used: these cards report it empty.">
+      <type xsi:type="pogoDsl:StringType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <DefaultPropValue></DefaultPropValue>
+    </deviceProperties>
     <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
       <argin description="none">
         <type xsi:type="pogoDsl:VoidType"/>

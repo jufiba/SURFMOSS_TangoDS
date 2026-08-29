@@ -59,15 +59,47 @@ class cmca:
             buf.extend(r)
         return buf
 
-    def drain(self):
-        """ Discard reports left queued by an earlier desynchronised session. """
-        n=0
-        while self.dev.read(self.REPORT_SIZE,50):
-            n+=1
-        return n
+    # Enough to clear anything a desynchronised session can have left, and
+    # short enough that a card which never stops talking cannot hold the
+    # device for ever. A full reply is two reports.
+    DRAIN_REPORTS=64
+    DRAIN_SECONDS=2.0
 
-    def open(self):
-        self.dev.open(self.VendorID,self.InstrumentID)
+    def drain(self):
+        """ Discard reports left queued by an earlier desynchronised session.
+
+        Bounded, deliberately. This was `while self.dev.read(...)`, which never
+        ends while the card keeps producing reports -- and a card that is
+        measuring does. It runs inside the device's Tango serialization
+        monitor, so the whole device wedges rather than the call failing: ping
+        and info keep answering, while state() and every attribute come back
+        "not able to acquire serialization monitor". Found in that state on
+        29-Aug-2026 after twelve hours, at 0.7% CPU, which is what a 50 ms
+        timeout in an endless loop looks like.
+        """
+        n=0
+        end=time.monotonic()+self.DRAIN_SECONDS
+        while n<self.DRAIN_REPORTS and time.monotonic()<end:
+            if not self.dev.read(self.REPORT_SIZE,50):
+                return n
+            n+=1
+        # Still talking after all that: say so rather than keep reading.
+        raise IOError("the MCA is still sending after %d reports in %.1f s; "
+                      "it did not go quiet to be drained" % (n, self.DRAIN_SECONDS))
+
+    def open(self,path=None):
+        """Open the card. By hidapi path if given, else by VendorID/InstrumentID.
+
+        These cards report an empty serial number, so with two of them plugged
+        in VendorID/InstrumentID cannot tell them apart and hidapi returns
+        whichever it finds first. The path can: it encodes the USB topology,
+        like the /dev/serial/by-path names the serial servers use.
+        """
+        if path:
+            self.dev.open_path(path if isinstance(path,bytes)
+                               else path.encode("ascii"))
+        else:
+            self.dev.open(self.VendorID,self.InstrumentID)
         self.dev.set_nonblocking(False)
         self.drain()
         return(True)
@@ -315,6 +347,15 @@ class WisselMCA(Device):
         dtype='uint16', default_value=0x0035
     )
 
+    DevicePath = device_property(
+        dtype='str', default_value="",
+        doc='Which card, when more than one is connected. The hidapi path, as '
+            'hid.enumerate() reports it -- "1-1.1.2:1.0" on pi-rackmossbauer. '
+            'Empty picks the first one matching VendorID and InstrumentID, '
+            'which is right while there is only one. The serial number cannot '
+            'be used for this: these cards report it empty.',
+    )
+
     # ----------
     # Attributes
     # ----------
@@ -427,7 +468,7 @@ class WisselMCA(Device):
         self.c.VendorID = self.VendorID
         self.c.InstrumentID = self.InstrumentID
         try:
-            self.c.open()
+            self.c.open(self.DevicePath)
         except Exception as e:
             self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to Wissel MCA %x: %s"
