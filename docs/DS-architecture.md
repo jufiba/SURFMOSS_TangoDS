@@ -1,7 +1,8 @@
 # Device server architecture: failing well, and being asked too often
 
 _Written 28-Aug-2026, from an audit of the 35 live servers and measurements
-against the running vacuum instruments._
+against the running vacuum instruments. Updated 29-Aug-2026, when sixteen of
+the seventeen were fixed._
 
 Two problems that look unrelated and are the same question seen from two sides:
 **what happens when the instrument cannot answer.** In one case nobody asked and
@@ -67,23 +68,13 @@ Two details that are easy to miss:
 
 ### Which servers still have the defect
 
-Seventeen of the 35 live servers reach hardware in `init_device` outside any
-`try`:
+**One, as of 29-Aug-2026: `NetworkUPSTool`.** It was seventeen. Sixteen were
+fixed in four batches (`caa0b20`, `8b6bbc7`, `a4a56f2`, `168f860`, `544d09e`),
+and NetworkUPSTool is left because it needs the separate question of `upsd` not
+starting on its own settled at the same time.
 
-| Server | Unguarded | Device |
-|---|---|---|
-| HuttingerPFGDC | `Serial()`, two exchanges | sputtering/power/magDC |
-| HuttingerPFGRF | `Serial()`, one exchange | sputtering/power/magRFmag |
-| VarianTV301nav | `Serial()`, two exchanges | sputtering/vacuum/turbo |
-| Itech6000C | `socket()` | VSM |
-| ElmitecLEEM2k | `socket()` | LEEM |
-| ElmitecUview | `socket()` | LEEM |
-| NetworkUPSTool | `PyNUTClient()` | pi-leem |
-| CenterOneGauge | `Serial()` | leem/vacuum/gaugeEvap |
-| MKSGauge, MFC, Hygrometer, ArduinoPt, ArduinoMotor, FUGMCP | `Serial()` / `write()` | various |
-| RaspberryButton, RaspberrySwitch, WaterSwitch | `setmode()`, `setup()` | GPIO |
-
-`HuttingerPFGDC` is the textbook case, and shows the intention was there:
+`HuttingerPFGDC` was the textbook case, and shows the intention was always
+there:
 
 ```python
 self.ser = serial.Serial(...)
@@ -98,15 +89,59 @@ With the supply switched off, `sendcommand` gets nothing, `parse_response`
 raises while indexing, and the server is gone — three lines before the FAULT it
 meant to set.
 
-**Already protected (16):** AGPolaritySwitch, AMLPGC1, ArduinoDAC, CryoCon32,
-GammaVacuumDigitel, GranvillePhillips350, LeyboldIG3, PIDController,
-PfeifferHiscroll, PfeifferTC100, PfeifferTU400, SEAWaterflowmeter,
-SRIlockin830, TempSensorDS18B20, Tti604, WisselMCA.
+### What each batch turned out to need
 
-⚠️ **Seventeen is a floor, not a ceiling.** The audit looks for calls that reach
+Guarding `init_device` was the smallest part. Every batch turned up something
+that only shows when the instrument is absent:
+
+| Batch | Servers | What else was wrong |
+|---|---|---|
+| A, sputtering | HuttingerPFGDC, HuttingerPFGRF, VarianTV301nav, ArduinoPt, ArduinoMotor, MKSGauge, MFC | **ArduinoPt reported ON with nothing connected** — `readline()` returns an empty line on timeout and raises nothing, so silence fell through to "Pt resistor connected". **MFC opened its port with no timeout**, so a silent instrument blocked a read for ever |
+| B | Hygrometer, FUGMCP, CenterOneGauge | Hygrometer set the status to "Connected" *before* checking the identity, so a mute board was reported connected and FAULT at once. FUGMCP guarded its identity exchange and then asked `>BON?` outside any try |
+| C | ElmitecLEEM2k, ElmitecUview, Itech6000C | **`TCPBlockingReceive` spun at full CPU** when the program went away: its inner `while ReceivedLength == 0: recv(1)` never ends, because recv returns zero only at end of file. No socket timeout either. Itech6000C's copy had the whole loop as dead code behind an early `return` |
+| D, GPIO | RaspberryButton, RaspberrySwitch, WaterSwitch | A different failure entirely: not a switched-off instrument but a pin the kernel holds, `lgpio.error: 'GPIO busy'` — the `w1-gpio` conflict on GPIO 4. RaspberrySwitch and WaterSwitch set no state at all, so they sat in UNKNOWN even when working |
+
+Two servers also needed more than not dying:
+
+- **ElmitecLEEM2k and ElmitecUview reconnect on their own now.** LEEM2000 and
+  UView are restarted routinely, and until 29-Aug-2026 each restart meant
+  restarting the device server by hand. A `_Reconnect` thread rebuilds the link
+  every `ReconnectPeriod` seconds, and every send goes through a helper that
+  marks the link down on failure. Itech6000C deliberately does *not* have this:
+  its link has not dropped in practice, and the thread is not free.
+- **RaspberryButton carries the X-ray gun permissive**, so failing safely
+  matters more there than anywhere. It fails in the right direction: the pin is
+  never claimed, so the server is not driving the permissive and cannot assert
+  it, and the deadman is left unarmed because there would be nothing to drop.
+
+### How the failure paths were tested
+
+Without switching off any instrument, and without touching the database:
+
+```bash
+<Server> test -file=/tmp/props -ORBendPoint giop:tcp:127.0.0.1:12990
+```
+
+with a property file naming the device and pointing `SerialPort` at a path that
+does not exist, or at a real adapter with nothing on the other end. Those are
+the two shapes of "the instrument is not there", and they can be produced on any
+Pi. For the networked servers a stand-in program that could be started and
+killed at will showed the reconnection working end to end.
+
+⚠️ **`-nodb` alone is not enough**: a property declared `mandatory=True` is
+fetched by `Device.init_device()` before any of this code runs, and a missing
+one raises there — which is itself a way to kill a server that no guard written
+here can catch. `-file=` supplies the properties and avoids it.
+
+**Already protected (32):** everything except NetworkUPSTool, AlarmNotifier and
+AnalogInterlock, the last two having nothing risky in `init_device` to begin
+with.
+
+⚠️ **The count is a floor, not a ceiling.** The audit looks for calls that reach
 hardware or the network. Any other exception kills the server just as dead:
-`AnalogInterlock` counts as clean here and still has an explicit `raise` in
-`init_device` when its thresholds are inconsistent.
+`AnalogInterlock` counts as clean and still has an explicit `raise` in
+`init_device` when its thresholds are inconsistent, and a missing mandatory
+property kills it before `init_device` is even entered.
 
 ---
 
@@ -215,28 +250,18 @@ manufactures the very problem being solved.
 The two halves are independent and can be done in either order. Both are
 tractable in batches.
 
-**Robustness**, in order of who is asking for it:
+**Robustness** — done, bar one:
 
-- **Sputtering (7)** — the whole rig bar one. Mapping the devices to their
-  servers turned up more than the four the synoptic shows: HuttingerPFGDC
-  (`power/magDC`), HuttingerPFGRF (`power/magRFmag` **and** `power/magRFnonmag`),
-  VarianTV301nav (`vacuum/turbo`), ArduinoPt (`measurement/temperature`),
-  ArduinoMotor (`motion/sample`), MKSGauge (`vacuum/gauge`) and MFC (`vacuum/mfc_Ar`
-  and `vacuum/mfc_O2`). Only ArduinoDAC (`power/heating`) is already protected.
-
-  Note HuttingerPFGRF and MFC each serve **two devices**: an exception raised
-  while initialising one takes the other down with it, since it is one process.
-
-  This is what raised the question, and the hardware is switched off, which is
-  the one time the failure path can actually be tested rather than reasoned
-  about.
-- **The rest of the simple serial (3)** — Hygrometer, FUGMCP, CenterOneGauge.
-- **Networked (3)** — ElmitecLEEM2k, ElmitecUview, Itech6000C. In production on
-  the LEEM; more care.
-- **GPIO (3)** — RaspberryButton, RaspberrySwitch, WaterSwitch. Different in
-  kind: a GPIO failure is usually configuration, not a switched-off instrument,
-  and `RaspberryButton` carries the X-ray gun interlock. Last, and carefully.
-- **NetworkUPSTool** separately, since it also depends on `upsd` starting.
+- ✅ **Sputtering (7)** — `caa0b20`. The rig was switched off, which made it the
+  one batch whose failure path could be tested rather than reasoned about.
+- ✅ **Hygrometer, FUGMCP, CenterOneGauge** — `8b6bbc7`.
+- ✅ **Networked (3)** — `a4a56f2` and `168f860`, with reconnection for the two
+  Elmitec servers.
+- ✅ **GPIO (3)** — `544d09e`.
+- ⏳ **NetworkUPSTool** — left, because it also needs `upsd` starting on its own,
+  which is still open (see `netboot-shared-root.md`). It runs today only
+  because `upsd` was started by hand, so it will fail again at the next reboot
+  of pi-leem.
 
 **Load**: set `polled_attr` on the vacuum devices, starting with the two ion
 pumps, which are the only ones with no headroom. No code change.
