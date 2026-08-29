@@ -9,6 +9,10 @@ Two problems that look unrelated and are the same question seen from two sides:
 the server dies at start-up; in the other everybody asks at once and the
 instrument stops answering.
 
+A third was added on 29-Aug-2026: a server that does diagnose the failure
+correctly and then overwrites the diagnosis with a later line, which is how a
+server can be wrong out loud for weeks without anybody being able to see why.
+
 ---
 
 ## 1. An exception in `init_device` takes the whole server down
@@ -245,7 +249,60 @@ manufactures the very problem being solved.
 
 ---
 
-## 3. What to do
+## 3. A status that a later line overwrites
+
+Found on 29-Aug-2026 in `AnalogInterlock`, and worth stating separately because
+neither audit above can see it and the symptom points away from the cause.
+
+`mossbauer/warn/watercompressor` reported
+
+```
+ALARM | No permit: newcompressor = 10.80, must rise above 9.00
+```
+
+with the flow at 10.8 l/min against a threshold of 9. The value was read
+correctly, it was plainly above the threshold, and the server said it was not.
+
+The device had no `OutputDevice` property at all. Every cycle: the value passed
+`ThresholdOn`, so `grant()` ran; `grant()` called `send("On")`; `send()` could
+not build a proxy to an empty device name, set FAULT and wrote a status saying
+which command had failed and why — the correct diagnosis, first try. It then
+returned `False`, `grant()` returned without granting, and control fell through
+to the tail of `cycle()`, whose job is to say why the permissive is not held.
+That tail set ALARM and "must rise above" unconditionally. The FAULT was
+replaced by a lie a few microseconds after being set, so no client, log or
+poll ever saw it.
+
+The same function's `trip()` had guarded against this from the start:
+
+```python
+if self.get_state() != tango.DevState.FAULT or state == tango.DevState.FAULT:
+```
+
+`grant()` had not. The asymmetry is the whole bug.
+
+**The pattern.** A function that sets state and status on failure has to tell
+its caller, and the caller has to stop. `grant()` now returns a bool and
+`cycle()` returns when it is `False`.
+
+**The second lesson is about defaults.** An empty `OutputDevice` could have been
+taken to mean "this one only watches" — which is genuinely what this device is
+for, under the `warn/` domain. It is not taken to mean that: watching is now an
+explicit `WatchOnly` property, and an empty `OutputDevice` without it is refused
+at start-up. Inferring intent from a missing property makes a `safety/` device
+that loses its `OutputDevice` demote itself to a bystander, silently, which is
+the same failure again with worse consequences. Same reasoning for `Reverse`,
+the new direction property: reading the direction off which threshold is larger
+would turn a transposed pair from a start-up refusal into an inverted interlock.
+
+How it was tested: `cycle()` driven directly against stubs for all four
+combinations of `Reverse` x `WatchOnly` plus the refused-command case, and the
+three start-up refusals against a real server run from a `-file=` database.
+Neither test touches the live chains.
+
+---
+
+## 4. What to do
 
 The two halves are independent and can be done in either order. Both are
 tractable in batches.
@@ -285,7 +342,11 @@ is now constant, whatever the number of clients.
 ```bash
 python3 tools/audit_init_device.py     # who can still die at start-up
 python3 tools/audit_reads.py           # who reads the instrument per request
+python3 tools/test_analoginterlock.py  # the interlock's decisions and refusals
 ```
+
+The last one needs PyTango, so it runs on a Pi or on wolframite rather than on
+a laptop; the two audits parse with `ast` and run anywhere.
 
 Both have a `--self-test` that runs anywhere. audit_init_device's regression
 fixture is this repository's own history: HuttingerPFGDC must report at

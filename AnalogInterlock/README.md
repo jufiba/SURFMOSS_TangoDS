@@ -5,7 +5,8 @@ attribute from an input device and asserts or de-asserts a permissive on an
 output device, with hysteresis, read-failure tolerance and detection of a
 frozen input publisher.
 
-Replaces the `xps-interlock.py` cron script on pi-xps.
+Replaces the `xps-interlock.py` cron script on pi-xps. A second instance on
+pi-mossbauer watches the compressor cooling water without commanding anything.
 
 **This is a secondary protection layer.** It runs in userspace, over CORBA,
 between two processes on a Raspberry Pi. Anything that genuinely must not
@@ -84,16 +85,84 @@ On `RaspberryButton/1` set `DeadmanTimeout = 10.0`. It must be comfortably
 longer than a restart of this server, or restarting the interlock drops the
 permissive and someone has to walk over and press the physical reset button.
 
+## Which way round, and whether it commands anything
+
+Two properties say what the server is for. Both are declared rather than
+guessed from the other values, because in each case the thing that would be
+guessed is also what a mistake looks like.
+
+`Reverse` gives the direction. `False`, the default, is a quantity that must
+stay **high** — a cooling flow, a supply pressure: granted above `ThresholdOn`,
+withdrawn below `ThresholdOff`, so `ThresholdOff` is the lower of the two.
+`True` is a quantity that must stay **low** — a temperature, a chamber
+pressure: granted below `ThresholdOn`, withdrawn above `ThresholdOff`, so
+`ThresholdOff` is the higher. The direction could have been read off which
+threshold is larger, and then a pair typed the wrong way round would silently
+invert the interlock instead of being refused at start-up.
+
+`WatchOnly` says the server commands nothing: it reads the input, applies the
+same thresholds and hysteresis, and publishes `Permit` and a state for
+something else to act on — AlarmNotifier, a synoptic. That is what the
+`<instrument>/warn/` domain means, as against `<instrument>/safety/`. An empty
+`OutputDevice` is *not* taken to mean it, and either property without the other
+is refused at start-up: a `safety/` device whose `OutputDevice` went missing
+must fault rather than quietly demote itself to a bystander. That is not
+hypothetical — see below.
+
+### The watch that could not grant
+
+`mossbauer/warn/watercompressor` (`AnalogInterlock/2`, pi-mossbauer) was
+registered with no `OutputDevice` at all, and until 29-Aug-2026 reported
+
+```
+ALARM | No permit: newcompressor = 10.80, must rise above 9.00
+```
+
+with the flow at 10.8 l/min, comfortably above the threshold of 9. The reading
+was right and the conclusion was nonsense. What happened each cycle: the value
+was past `ThresholdOn`, `grant()` ran, `send("On")` could not build a proxy to
+the empty device name and set FAULT with a status saying so — and then `cycle()`
+fell through to its tail, which unconditionally set ALARM and "must rise above".
+The FAULT was overwritten within the same cycle by the code that came after it,
+so the real reason was never visible to anybody. `trip()` had always guarded
+against exactly this and `grant()` had not.
+
+`grant()` now reports whether it succeeded and `cycle()` stops when it did not,
+leaving the FAULT standing. And the configuration that provoked it is now
+refused outright at start-up instead of running in that state for weeks.
+
+## Registration on pi-mossbauer
+
+Server `AnalogInterlock/2`, class `AnalogInterlock`, device
+`mossbauer/warn/watercompressor`.
+
+| Property         | Value                       |
+|------------------|-----------------------------|
+| `InputDevice`    | `mossbauer/safety/waterflow` |
+| `InputAttribute` | `newcompressor` (l/min)     |
+| `WatchOnly`      | `true`                      |
+| `ThresholdOn`    | `9`                         |
+| `ThresholdOff`   | `8`                         |
+| `Latching`       | `true`                      |
+
+`Reverse` stays at its default: the flow must stay high.
+
+`Latching = true` on a watch means a dip below 8 l/min keeps the warning
+asserted after the flow recovers, until somebody calls `Reset`. On a compressor
+that is usually what is wanted — the point is to learn that it happened — but
+it is a choice, and the alarm will not clear by itself.
+
 ## Failure modes
 
 | Condition                  | Response                                     |
 |----------------------------|----------------------------------------------|
-| input below `ThresholdOff` | de-assert, ALARM                             |
+| input past `ThresholdOff`  | de-assert, ALARM                             |
 | input unreadable/INVALID   | de-assert after `MaxReadFailures`, FAULT     |
 | heartbeat unreadable       | de-assert after `MaxReadFailures`, FAULT     |
 | input publisher frozen     | de-assert after `StaleCycles`, ALARM         |
 | this server dies           | keepalives stop, output device's deadman fires |
 | output device unreachable  | FAULT; nothing else is possible from here    |
+| output command refused     | FAULT, not granted; the status names the command |
 
 The frozen-publisher case is the one neither the cron script nor a naive
 port could catch: a dead acquisition thread keeps returning its last good

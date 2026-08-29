@@ -13,6 +13,22 @@ Generic threshold interlock between two Tango devices: reads a numeric
 attribute from an input device and asserts or de-asserts a permissive on an
 output device.
 
+The permissive is granted at ThresholdOn and withdrawn at ThresholdOff, with
+the band between them as hysteresis. Which way round that is depends on
+Reverse: normally the quantity must stay *high* (a flow, a supply pressure)
+and ThresholdOff is the lower of the two; with Reverse it must stay *low* (a
+temperature, a chamber pressure) and ThresholdOff is the higher. The direction
+is a declared property and not inferred from the two numbers, so a pair
+entered the wrong way round is still caught at start-up instead of quietly
+inverting the interlock.
+
+With WatchOnly the server commands nothing and only reports: Permit and the
+state are then a judgement about the input for something else to act on --
+AlarmNotifier, a synoptic -- which is what the `<instrument>/warn/` domain
+means. It too is declared rather than inferred from an empty OutputDevice: a
+`safety/` device whose OutputDevice property went missing must fault, not
+quietly downgrade itself to watching.
+
 This is a *secondary* protection layer. It runs in userspace, over CORBA,
 between two processes on a Raspberry Pi. Anything that genuinely must not
 happen belongs in a hardware chain — a flow switch in series with the supply
@@ -20,7 +36,7 @@ enable — not here.
 
 Failure modes and what this server does about each:
 
-  input below threshold      -> de-assert, ALARM
+  input past ThresholdOff     -> de-assert, ALARM
   input attribute unreadable  -> de-assert after MaxReadFailures, FAULT
   input attribute INVALID     -> counted as a read failure
   input publisher frozen      -> de-assert after StaleCycles, ALARM
@@ -33,6 +49,8 @@ Failure modes and what this server does about each:
                                  construction: a process cannot be its own
                                  watchdog.
   output device unreachable   -> FAULT; nothing else is possible from here
+  output command refused      -> FAULT, and the permissive is not granted. The
+                                 status says which command failed and why
 """
 
 # PyTango imports
@@ -112,7 +130,16 @@ class AnalogInterlock(Device):
 
     OutputDevice = device_property(
         dtype='str',
-        doc="Device holding the permissive, e.g. xps/safety/xrayguninterlock",
+        doc="Device holding the permissive, e.g. xps/safety/xrayguninterlock. "
+            "Leave empty only together with WatchOnly.",
+    )
+
+    WatchOnly = device_property(
+        dtype='bool', default_value=False,
+        doc="If True, no command is ever sent: this device only reports "
+            "whether the input is within limits, and OutputDevice must be "
+            "empty. For a watch under `<instrument>/warn/` whose output is a "
+            "warning rather than a permissive.",
     )
 
     OnCommand = device_property(dtype='str', default_value="On")
@@ -125,16 +152,28 @@ class AnalogInterlock(Device):
             "implement a deadman.",
     )
 
+    Reverse = device_property(
+        dtype='bool', default_value=False,
+        doc="Which side of the thresholds is safe. False: the input must stay "
+            "high, as a cooling flow must (granted above ThresholdOn, "
+            "withdrawn below ThresholdOff). True: it must stay low, as a "
+            "temperature or a pressure must (granted below ThresholdOn, "
+            "withdrawn above ThresholdOff).",
+    )
+
     ThresholdOn = device_property(
         dtype='double', default_value=2.0,
-        doc="The permissive is granted when the input rises above this.",
+        doc="The permissive is granted when the input passes this: rises "
+            "above it normally, falls below it with Reverse.",
     )
 
     ThresholdOff = device_property(
         dtype='double', default_value=1.6,
-        doc="The permissive is withdrawn when the input falls below this. "
-            "Must be lower than ThresholdOn; the gap is the hysteresis that "
-            "stops the relay chattering around the trip point.",
+        doc="The permissive is withdrawn when the input passes back through "
+            "this: falls below it normally, rises above it with Reverse. The "
+            "gap to ThresholdOn is the hysteresis that stops the relay "
+            "chattering around the trip point, so ThresholdOff must be the "
+            "lower of the two normally and the higher with Reverse.",
     )
 
     PollPeriod = device_property(
@@ -221,11 +260,31 @@ class AnalogInterlock(Device):
         self.inputproxy = None
         self.outputproxy = None
 
-        if self.ThresholdOff >= self.ThresholdOn:
-            self.set_state(tango.DevState.FAULT)
-            self.set_status("ThresholdOff (%g) must be below ThresholdOn (%g)"
-                            % (self.ThresholdOff, self.ThresholdOn))
-            return
+        # A misconfiguration is refused here rather than at the first cycle,
+        # because a server that starts and then behaves as though the
+        # thresholds meant something else is worse than one that never starts.
+        output = (self.OutputDevice or "").strip()
+        if self.WatchOnly and output:
+            return self.misconfigured(
+                "WatchOnly is set, but OutputDevice is %s. Watching and "
+                "commanding are different jobs; pick one" % output)
+        if not self.WatchOnly and not output:
+            return self.misconfigured(
+                "no OutputDevice, and WatchOnly is not set. If this device is "
+                "meant only to report, say so with WatchOnly; an empty "
+                "OutputDevice is not taken to mean it, so that a safety "
+                "device that loses the property faults instead of quietly "
+                "becoming a bystander")
+        if self.Reverse and self.ThresholdOff <= self.ThresholdOn:
+            return self.misconfigured(
+                "with Reverse the input must stay low, so ThresholdOff (%g) "
+                "must be above ThresholdOn (%g)"
+                % (self.ThresholdOff, self.ThresholdOn))
+        if not self.Reverse and self.ThresholdOff >= self.ThresholdOn:
+            return self.misconfigured(
+                "ThresholdOff (%g) must be below ThresholdOn (%g). If the "
+                "input is meant to stay low rather than high, that is Reverse"
+                % (self.ThresholdOff, self.ThresholdOn))
 
         # Deliberately no command is sent here. This server restarting must not
         # by itself disturb a running experiment: the output device keeps
@@ -241,6 +300,24 @@ class AnalogInterlock(Device):
         # PROTECTED REGION END #    //  AnalogInterlock.init_device
 
     # PROTECTED REGION ID(AnalogInterlock.protected_methods) ENABLED START #
+    def misconfigured(self, reason):
+        """Refuse to start, and say what to correct. The control thread is
+        never started, so nothing is polled and nothing is commanded."""
+        self.set_state(tango.DevState.FAULT)
+        self.set_status(reason)
+
+    def grants(self, value):
+        """Is the input past ThresholdOn, on the safe side?"""
+        if self.Reverse:
+            return value < self.ThresholdOn
+        return value > self.ThresholdOn
+
+    def withdraws(self, value):
+        """Is the input back past ThresholdOff, on the unsafe side?"""
+        if self.Reverse:
+            return value > self.ThresholdOff
+        return value < self.ThresholdOff
+
     def proxy(self, which):
         """Create device proxies lazily, so a database or device that is not up
         yet delays the interlock rather than killing it at start-up."""
@@ -255,6 +332,8 @@ class AnalogInterlock(Device):
         return self.outputproxy
 
     def send(self, cmd):
+        if self.WatchOnly:
+            return True
         try:
             self.proxy("output").command_inout(cmd)
             return True
@@ -287,13 +366,23 @@ class AnalogInterlock(Device):
 
     def grant(self):
         if not self.send(self.OnCommand):
-            return
+            # send() has already set FAULT and said which command failed. The
+            # caller must stop here: falling through to the tail of cycle()
+            # would overwrite that with "must rise above", which is both wrong
+            # -- the input is past the threshold, that is why we are here --
+            # and unfalsifiable, since the FAULT is replaced within the same
+            # cycle and never seen. That is how an interlock with no
+            # OutputDevice at all spent its life reporting a threshold it had
+            # already passed.
+            return False
         self.permit = True
         self.tripped = False
         self.cyclessincereassert = 0
         self.set_state(tango.DevState.ON)
-        self.set_status("Permit granted (%s = %.2f)"
-                        % (self.InputAttribute, self.inputvalue))
+        self.set_status("%s granted (%s = %.2f)"
+                        % ("Watch" if self.WatchOnly else "Permit",
+                           self.InputAttribute, self.inputvalue))
+        return True
 
     def cycle(self):
         """One poll. Called only from the control thread."""
@@ -354,13 +443,16 @@ class AnalogInterlock(Device):
         # --- threshold with hysteresis --------------------------------------
         latched = self.manuallatch or (self.Latching and self.tripped)
         if self.permit:
-            if value < self.ThresholdOff:
-                self.trip("%s = %.2f below ThresholdOff (%.2f)"
-                          % (self.InputAttribute, value, self.ThresholdOff))
+            if self.withdraws(value):
+                self.trip("%s = %.2f %s ThresholdOff (%.2f)"
+                          % (self.InputAttribute, value,
+                             "above" if self.Reverse else "below",
+                             self.ThresholdOff))
                 return
         else:
-            if value > self.ThresholdOn and not latched:
-                self.grant()
+            if self.grants(value) and not latched:
+                if not self.grant():
+                    return
 
         # --- maintain the permissive ----------------------------------------
         if self.permit:
@@ -382,8 +474,11 @@ class AnalogInterlock(Device):
             self.set_status("No permit: latched off, Reset to clear (%s = %.2f)"
                             % (self.InputAttribute, value))
         else:
-            self.set_status("No permit: %s = %.2f, must rise above %.2f"
-                            % (self.InputAttribute, value, self.ThresholdOn))
+            self.set_status("No %s: %s = %.2f, must %s %.2f"
+                            % ("watch" if self.WatchOnly else "permit",
+                               self.InputAttribute, value,
+                               "fall below" if self.Reverse else "rise above",
+                               self.ThresholdOn))
     # PROTECTED REGION END #    //  AnalogInterlock.protected_methods
 
     def always_executed_hook(self):
