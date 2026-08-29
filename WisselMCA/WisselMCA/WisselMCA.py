@@ -43,6 +43,50 @@ class cmca:
     def __init__(self):
         self.dev=hid.device()
 
+    # Every reply gets a deadline. hid.device.read() without one waits for
+    # ever on a blocking handle, and the whole device server waits with it:
+    # the call runs inside the device's Tango serialization monitor, so ping
+    # keeps answering while state() and every attribute come back IMP_LIMIT.
+    # Found in exactly that state on 29-Aug-2026, six hours after a clean
+    # restart, with a thread parked in hid_read_timeout / pthread_cond_wait
+    # and not one USB error in dmesg: a single reply had gone missing, which
+    # is all it takes. A second longer than the slowest reply is plenty.
+    READ_TIMEOUT=1000
+
+    def read_timed(self,nbytes):
+        """One report, with a deadline. Empty means nothing arrived in time."""
+        return self.dev.read(nbytes,self.READ_TIMEOUT)
+
+    def resync(self):
+        """Throw away what a lost or late reply left in the pipe.
+
+        A reply that never came does not cost only that one command: it leaves
+        the stream out of step, so every command after it reads the previous
+        one's leftovers and reports a wrong count -- the desynchronisation
+        read_response() below was written for. Draining here means the next
+        command starts clean, and a card that will not go quiet says so
+        instead of being waited on.
+        """
+        try:
+            self.drain()
+            return ""
+        except Exception as e:
+            return " (and %s)"%e
+
+    def reply(self,nbytes,expect,what):
+        """Read one reply, check its count byte, resynchronise on failure.
+
+        (True, report) or (False, message), the shape checked() unwraps.
+        """
+        r=self.read_timed(nbytes)
+        if not r:
+            return(False,"no reply to %s in %d ms%s"
+                   %(what,self.READ_TIMEOUT,self.resync()))
+        if r[0]!=expect:
+            note=self.resync()
+            return(False,"wrong count in response %d%s"%(r[0],note))
+        return(True,r)
+
     def read_response(self,nbytes,timeout=1000):
         """ Read a reply of nbytes, reassembling it from 64-byte HID reports.
 
@@ -122,9 +166,9 @@ class cmca:
 
     def model(self):
         self.dev.write(self.code(bytes([0xF1])))
-        r=self.dev.read(7)
-        if (r[0]!=6):
-            return(False,"wrong count in response")
+        (ok,r)=self.reply(7,6,"model")
+        if not ok:
+            return(False,r)
         year=r[2]-0x48+2003
         week=r[3]
         serialnumber=r[4]*256+r[5]
@@ -132,69 +176,77 @@ class cmca:
 
     def start(self):
         self.dev.write(self.code(bytes([0x84]))) # Read mode
-        r=self.dev.read(4)
-        if (r[0]!=3):
-            return(False, "wrong count in response")
+        (ok,r)=self.reply(4,3,"start/read mode")
+        if not ok:
+            return(False,r)
         self.dev.write(self.code(bytes([0x04,r[2]|0b00010000]))) # Set bit4 (Start)
-        self.dev.read(4)
+        if not self.read_timed(4):
+            return(False,"no reply to start/set mode in %d ms%s"
+                   %(self.READ_TIMEOUT,self.resync()))
+        # Re-checks the *first* reply, so it can never fail here. Left as it
+        # was on purpose: correcting it changes what Start reports, and Start
+        # is one of the two commands that touch a running measurement.
         if (r[0]!=3):
             return(False,"wrong count in response")
         return(True)
 
     def stop(self):
         self.dev.write(self.code(bytes([0x84]))) # Read mode
-        r=self.dev.read(4)
-        if (r[0]!=3):
-            return(False,"wrong count in response %d"%r[0])
+        (ok,r)=self.reply(4,3,"stop/read mode")
+        if not ok:
+            return(False,r)
         self.dev.write(self.code(bytes([0x04,r[2]&0b11101111]))) # Reset bit4 (Start)
-        self.dev.read(4)
+        if not self.read_timed(4):
+            return(False,"no reply to stop/set mode in %d ms%s"
+                   %(self.READ_TIMEOUT,self.resync()))
+        # Same as in start(): this re-checks the first reply. Left alone.
         if (r[0]!=3):
             return(False,"wrong count in response")
         return(True)
 
     def readgeneral(self):
         self.dev.write(self.code(bytes([0x81])))
-        r=self.dev.read(5)
-        if (r[0]!=4):
-            return(False, "wrong count in response %d"%r[0])
+        (ok,r)=self.reply(5,4,"readgeneral")
+        if not ok:
+            return(False,r)
         return(True,r[2]+256*r[3])
 
     def writegeneral(self,setupbytes):
         self.dev.write(self.code(bytes([0x01,setupbytes%256,setupbytes//256])))
-        r=self.dev.read(3)
-        if (r[0]!=2):
-            return(False, "wrong count in response %d"%r[0])
+        (ok,r)=self.reply(3,2,"writegeneral")
+        if not ok:
+            return(False,r)
         return(True)
 
     def setmode(self,mode):
         self.dev.write(self.code(bytes([0x04,mode])))
-        r=self.dev.read(3)
-        if (r[0]!=2):
-            return(False,"wrong count in response %d"%r[0])
+        (ok,r)=self.reply(3,2,"setmode")
+        if not ok:
+            return(False,r)
         return(True)
 
     def readmode(self):
         self.dev.write(self.code(bytes([0x84])))
-        r=self.dev.read(4)
-        if (r[0]!=3):
-            return(False, "wrong count in response %d"%r[0])
+        (ok,r)=self.reply(4,3,"readmode")
+        if not ok:
+            return(False,r)
         return(True,r[2])
 
     def cleardata(self):
         # Block 0 clears entire RAM for MCS and PHA
         self.dev.write(self.code(bytes([0x13,0])))
-        r=self.dev.read(3)
-        if (r[0]!=2):
-            return(False,"wrong count in response")
+        (ok,r)=self.reply(3,2,"cleardata")
+        if not ok:
+            return(False,r)
         return(True)
 
     def readPHA(self):
         # Returns (True, array of 5 uint16): [Hysteresis, LLD1, ULD1, LLD2, ULD2]
         # Values are 14-bit: 0=0V, 16383=10V
         self.dev.write(self.code(bytes([0x88])))
-        r=self.dev.read(13)
-        if (r[0]!=12):
-            return(False,"wrong count in response")
+        (ok,r)=self.reply(13,12,"readPHA")
+        if not ok:
+            return(False,r)
         w=numpy.frombuffer(bytes(r[2:12]),dtype="<u2")
         # w[0]=Hysteresis, w[1]=LLD1, w[2]=ULD1, w[3]=LLD2, w[4]=ULD2
         return(True,w)
@@ -202,25 +254,25 @@ class cmca:
     def writePHA(self,w): # w should be a uint16 array of 5 elements
         message=bytes([0x08])+w.tobytes()
         self.dev.write(self.code(message))
-        r=self.dev.read(3)
-        if (r[0]!=2):
-            return(False,"wrong count in response %d"%r[0])
+        (ok,r)=self.reply(3,2,"writePHA")
+        if not ok:
+            return(False,r)
         return(True)
 
     def readlastchannel(self):
         self.dev.write(self.code(bytes([0x92])))
-        r=self.dev.read(5)
-        if (r[0]!=4):
-            return(False,"wrong count in response %d"%r[0])
+        (ok,r)=self.reply(5,4,"readlastchannel")
+        if not ok:
+            return(False,r)
         chan=r[2]*256+r[3]
         return(True,chan)
 
     def readchannel(self,channel):
         # Channel number 0-8191; returns 32-bit count
         self.dev.write(self.code(bytes([0x91,channel//256,channel%256])))
-        r=self.dev.read(7)
-        if (r[0]!=6):
-            return(False,"wrong count in response %d"%r[0])
+        (ok,r)=self.reply(7,6,"readchannel")
+        if not ok:
+            return(False,r)
         chan=numpy.frombuffer(bytes(r[2:6]),dtype="<u4")
         return(True,int(chan[0]))
 
@@ -231,9 +283,10 @@ class cmca:
         self.dev.write(self.code(bytes([0x90,0,page])))
         r=self.read_response(131)
         if (len(r)<130):
-            return(False,"short response, %d bytes"%len(r))
+            return(False,"short response to readpage, %d bytes%s"
+                   %(len(r),self.resync()))
         if (r[0]!=130):
-            return(False,"wrong count in response %d"%r[0])
+            return(False,"wrong count in response %d%s"%(r[0],self.resync()))
         return(True,bytes(r[2:130]))
 
     def readspectrum_pages(self, first_channel=0, n_channels=256):

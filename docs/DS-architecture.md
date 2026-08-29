@@ -9,9 +9,11 @@ Two problems that look unrelated and are the same question seen from two sides:
 the server dies at start-up; in the other everybody asks at once and the
 instrument stops answering.
 
-A third was added on 29-Aug-2026: a server that does diagnose the failure
+Two more were added on 29-Aug-2026. One is a server that diagnoses the failure
 correctly and then overwrites the diagnosis with a later line, which is how a
 server can be wrong out loud for weeks without anybody being able to see why.
+The other is a read with no deadline, which does not fail at all: it stops,
+and takes the device with it.
 
 ---
 
@@ -302,7 +304,59 @@ Neither test touches the live chains.
 
 ---
 
-## 4. What to do
+## 4. A read with no deadline, inside the serialization monitor
+
+Tango serialises calls to a device: every attribute read, every command and
+`state()` itself take the device's monitor. So a call that blocks does not
+block one client, it blocks the device. The symptom is unmistakable once seen:
+
+    ping         answers instantly
+    info         answers instantly
+    state()      IMP_LIMIT, "not able to acquire serialization monitor"
+    every attr   the same
+
+`ping` and `info` are answered by the admin device, which does not take that
+monitor. Anything that does, waits. To the Starter and to Astor the server is
+perfectly healthy, because that is what they check.
+
+WisselMCA did this twice on 29-Aug-2026, for two different reasons, and it is
+worth keeping both:
+
+| | what blocked | what it looked like |
+|---|---|---|
+| first | `while self.dev.read(...)` in `drain()`, unbounded | 0.7% CPU, a thread in `ppoll`, a 50 ms timeout going round for ever |
+| second | `hid.device.read(n)` with no timeout at all | 0.0% CPU, a thread in `hid_read_timeout` → `pthread_cond_wait` |
+
+The second is the more insidious: fourteen calls were written that way, the
+card answers all of them for hours, and one lost reply is enough. There was no
+USB error in `dmesg` -- nothing broke, a reply simply never came.
+
+**How to find it.** `gdb` is on the Pis and this needs no debug symbols:
+
+```bash
+sudo gdb -p $(pidof -s WisselMCA) -batch -ex "thread apply all bt 12"
+```
+
+The library names alone tell the story: one thread deep in the instrument
+library (`hid_read_timeout`, `pthread_cond_wait`) and one or more parked in
+`Tango::TangoMonitor::get_monitor()` from `AutoTangoMonitor`. The first holds
+the monitor; the rest are the clients you can see timing out.
+
+**The rule.** Every read from an instrument gets a deadline, and every reply
+gets checked for being empty. Not most of them: one is enough to wedge the
+device, and it will be the one that never fails in testing. `tools/audit_reads.py`
+cannot see this -- it reports which attributes reach the instrument, not
+whether the call can return.
+
+**And what a timeout means afterwards.** A reply that never came leaves the
+stream out of step, so every command after it reads the previous one's
+leftovers and reports a wrong count. A deadline alone converts a wedge into a
+permanent stream of nonsense. WisselMCA resynchronises at the point of failure,
+with the same bounded drain, so the next command starts clean.
+
+---
+
+## 5. What to do
 
 The two halves are independent and can be done in either order. Both are
 tractable in batches.
@@ -343,10 +397,13 @@ is now constant, whatever the number of clients.
 python3 tools/audit_init_device.py     # who can still die at start-up
 python3 tools/audit_reads.py           # who reads the instrument per request
 python3 tools/test_analoginterlock.py  # the interlock's decisions and refusals
+python3 tools/test_wisselmca.py        # every MCA read carries a deadline
 ```
 
-The last one needs PyTango, so it runs on a Pi or on wolframite rather than on
-a laptop; the two audits parse with `ast` and run anywhere.
+The last two need PyTango, so they run on a Pi or on wolframite rather than on
+a laptop; the two audits parse with `ast` and run anywhere. Both drive stubs
+and reach no instrument, which is what makes them runnable on a Pi whose card
+is in the middle of a measurement.
 
 Both have a `--self-test` that runs anywhere. audit_init_device's regression
 fixture is this repository's own history: HuttingerPFGDC must report at
