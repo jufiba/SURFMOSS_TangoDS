@@ -263,10 +263,33 @@ tractable in batches.
   because `upsd` was started by hand, so it will fail again at the next reboot
   of pi-leem.
 
-**Load**: set `polled_attr` on the vacuum devices, starting with the two ion
-pumps, which are the only ones with no headroom. No code change.
+✅ **Load** — `polled_attr` applied to the eight vacuum devices on
+29-Aug-2026, at the periods above, and the servers restarted. The ion pumps'
+setpoints were deliberately left unpolled: they are configuration, they change
+very rarely, and each costs 200 ms of the controller's time.
 
-**A safety net for both**: the audits behind this document are throwaway
-scripts. As `tools/audit_init_device.py` and an extension of the read
-classifier they would catch a new server with either defect, the way
-`check_xmi.py` and `check_synoptics.py` catch their own kinds of drift.
+Measured afterwards, reading four attributes with `DevSource.DEV` against
+`DevSource.CACHE`:
+
+| Device | To the hardware | From the buffer |
+|---|---|---|
+| `xps/vacuum/ionpump` | 0.80 s | 0.003 s |
+| `leem/vacuum/ColumnsIonPump` | 0.80 s | 0.004 s |
+| `leem/vacuum/scrollPump` | 0.21 s | 0.006 s |
+
+The number that matters is not the speed but that the traffic to the instrument
+is now constant, whatever the number of clients.
+
+✅ **A safety net for both**, added 29-Aug-2026:
+
+```bash
+python3 tools/audit_init_device.py     # who can still die at start-up
+python3 tools/audit_reads.py           # who reads the instrument per request
+```
+
+Both have a `--self-test` that runs anywhere. audit_init_device's regression
+fixture is this repository's own history: HuttingerPFGDC must report at
+`caa0b20^` and must not at `caa0b20`.
+
+audit_reads is a survey, not a verdict -- reading live is the right shape for
+an attribute nobody watches continuously, and it exits 0 either way.
