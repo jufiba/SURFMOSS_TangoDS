@@ -104,6 +104,14 @@
       <enumLabels>MID</enumLabels>
       <enumLabels>HIGH</enumLabels>
     </attributes>
+    <attributes name="HeaterPower" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="3000" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="What the heater is actually delivering, in watts: the controller reports a percentage of the full scale of the selected range, and the range and load resistance are read with it." label="Heater Power" unit="W" standardUnit="" displayUnit="" format="%6.2f" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
     <states name="ON" description="Control loop on">
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
     </states>

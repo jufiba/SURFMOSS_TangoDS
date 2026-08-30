@@ -51,6 +51,8 @@ REPLIES = {
     "INPUT? B": "312.953064\n",
     "LOOP 1:SETPT?": "20.000000K\n",
     "LOOP 1:RANGE?": "HI \n",
+    "LOOP 1:OUTPWR?": "45.000000\n",
+    "LOOP 1:LOAD?": "50\n",
 }
 
 
@@ -195,6 +197,28 @@ def main(argv):
         check("%-7r is INVALID, not HIGH" % reply,
               got[2] if isinstance(got, tuple) else got,
               tango.AttrQuality.ATTR_INVALID)
+
+    print("\nheater power in watts, not in percent")
+    # Table 4 in the manual: full scale is 25 W on HI into 25 ohms, 50 W into
+    # 50, and a tenth and a hundredth of that on MID and LOW.
+    for rng, load, want in (("HI \n", "50\n", 22.5),
+                            ("HI \n", "25\n", 11.25),
+                            ("MID\n", "50\n", 2.25),
+                            ("LOW\n", "25\n", 0.1125),
+                            ("HIGH\n", "50\n", 22.5)):
+        port.replies["LOOP 1:RANGE?"] = rng
+        port.replies["LOOP 1:LOAD?"] = load
+        check("45%% on %-5s into %s ohms" % (rng.strip(), load.strip()),
+              dev.read_HeaterPower(), want)
+    port.replies["LOOP 1:OUTPWR?"] = "-------\n"
+    check("an unreadable output is INVALID", dev.read_HeaterPower()[2],
+          tango.AttrQuality.ATTR_INVALID)
+    port.replies["LOOP 1:OUTPWR?"] = "45.000000\n"
+    port.replies["LOOP 1:RANGE?"] = "WHAT\n"
+    check("an unknown range is INVALID, not a guess",
+          dev.read_HeaterPower()[2], tango.AttrQuality.ATTR_INVALID)
+    port.replies["LOOP 1:RANGE?"] = "HI \n"
+    check("and it recovers", dev.read_HeaterPower(), 22.5)
 
     print("\nthe control loop being switched off at the front panel")
     port.replies["CONTROL?"] = "OFF\n"

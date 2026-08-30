@@ -57,6 +57,17 @@ class CryoCon32(Device):
     # class_variable is the only region inside the class body that POGO
     # preserves, so the helpers live here.
 
+    # Full-scale heater power in watts, by range and load resistance. From
+    # Table 4, Loop #1 Output Summary, in the manual. The percentage the
+    # controller reports is a percentage of *power*, not of current -- the
+    # manual is explicit about it, and about having to multiply by the
+    # full scale of the selected range to get watts. Which is the whole
+    # reason HeaterPower exists: 45% on the HI range into 50 ohms is 22.5 W,
+    # and a number that could be read as either is worth nobody's evening.
+    FULL_SCALE = {("HI", 25): 25.0, ("HI", 50): 50.0,
+                  ("MID", 25): 2.5, ("MID", 50): 5.0,
+                  ("LOW", 25): 0.25, ("LOW", 50): 0.50}
+
     # How often the control loop's on/off state is re-read. The state of this
     # device is the state of that loop, and it was only ever read at start-up:
     # switching the controller off left the server saying ON until somebody
@@ -237,6 +248,19 @@ class CryoCon32(Device):
         enum_labels=["LOW", "MID", "HIGH", ],
     )
 
+    HeaterPower = attribute(
+        dtype='double',
+        label="Heater Power",
+        unit="W",
+        format="%6.2f",
+        doc="What the heater is actually delivering. The controller reports "
+            "this as a percentage of the full scale of the selected range, "
+            "and the range and the load resistance are read with it so that "
+            "the answer is in watts: HI into 50 ohms is 50 W full scale, so "
+            "45% is 22.5 W. Reading the percentage alone invites taking it "
+            "for watts, or for the HI/MID/LOW setting, which is neither.",
+    )
+
     # ---------------
     # General methods
     # ---------------
@@ -336,6 +360,34 @@ class CryoCon32(Device):
         return
         # PROTECTED REGION END #    //  CryoCon32.HeaterLevel_write
 
+
+    def read_HeaterPower(self):
+        # PROTECTED REGION ID(CryoCon32.HeaterPower_read) ENABLED START #
+        # Three queries rather than one. The range and the load are settings
+        # that change rarely, but caching them would mean reporting watts
+        # computed from a full scale somebody had changed at the front panel,
+        # and a heater power that is quietly wrong is worse than one that
+        # costs 120 ms.
+        try:
+            percent = self._number(b"LOOP 1:OUTPWR?\n")
+            rng = self._query(b"LOOP 1:RANGE?\n").upper()
+            load = self._number(b"LOOP 1:LOAD?\n")
+        except Exception as exc:
+            self._fail("Lost the CryoCon32 on %s: %s" % (self.SerialPort, exc))
+            return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
+        if rng == "HIGH":
+            rng = "HI"
+        full = None
+        if load is not None:
+            full = self.FULL_SCALE.get((rng, int(load)))
+        if percent is None or full is None:
+            self._note("power", "the heater power is unreadable: the "
+                                "controller answers %s%% on range %r into "
+                                "%s ohms" % (percent, rng, load))
+            return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
+        self._note("power", None)
+        return full * percent / 100.0
+        # PROTECTED REGION END #    //  CryoCon32.HeaterPower_read
 
     # --------
     # Commands
