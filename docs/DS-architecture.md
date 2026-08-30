@@ -1,8 +1,8 @@
 # Device server architecture: failing well, and being asked too often
 
 _Written 28-Aug-2026, from an audit of the 35 live servers and measurements
-against the running vacuum instruments. Updated 29-Aug-2026, when sixteen of
-the seventeen were fixed._
+against the running vacuum instruments. Updated 30-Aug-2026, when the last of
+the seventeen was fixed._
 
 Two problems that look unrelated and are the same question seen from two sides:
 **what happens when the instrument cannot answer.** In one case nobody asked and
@@ -72,12 +72,13 @@ Two details that are easy to miss:
   `9.90E+09` gauge-off marker, or `GammaVacuumDigitel` when command 61 answers
   NO.
 
-### Which servers still have the defect
+### Which servers had the defect
 
-**One, as of 29-Aug-2026: `NetworkUPSTool`.** It was seventeen. Sixteen were
-fixed in four batches (`caa0b20`, `8b6bbc7`, `a4a56f2`, `168f860`, `544d09e`),
-and NetworkUPSTool is left because it needs the separate question of `upsd` not
-starting on its own settled at the same time.
+**Seventeen, all now fixed.** Sixteen went in four batches (`caa0b20`,
+`8b6bbc7`, `a4a56f2`, `168f860`, `544d09e`); `NetworkUPSTool` followed on
+30-Aug-2026, once the separate question of `upsd` not starting on its own had
+been settled. `python3 tools/audit_init_device.py` now scans the 35 and finds
+nothing.
 
 `HuttingerPFGDC` was the textbook case, and shows the intention was always
 there:
@@ -139,9 +140,8 @@ fetched by `Device.init_device()` before any of this code runs, and a missing
 one raises there — which is itself a way to kill a server that no guard written
 here can catch. `-file=` supplies the properties and avoids it.
 
-**Already protected (32):** everything except NetworkUPSTool, AlarmNotifier and
-AnalogInterlock, the last two having nothing risky in `init_device` to begin
-with.
+**All 35 protected.** AlarmNotifier and AnalogInterlock never needed it:
+neither has anything risky in `init_device` to begin with.
 
 ⚠️ **The count is a floor, not a ceiling.** The audit looks for calls that reach
 hardware or the network. Any other exception kills the server just as dead:
@@ -361,7 +361,7 @@ with the same bounded drain, so the next command starts clean.
 The two halves are independent and can be done in either order. Both are
 tractable in batches.
 
-**Robustness** — done, bar one:
+**Robustness** — done, all seventeen:
 
 - ✅ **Sputtering (7)** — `caa0b20`. The rig was switched off, which made it the
   one batch whose failure path could be tested rather than reasoned about.
@@ -369,10 +369,16 @@ tractable in batches.
 - ✅ **Networked (3)** — `a4a56f2` and `168f860`, with reconnection for the two
   Elmitec servers.
 - ✅ **GPIO (3)** — `544d09e`.
-- ⏳ **NetworkUPSTool** — left, because it also needs `upsd` starting on its own,
-  which is still open (see `netboot-shared-root.md`). It runs today only
-  because `upsd` was started by hand, so it will fail again at the next reboot
-  of pi-leem.
+- ✅ **NetworkUPSTool** — the last one, 30-Aug-2026. Left until now because it
+  also needed `upsd` starting on its own, settled first with a
+  `Wants=nut-server.service` drop-in (see `netboot-shared-root.md`). Guarding
+  `init_device` was the smallest part of it again: PyNUT opens one session and
+  never renews it, so a restart of `upsd` left this end holding a socket that
+  answered `BrokenPipeError` for ever — found in exactly that state, ON with
+  all four attributes failing and the last real reading hours old. It now
+  re-establishes the session on the next read. And `ups.status` is a set of
+  flags, not a word: `"OL CHRG"`, a healthy UPS recharging after a cut, was
+  being reported as FAULT.
 
 ✅ **Load** — `polled_attr` applied to the eight vacuum devices on
 29-Aug-2026, at the periods above, and the servers restarted. The ion pumps'
@@ -398,12 +404,13 @@ python3 tools/audit_init_device.py     # who can still die at start-up
 python3 tools/audit_reads.py           # who reads the instrument per request
 python3 tools/test_analoginterlock.py  # the interlock's decisions and refusals
 python3 tools/test_wisselmca.py        # every MCA read carries a deadline
+python3 tools/test_networkupstool.py   # starting without upsd, and surviving it
 ```
 
-The last two need PyTango, so they run on a Pi or on wolframite rather than on
-a laptop; the two audits parse with `ast` and run anywhere. Both drive stubs
-and reach no instrument, which is what makes them runnable on a Pi whose card
-is in the middle of a measurement.
+The last three need PyTango, so they run on a Pi or on wolframite rather than
+on a laptop; the two audits parse with `ast` and run anywhere. All three drive
+stubs and reach no instrument, which is what makes them runnable on a Pi whose
+card is in the middle of a measurement or whose UPS is carrying the LEEM.
 
 Both have a `--self-test` that runs anywhere. audit_init_device's regression
 fixture is this repository's own history: HuttingerPFGDC must report at

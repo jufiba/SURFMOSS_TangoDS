@@ -8,9 +8,10 @@ switched off disappears instead of reporting that it cannot reach it -- which
 is how the sputtering rig was found, in August 2026, with seven of its eight
 servers gone whenever the rig was off.
 
-Seventeen of the 35 live servers had this. Sixteen were fixed in four batches;
-see docs/DS-architecture.md for what each one turned out to need, because
-guarding init_device was the smallest part of the work every time.
+Seventeen of the 35 live servers had this, and all seventeen are fixed; see
+docs/DS-architecture.md for what each one turned out to need, because guarding
+init_device was the smallest part of the work every time. A clean sweep is
+what this should report now, so a finding means something new arrived.
 
 WHAT IT LOOKS FOR
 
