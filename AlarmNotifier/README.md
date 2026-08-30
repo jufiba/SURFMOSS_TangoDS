@@ -73,8 +73,8 @@ an empty registration that has never run. Use the former.
 
 | Scope | Domain | Example |
 |---|---|---|
-| An instrument's safety chain | `<instrument>/safety/` | `xps/safety/waterinterlock` |
-| Watching that only warns | `<instrument>/warn/` | `mossbauer/warn/compressorwater` |
+| An instrument's safety chain | `<instrument>/safety/` | `xps/safety/interlockxraygun` |
+| Watching that only warns | `<instrument>/warn/` | `mossbauer/warn/watercompressor` |
 | Lab-wide service | `lab/` | `lab/alarm/notifier` |
 
 `warn/` describes what the device does rather than what it measures: its output
@@ -169,7 +169,7 @@ Space-separated `key=value` pairs. `msg=` goes **last**, because it swallows
 the rest of the line. Blank lines and lines starting with `#` are skipped.
 
 ```
-name=xpsWater dev=xps/safety/waterinterlock alarm=ALARM,FAULT ok=ON ctx=xps/safety/water/xray msg=XPS water interlock tripped
+name=xpsWater dev=xps/safety/interlockxraygun alarm=ALARM,FAULT ok=ON ctx=xps/safety/water/xray msg=XPS water interlock tripped
 ```
 
 | Field | Req. | Default | Meaning |
@@ -215,10 +215,10 @@ A malformed rule leaves the device in `FAULT` with the offending line in
 1. `TestMail` from Jive. A mail with the rule table should arrive. If not,
    check `LastMailError` and `sudo tail /var/log/msmtp`.
 2. With the XPS interlock in `ON`, `Report` should show `xpsWater NORM`.
-3. `Trip` on `xps/safety/waterinterlock`. After two sweeps (`persist=2`, 20 s)
+3. `Trip` on `xps/safety/interlockxraygun`. After two sweeps (`persist=2`, 20 s)
    the ALARMA mail should arrive, with the flow in the context block.
 4. `Reset` on the interlock. The RESUELTO mail should arrive.
-5. Stop `AnalogInterlock/xps` from Astor. After five minutes
+5. Stop `AnalogInterlock/1` from Astor. After five minutes
    (`UnknownCycles=30` × 10 s) the SIN LECTURA mail should arrive. **This is
    the step that justifies the whole exercise**: it is the failure a
    threshold-based watchdog cannot see.

@@ -21,6 +21,26 @@ each would need testing against the new hardware first.
 _Distinct from `inactive/`: those are paused but potentially revivable; these are
 considered dead._
 
+The directory holds two things that are not device servers, below: a retired
+cron script and a vendored third-party alarm system.
+
+## Separate case: `xps-interlock.py`
+
+Not a device server either: the cron script that held the SPECS x-ray gun's
+permissive on pi-xps from March 2021 until `AnalogInterlock` replaced it.
+Retired on 30-Aug-2026, when the rename of the two devices it drove made it
+plain that nothing had been running it for some time — no crontab for root,
+`tango` or `pi` on pi-xps, nothing in `/etc/cron.d`, and no process.
+
+It is kept because it is the specification of what the interlock has to do,
+written against the real gun, and because the case `AnalogInterlock` exists
+for is the one it could not cover: a `kill -9` of the script left the
+permissive asserted, since a process cannot be its own watchdog. That is what
+`RaspberryButton`'s deadman is for.
+
+Its device names are the old ones, `xps/safety/xrayguninterlock` and
+`xps/safety/water`, so it would not run today without editing.
+
 ## Separate case: PANIC (PyAlarm)
 
 **PANIC is not a deprecated server like the four above.** Those are SURFMOSS

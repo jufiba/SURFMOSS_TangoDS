@@ -5,8 +5,9 @@ attribute from an input device and asserts or de-asserts a permissive on an
 output device, with hysteresis, read-failure tolerance and detection of a
 frozen input publisher.
 
-Replaces the `xps-interlock.py` cron script on pi-xps. A second instance on
-pi-mossbauer watches the compressor cooling water without commanding anything.
+Replaces the `xps-interlock.py` cron script on pi-xps, which is retired to
+`deprecated/`. A second instance on pi-mossbauer watches the compressor cooling
+water without commanding anything.
 
 **This is a secondary protection layer.** It runs in userspace, over CORBA,
 between two processes on a Raspberry Pi. Anything that genuinely must not
@@ -48,9 +49,17 @@ exit
 
 ## Registration
 
-Server `AnalogInterlock/xps`, class `AnalogInterlock`, device
-`xps/safety/waterinterlock`, host pi-xps, **startup level 3** (after
+Server `AnalogInterlock/1`, class `AnalogInterlock`, device
+`xps/safety/interlockxraygun`, host pi-xps, **startup level 3** (after
 `RaspberryButton/1` and `SEAWaterflowmeter/3`, both at level 2).
+
+Renamed on 30-Aug-2026, together with the device it commands. The two names
+used to describe each other's job: the GPIO output was called
+`xps/safety/xrayguninterlock` and the interlock proper was called
+`xps/safety/interlockXgun`. They are now `switchxraygun` and
+`interlockxraygun` — what each one is, then what it is attached to, as the
+vacuum devices are named. A third name, `xps/safety/waterinterlock`, appeared
+in this document and in AlarmNotifier's rule and had never existed at all.
 
 Set the properties *before* starting it for the first time: without
 `InputDevice` and `OutputDevice` the `init_device` will fail.
@@ -60,7 +69,7 @@ Set the properties *before* starting it for the first time: without
 | `InputDevice`        | `xps/safety/water`            |
 | `InputAttribute`     | `xray` — confirmed, see below |
 | `HeartbeatAttribute` | `UpdateCount`                 |
-| `OutputDevice`       | `xps/safety/xrayguninterlock` |
+| `OutputDevice`       | `xps/safety/switchxraygun`    |
 | `ThresholdOff`       | `1.6`                         |
 | `ThresholdOn`        | `2.0` (pending nominal flow)  |
 | `PollPeriod`         | `1.0`                         |
@@ -75,7 +84,7 @@ says `xraygun`, is wrong.
 
 The refactored server is deployed on pi-xps and running: `xps/safety/water` is
 ON and exposes `xray` alongside `channel0..3` and `UpdateCount`. So is the
-patched `RaspberryButton`: `xps/safety/xrayguninterlock` has `Pin = 26` and
+patched `RaspberryButton`: `xps/safety/switchxraygun` has `Pin = 26` and
 publishes `PinLevel`, `Active` and `TimeSinceKeepalive`. Its `DeadmanTimeout` is
 still unset, which is correct until commissioning step 4.
 

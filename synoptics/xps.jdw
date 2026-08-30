@@ -64,7 +64,7 @@ JDFile v11 {
     background:238,238,238
     fillStyle:1
     lineWidth:0
-    name:"xps/safety/xrayguninterlock/Off"
+    name:"xps/safety/switchxraygun/Off"
     extensions:{
       text:""
     }

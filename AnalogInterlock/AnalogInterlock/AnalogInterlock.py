@@ -130,7 +130,7 @@ class AnalogInterlock(Device):
 
     OutputDevice = device_property(
         dtype='str',
-        doc="Device holding the permissive, e.g. xps/safety/xrayguninterlock. "
+        doc="Device holding the permissive, e.g. xps/safety/switchxraygun. "
             "Leave empty only together with WatchOnly.",
     )
 
