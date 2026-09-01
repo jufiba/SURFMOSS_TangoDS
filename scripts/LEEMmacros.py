@@ -96,7 +96,6 @@ doser1_pid=tango.DeviceProxy("leem/control/doser_pid")
 doser2_pid=tango.DeviceProxy("leem/control/doser2_pid")
 leem2k=tango.DeviceProxy("leem/measurement/LEEM2k")
 uview=tango.DeviceProxy("leem/measurement/Uview")
-position=tango.DeviceProxy("leem/measurement/positionXY")
 
 def leemSetDailyFolder():
     (wprefix,prefix,dayfolder,exp)=leem_getfolder()
@@ -151,7 +150,6 @@ def leem_makenextfolder_and_inc():
 
 def leem_savesettings(name):
     f=open(name,"w")
-    #f.write("Position    : %s\n"%position.Position[1:-3])
     f.write("LEEM2k----------------------------\n")
     f.write("StartVoltage: %5.2f Volt\n"%leem2k.StartVoltage)
     f.write("Preset      : %s \n"%leem2k.Preset)
