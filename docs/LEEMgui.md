@@ -38,7 +38,7 @@ live in the same place on the instrument:
 | Variable | Default | Meaning |
 |---|---|---|
 | `LEEM_CODEDIR` | the script's own directory | where `LEEMmacros.py` and `LEEMgui.py` are; goes on `PYTHONPATH` |
-| `LEEM_RUNDIR` | `/home/tvips/Superficies/LEEM_Madrid` | working directory for the session |
+| `LEEM_RUNDIR` | `/Superficies/LEEM_Madrid` | working directory for the session |
 
 On the LEEM PC the checkout lives on the WSL local disk while the data lives on
 the mounted server share, so `git pull` is the whole deployment step.

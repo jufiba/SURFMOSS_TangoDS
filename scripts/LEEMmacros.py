@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.6 02/09/2026 Superficies moved from /home/tvips/Superficies to /Superficies, so counter_filename pointed at a path that no longer exists. leem_getfolder() reacted to the missing counter file by calling exit(), which from the GUI worker thread raised SystemExit past Worker.run()'s "except Exception" and segfaulted PySide6's QThread trampoline ("QThreadStorage: entry destroyed before end of thread") -- the hang/crash seen when saving a sequence. counter_filename now points at /Superficies/LEEM_Madrid/macros.dat (its wprefix/prefix fields were already correct), and leem_getfolder() raises RuntimeError instead of exit() so a bad path surfaces as a traceback in the log with the buttons re-enabled. The leemgui launcher default rundir moved too. macros.dat itself is unchanged.
+#
 # v3.5 03/08/2026 Fixed gui() blocking the ipython prompt. IPython installs its Qt hook when the prompt starts, which is after any startup code has run, so under "ipython --gui=qt6 -c ..." both active_eventloop and QApplication.instance() are still empty when gui() runs and cannot be used to detect that IPython will drive the loop. gui() now simply skips app.exec() whenever an IPython shell is present and lets IPython pump the event loop once the prompt appears; under plain python it still blocks as before.
 #
 # v3.4 03/08/2026 GUI reorganised into groups: Image(s), IV, Sample temperature ramp and Doser ramp, each choosing one variant with radio buttons and having its own Run button and a preview line showing the exact call it will make. Exposure and average moved to a shared "Imaging conditions" panel, E0/Ef/dE to a "Scan voltage" panel inside the IV group. The ramps show the PID setpoint they will start from as a read-only field, because the macros always ramp from the current setpoint and there is no way to pass a starting value. For the shared panel to work, leemIV, leemIV_ROI, leemIVandObj, leemRampTemperatureROI and leemARRESrun now accept exp=None and avg=None meaning "use whatever the camera is set to", as leemSaveSingleImage and leemSequenceImages already did; their defaults are unchanged, so calling them from the command line behaves exactly as before.
@@ -41,7 +43,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.5"
+__version__ = "3.6"
 
 from datetime import date
 import tango
@@ -87,7 +89,7 @@ def frange(start, stop=None, step=None):
 #end of function frange()
 
 
-counter_filename="/home/tvips/Superficies/LEEM_Madrid/macros.dat"
+counter_filename="/Superficies/LEEM_Madrid/macros.dat"
 name="000"
 
 #gaugeMCH=tango.DeviceProxy("leem/vacuum/gaugeMCH")
@@ -113,8 +115,8 @@ def leemSetDailyFolder():
     
 def leem_getfolder():
     if not os.path.exists(counter_filename):
-        print("Error, no saved filename")
-        exit()
+        raise RuntimeError("no counter file at %s (run leemSetDailyFolder() "
+                           "or fix counter_filename)"%counter_filename)
     f=open(counter_filename,"r")
     count=f.readline()
     f.close()

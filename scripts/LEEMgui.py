@@ -337,7 +337,11 @@ class Worker(QtCore.QThread):
             # Macros with a handler clean up and return normally; this only
             # catches one that re-raises, so the GUI does not treat it as a crash.
             pass
-        except Exception:
+        except BaseException:
+            # BaseException, not Exception: a stray exit()/sys.exit() in a macro
+            # raises SystemExit, which escaping run() segfaults PySide6's QThread
+            # trampoline. Catch it here so it surfaces as a traceback in the log
+            # with the buttons re-enabled, like any other crash.
             error=traceback.format_exc()
         finally:
             try:

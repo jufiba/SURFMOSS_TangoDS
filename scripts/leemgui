@@ -36,7 +36,7 @@ done
 here=$(CDPATH= cd -- "$(dirname -- "$target")" && pwd)
 
 codedir=${LEEM_CODEDIR:-$here}
-rundir=${LEEM_RUNDIR:-/home/tvips/Superficies/LEEM_Madrid}
+rundir=${LEEM_RUNDIR:-/Superficies/LEEM_Madrid}
 
 if [ ! -f "$codedir/LEEMmacros.py" ]; then
     echo "leemgui: no LEEMmacros.py in $codedir" >&2
