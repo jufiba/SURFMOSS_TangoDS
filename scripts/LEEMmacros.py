@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.7 02/09/2026 Register an atexit hook that calls tango.ApiUtil.cleanup(). omniORB's client threads were racing Python finalisation and segfaulting on exit from an ipython leemgui session -- reproducible with just "ipython --gui=qt6 -c 'from LEEMmacros import *'" then exit, and not with "--gui=qt6" alone, so it is the Tango client, not the Qt inputhook. cleanup() shuts the ORB down at the start of shutdown, before the race. Guarded in try/except because it is a no-op or raises depending on the pytango build.
+#
 # v3.6 02/09/2026 Superficies moved from /home/tvips/Superficies to /Superficies, so counter_filename pointed at a path that no longer exists. leem_getfolder() reacted to the missing counter file by calling exit(), which from the GUI worker thread raised SystemExit past Worker.run()'s "except Exception" and segfaulted PySide6's QThread trampoline ("QThreadStorage: entry destroyed before end of thread") -- the hang/crash seen when saving a sequence. counter_filename now points at /Superficies/LEEM_Madrid/macros.dat (its wprefix/prefix fields were already correct), and leem_getfolder() raises RuntimeError instead of exit() so a bad path surfaces as a traceback in the log with the buttons re-enabled. The leemgui launcher default rundir moved too. macros.dat itself is unchanged.
 #
 # v3.5 03/08/2026 Fixed gui() blocking the ipython prompt. IPython installs its Qt hook when the prompt starts, which is after any startup code has run, so under "ipython --gui=qt6 -c ..." both active_eventloop and QApplication.instance() are still empty when gui() runs and cannot be used to detect that IPython will drive the loop. gui() now simply skips app.exec() whenever an IPython shell is present and lets IPython pump the event loop once the prompt appears; under plain python it still blocks as before.
@@ -43,7 +45,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.6"
+__version__ = "3.7"
 
 from datetime import date
 import tango
@@ -51,8 +53,21 @@ import os
 import numpy
 import time
 import threading
+import atexit
 from matplotlib.figure import Figure
 from scipy.interpolate import interp1d
+
+# omniORB's client threads race Python finalisation and segfault on exit --
+# seen leaving an ipython leemgui session after any DeviceProxy use ("ipython
+# -c 'from LEEMmacros import *'" then exit is enough). Shut the Tango client API
+# down cleanly at the start of interpreter shutdown, before that race. Guarded
+# because cleanup() is a no-op-or-raise depending on pytango build.
+@atexit.register
+def _tango_cleanup():
+    try:
+        tango.ApiUtil.cleanup()
+    except Exception:
+        pass
 
 # Set by the GUI Stop button. The acquisition loops poll it through
 # leem_checkstop() and raise KeyboardInterrupt, so a GUI stop unwinds through
