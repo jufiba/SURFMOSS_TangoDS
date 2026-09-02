@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.9 02/09/2026 Added leem_log(command): the GUI now appends every acquisition it launches, as the exact call it makes, to <dayfolder>/<YYYYMMDD>_commands.log next to the data, with a timestamp. Opens and closes per line so nothing is lost if a run hangs. Only the final call from a Run button is logged -- typed commands are not intercepted. leem_log never raises; if there is no counter file it silently does nothing.
+#
 # v3.8 02/09/2026 LEEMgui.py moved from PySide6 to PyQt6: PyQt6 is a single Debian package (python3-pyqt6) that is already on the instrument, no new dependency, and IPython 8.x's qt inputhook works with it where it broke on PySide6 >= 6.7 (lazy submodule attributes). Changes were mechanical: import, QtCore.Signal -> QtCore.pyqtSignal, and the QFontDatabase.FixedFont enum now needs its SystemFont scope. leemgui pins QT_API=pyqt6.
 #
 # v3.7 02/09/2026 Register an atexit hook that calls tango.ApiUtil.cleanup(). omniORB's client threads were racing Python finalisation and segfaulting on exit from an ipython leemgui session -- reproducible with just "ipython --gui=qt6 -c 'from LEEMmacros import *'" then exit, and not with "--gui=qt6" alone, so it is the Tango client, not the Qt inputhook. cleanup() shuts the ORB down at the start of shutdown, before the race. Guarded in try/except because it is a no-op or raises depending on the pytango build.
@@ -47,7 +49,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.8"
+__version__ = "3.9"
 
 from datetime import date
 import tango
@@ -166,6 +168,30 @@ def leem_makenextfolder_and_inc():
     f.write(wprefix+","+prefix+","+dayfolder+","+str(exp))
     f.close()
     return(wfull,full,name)
+
+def leem_log(command):
+    """ Append one timestamped line to <dayfolder>/<YYYYMMDD>_commands.log, so
+    the day folder next to the data keeps a record of every acquisition the GUI
+    launched. Never raises: a logging failure must not abort an acquisition. """
+    try:
+        (wprefix,prefix,dayfolder,exp)=leem_getfolder()
+        today=date.today()
+        dayfolder="%04d%02d%02d"%(today.year,today.month,today.day)
+        dayname=prefix+"/"+dayfolder
+        if not os.path.exists(dayname):
+            # First run of the day may be logged before the acquisition makes
+            # the folder; mirror leem_makenextfolder_and_inc so the day still
+            # starts at _000.
+            os.mkdir(dayname)
+            f=open(counter_filename,"w")
+            f.write(wprefix+","+prefix+","+dayfolder+",0")
+            f.close()
+        stamp=time.strftime("%Y-%m-%d %H:%M:%S")
+        f=open(dayname+"/"+dayfolder+"_commands.log","a")
+        f.write(stamp+"  "+command+"\n")
+        f.close()
+    except Exception:
+        pass
 
 def leem_savesettings(name):
     f=open(name,"w")

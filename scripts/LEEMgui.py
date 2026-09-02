@@ -427,8 +427,10 @@ class LEEMWindow(QtWidgets.QWidget):
             self.append("! %s"%e)
             return
         func=getattr(M,variant["func"])
-        self.append(">>> %s(%s)"%(variant["func"],
-                                  ", ".join("%s=%r"%kv for kv in kwargs.items())))
+        call="%s(%s)"%(variant["func"],
+                       ", ".join("%s=%r"%kv for kv in kwargs.items()))
+        self.append(">>> "+call)
+        M.leem_log(call)                 # day folder keeps a record of every run
         self.worker=Worker(func,kwargs,self)
         self.worker.line.connect(self.append)
         self.worker.done.connect(self.finished)
