@@ -10,7 +10,7 @@ options that were considered and rejected.
 ## Running it
 
 ```bash
-pip install PySide6            # or: sudo apt install python3-pyside6.qtwidgets
+pip install PyQt6             # or: sudo apt install python3-pyqt6
 ```
 
 The easiest way, GUI and console together:
@@ -21,7 +21,7 @@ leemgui           # -n / --no-gui for the console alone
 
 `leemgui` starts ipython with the Qt event loop already integrated, imports the
 macros and opens the window, then leaves you at a prompt sharing the same module
-as the GUI. It prefers `ipython3` over `ipython`, pins `QT_API=pyside6` so
+as the GUI. It prefers `ipython3` over `ipython`, pins `QT_API=pyqt6` so
 ipython cannot pick a PyQt5 that happens to be installed, and uses `-i`, so if
 the GUI fails to open you get the traceback and still land at the prompt.
 
@@ -69,20 +69,20 @@ and blocks the console until the window closes.
 
 `LEEMgui.py` must sit next to `LEEMmacros.py` — `gui()` does a plain
 `from LEEMgui import ...` and finds it on the same path. The import is lazy, so a
-command-line session that never calls `gui()` does not need PySide6.
+command-line session that never calls `gui()` does not need PyQt6.
 
 ### `%gui qt` failing with "could not load the requested Qt binding"
 
-IPython's Qt integration imports more PySide6 submodules than the GUI does, and
+IPython's Qt integration imports more PyQt6 submodules than the GUI does, and
 Debian/Ubuntu ship one package per Qt module. The GUI itself needs only QtCore,
 QtGui and QtWidgets, which is why `python LEEMgui.py` works while `%gui qt` does
-not. Install what IPython wants:
+not. IPython's qt_loaders also imports QtSvg; install it:
 
 ```bash
-sudo apt install python3-pyside6.qtsvg python3-pyside6.qtprintsupport python3-pyside6.qtnetwork
+sudo apt install python3-pyqt6.qtsvg
 ```
 
-Avoid a blanket `'python3-pyside6.*'` — it pulls in QtWebEngine, hundreds of
+Avoid a blanket `'python3-pyqt6.*'` — it pulls in QtWebEngine, hundreds of
 megabytes for no benefit here.
 
 If ipython lives in a venv, apt packages are invisible to it unless the venv was
@@ -262,5 +262,5 @@ approaches were considered:
 - **`qtconsole` with an in-process kernel.** A real IPython console sharing the
   GUI's process, so the same `uview`/`leem2k` proxies. Gives completion, history
   and magics, but adds `qtconsole`/`ipykernel`/`jupyter_client` plus the split
-  PySide6 packages — and an in-process kernel runs in the GUI thread, so a long
+  PyQt6 packages — and an in-process kernel runs in the GUI thread, so a long
   command typed there would freeze the window, Stop included.

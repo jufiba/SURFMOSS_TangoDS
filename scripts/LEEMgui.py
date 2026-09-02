@@ -19,7 +19,7 @@
 import sys
 import traceback
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 import LEEMmacros as M
 
@@ -198,7 +198,7 @@ class GroupBox(QtWidgets.QGroupBox):
     """ One group: radio buttons choosing a variant, that variant's fields, a
     preview of the call and a Run button. """
 
-    run=QtCore.Signal(object)
+    run=QtCore.pyqtSignal(object)
 
     def __init__(self,spec,shared,parent=None):
         super().__init__(spec["label"],parent)
@@ -236,7 +236,7 @@ class GroupBox(QtWidgets.QGroupBox):
         self.preview=QtWidgets.QLabel("")
         self.preview.setWordWrap(True)
         self.preview.setStyleSheet("color: gray;")
-        self.preview.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
+        self.preview.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
         bottom.addWidget(self.preview,1)
         self.button=QtWidgets.QPushButton("Run")
         self.button.clicked.connect(lambda: self.run.emit(self))
@@ -316,8 +316,8 @@ class _Stream:
 class Worker(QtCore.QThread):
     """ Runs one acquisition. """
 
-    line=QtCore.Signal(str)
-    done=QtCore.Signal(str)     # empty string, or a traceback
+    line=QtCore.pyqtSignal(str)
+    done=QtCore.pyqtSignal(str)     # empty string, or a traceback
 
     def __init__(self,func,kwargs,parent=None):
         super().__init__(parent)
@@ -339,9 +339,9 @@ class Worker(QtCore.QThread):
             pass
         except BaseException:
             # BaseException, not Exception: a stray exit()/sys.exit() in a macro
-            # raises SystemExit, which escaping run() segfaults PySide6's QThread
-            # trampoline. Catch it here so it surfaces as a traceback in the log
-            # with the buttons re-enabled, like any other crash.
+            # raises SystemExit, which escaping run() segfaults the Qt binding's
+            # QThread trampoline. Catch it here so it surfaces as a traceback in
+            # the log with the buttons re-enabled, like any other crash.
             error=traceback.format_exc()
         finally:
             try:
@@ -399,7 +399,7 @@ class LEEMWindow(QtWidgets.QWidget):
         self.log=QtWidgets.QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(5000)
-        self.log.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
+        self.log.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
         layout.addWidget(self.log,1)
         self.resize(1000,780)
 

@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.8 02/09/2026 LEEMgui.py moved from PySide6 to PyQt6: PyQt6 is a single Debian package (python3-pyqt6) that is already on the instrument, no new dependency, and IPython 8.x's qt inputhook works with it where it broke on PySide6 >= 6.7 (lazy submodule attributes). Changes were mechanical: import, QtCore.Signal -> QtCore.pyqtSignal, and the QFontDatabase.FixedFont enum now needs its SystemFont scope. leemgui pins QT_API=pyqt6.
+#
 # v3.7 02/09/2026 Register an atexit hook that calls tango.ApiUtil.cleanup(). omniORB's client threads were racing Python finalisation and segfaulting on exit from an ipython leemgui session -- reproducible with just "ipython --gui=qt6 -c 'from LEEMmacros import *'" then exit, and not with "--gui=qt6" alone, so it is the Tango client, not the Qt inputhook. cleanup() shuts the ORB down at the start of shutdown, before the race. Guarded in try/except because it is a no-op or raises depending on the pytango build.
 #
 # v3.6 02/09/2026 Superficies moved from /home/tvips/Superficies to /Superficies, so counter_filename pointed at a path that no longer exists. leem_getfolder() reacted to the missing counter file by calling exit(), which from the GUI worker thread raised SystemExit past Worker.run()'s "except Exception" and segfaulted PySide6's QThread trampoline ("QThreadStorage: entry destroyed before end of thread") -- the hang/crash seen when saving a sequence. counter_filename now points at /Superficies/LEEM_Madrid/macros.dat (its wprefix/prefix fields were already correct), and leem_getfolder() raises RuntimeError instead of exit() so a bad path surfaces as a traceback in the log with the buttons re-enabled. The leemgui launcher default rundir moved too. macros.dat itself is unchanged.
@@ -45,7 +47,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.7"
+__version__ = "3.8"
 
 from datetime import date
 import tango
@@ -81,7 +83,7 @@ def leem_checkstop():
 
 def gui():
     """ Open the acquisition GUI. Imported lazily so that a plain command line
-    session does not need PySide6. """
+    session does not need PyQt6. """
     from LEEMgui import leem_gui_main
     return leem_gui_main()
 

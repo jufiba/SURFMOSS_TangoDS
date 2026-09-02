@@ -135,7 +135,7 @@ watched.
 
 The `scripts/` directory contains Tango macros and utility scripts for instrument control (LEEM, VSM, sputtering, dosing). These are loaded directly in the instrument control session, not installed as packages.
 
-`LEEMgui.py` is a Qt front end for the LEEM acquisition macros, opened with `LEEMmacros.gui()` or by running the file directly. It needs PySide6, imported lazily so a command line session does not.
+`LEEMgui.py` is a Qt front end for the LEEM acquisition macros, opened with `LEEMmacros.gui()` or by running the file directly. It needs PyQt6, imported lazily so a command line session does not.
 
 See [docs/LEEMmacros.md](docs/LEEMmacros.md) and [docs/LEEMgui.md](docs/LEEMgui.md) for the reasoning behind their design and the constraints to respect when changing them.
 

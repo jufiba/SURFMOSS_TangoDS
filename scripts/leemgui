@@ -71,8 +71,8 @@ for stale in LEEMmacros.py LEEMgui.py; do
 done
 
 # Pin the Qt binding. Without this, ipython may pick PyQt5 if it is also
-# installed and then fail to load, while LEEMgui.py itself needs PySide6.
-QT_API=pyside6
+# installed and then fail to load, while LEEMgui.py itself needs PyQt6.
+QT_API=pyqt6
 export QT_API
 
 ipy=
