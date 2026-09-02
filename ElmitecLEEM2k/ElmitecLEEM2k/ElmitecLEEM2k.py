@@ -91,7 +91,11 @@ class ElmitecLEEM2k(Device):
                 raise ElmitecLEEM2kError("LEEM2000 closed the connection")
             if Bytereceived == b'\x00':
                 return szData
-            szData = szData + Bytereceived.decode("ascii")
+            # latin-1: LEEM2000 is a Windows program and sends the micro sign
+            # (0xb5) in unit strings, which "ascii" rejected. latin-1 also maps
+            # every single byte 1:1, so decoding recv(1) output can never split
+            # a multibyte sequence.
+            szData = szData + Bytereceived.decode("latin-1")
 
     def _send(self, data):
         """Send, and mark the link down if it fails so it gets rebuilt."""
