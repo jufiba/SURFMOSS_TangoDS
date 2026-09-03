@@ -532,6 +532,23 @@ class ElmitecLEEM2k(Device):
         return data
         # PROTECTED REGION END #    //  ElmitecLEEM2k.sendCommand
 
+    @command
+    @DebugIt()
+    def P2lensOFF(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.P2lensOFF) ENABLED START #
+        # Response to a P2 lens cooling-water cut: drop P2Lens to a value the
+        # lens can hold without cooling.
+        self.write_P2Lens(1400)
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.P2lensOFF
+
+    @command
+    @DebugIt()
+    def P2lensON(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.P2lensON) ENABLED START #
+        # Put P2Lens back to its running value once the water is flowing again.
+        self.write_P2Lens(3000)
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.P2lensON
+
 # ----------
 # Run server
 # ----------
