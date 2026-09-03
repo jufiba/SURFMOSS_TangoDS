@@ -502,6 +502,22 @@ class WisselMCA(Device):
             "channels are time bins and this reads INVALID.",
     )
 
+    LowerWindowChannel = attribute(
+        dtype='uint16',
+        label="Lower Window Channel",
+        doc="Lower_Window_Limit as a Spectrum channel index, so its position "
+            "can be read straight off the channel-indexed spectrum plot in "
+            "ATKPanel. channel = card level >> (1 + Res), the same mapping "
+            "the discriminator and LastChannel use.",
+    )
+
+    UpperWindowChannel = attribute(
+        dtype='uint16',
+        label="Upper Window Channel",
+        doc="Upper_Window_Limit as a Spectrum channel index. Equal to "
+            "LastChannel - 1: it is where the counts stop.",
+    )
+
     FoldedSpectrum = attribute(
         dtype=('double',),
         max_dim_x=4096,
@@ -749,6 +765,25 @@ class WisselMCA(Device):
             return (w, time.time(), tango.AttrQuality.ATTR_INVALID)
         return w
         # PROTECTED REGION END #    //  WisselMCA.ChannelWidth_read
+
+    def _window_channels(self):
+        """(lower, upper) window edges as channel indices, from the live PHA
+        levels: channel = level >> (1 + Res), the mapping the card and
+        phalastchannel use."""
+        r = checked(self.c.readPHA(), "readPHA")
+        setup = checked(self.c.readgeneral(), "readgeneral")
+        shift = 1 + ((setup >> 10) & 0b11)
+        return int(r[1]) >> shift, int(r[2]) >> shift
+
+    def read_LowerWindowChannel(self):
+        # PROTECTED REGION ID(WisselMCA.LowerWindowChannel_read) ENABLED START #
+        return self._window_channels()[0]
+        # PROTECTED REGION END #    //  WisselMCA.LowerWindowChannel_read
+
+    def read_UpperWindowChannel(self):
+        # PROTECTED REGION ID(WisselMCA.UpperWindowChannel_read) ENABLED START #
+        return self._window_channels()[1]
+        # PROTECTED REGION END #    //  WisselMCA.UpperWindowChannel_read
 
     def _require_mcs_full_sweep(self, what):
         # PROTECTED REGION ID(WisselMCA._require_mcs_full_sweep) ENABLED START #

@@ -208,6 +208,22 @@
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
       <properties description="Width of one Spectrum channel in mV, so that the spectrum can be plotted against the same scale the window limits use: channel c starts at c * ChannelWidth mV. PHA mode only - in MCS the channels are time bins and this reads INVALID." label="Channel Width" unit="mV" standardUnit="" displayUnit="" format="%6.4f" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
     </attributes>
+    <attributes name="LowerWindowChannel" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="Lower_Window_Limit as a Spectrum channel index, so its position can be read straight off the channel-indexed spectrum plot in ATKPanel. channel = card level &gt;&gt; (1 + Res), the same mapping the discriminator and LastChannel use." label="Lower Window Channel" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="UpperWindowChannel" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:UShortType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="Upper_Window_Limit as a Spectrum channel index. Equal to LastChannel - 1: it is where the counts stop." label="Upper Window Channel" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
     <attributes name="FoldedSpectrum" attType="Spectrum" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="4096" maxY="" allocReadMember="true" isDynamic="false">
       <dataType xsi:type="pogoDsl:DoubleType"/>
       <changeEvent fire="false" libCheckCriteria="false"/>

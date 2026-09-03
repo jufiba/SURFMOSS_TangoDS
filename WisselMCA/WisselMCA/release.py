@@ -10,7 +10,7 @@
 """Release information for Python Package"""
 
 name = """tangods-wisselmca"""
-version = "1.1.0"
+version = "1.2.0"
 version_info = version.split(".")
 description = """Device server for the Wissel Multichannel Analyzer used for Mossbauer spectroscopy."""
 author = "juan.delafiguera"
