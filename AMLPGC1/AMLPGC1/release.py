@@ -10,7 +10,7 @@
 """Release information for Python Package"""
 
 name = """tangods-amlpgc1"""
-version = "1.0.0"
+version = "1.1.0"
 version_info = version.split(".")
 description = """Device server for AML PGC1."""
 author = "juan.delafiguera"
