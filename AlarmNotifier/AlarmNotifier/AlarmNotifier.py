@@ -29,6 +29,11 @@ Failure modes and what this server does about each:
                                    reboot passes unremarked
   device in neither set         -> held, neither trips nor recovers (INIT,
                                    MOVING, an Init from Jive)
+  when= gate shut               -> GATED, not evaluated, no mail either way.
+                                   For water that is deliberately closed while
+                                   a magnet or an evaporator is off
+  when= gate unreadable         -> evaluated anyway, because failing towards
+                                   silence is the one failure worth avoiding
   mail cannot be sent           -> FAULT, LastMailError, the queue keeps the
                                    message and the next sweep retries
   this server dies              -> nothing here can catch it. The periodic
@@ -66,12 +71,18 @@ _DAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 # Every key a rule may carry. Anything else is a typo, and a typo in an alarm
 # rule that is silently ignored is how an alarm gets lost.
 _KEYS = set(("name", "dev", "attr", "op", "alarm", "ok", "persist", "enabled",
-             "onunknown", "to", "cc", "ctx", "msg"))
+             "onunknown", "when", "to", "cc", "ctx", "msg"))
 
 # Rule states. NORM and ALARM are the two that matter; UNKNOWN is separate
 # because "the cooling is fine" and "nobody can tell me about the cooling" are
 # different pieces of news and deserve different subject lines.
 NORM, ALARM, UNKNOWN, PAUSED = "NORM", "ALARM", "UNKNOWN", "PAUSED"
+
+# GATED: the rule is fine but not worth watching right now, because the thing
+# it protects is switched off. Cooling water for the VSM magnet is normally
+# shut when the supply is off, so an alarm then would be noise. Distinct from
+# PAUSED, which is a person deciding to be quiet; this is the plant deciding.
+GATED = "GATED"
 
 
 def _split(text):
@@ -143,6 +154,22 @@ class Rule(object):
         if self.onunknown not in ("alarm", "ignore"):
             raise ValueError("onunknown must be alarm or ignore")
 
+        # when=device:STATE[,STATE] -- evaluate this rule only while that
+        # device is in one of those states.
+        self.whendev = ""
+        self.whenstates = set()
+        gate = fields.get("when", "")
+        if gate:
+            dev, sep, states = gate.partition(":")
+            if not sep or not dev or not states:
+                raise ValueError("when= must be device:STATE[,STATE]")
+            if "/" not in dev:
+                raise ValueError("when= needs a device name, got %r" % dev)
+            self.whendev = dev
+            self.whenstates = set(x.upper() for x in _split(states))
+            if not self.whenstates:
+                raise ValueError("when= lists no states")
+
         self.to = _split(fields.get("to", ""))
         self.cc = _split(fields.get("cc", ""))
         self.ctx = _split(fields.get("ctx", ""))
@@ -160,6 +187,8 @@ class Rule(object):
         self.acked = False
         self.snoozeuntil = 0.0
         self.proxy = None
+        self.gateproxy = None
+        self.gatevalue = ""
 
     def snoozed(self, now):
         return self.snoozeuntil > now
@@ -268,6 +297,10 @@ class AlarmNotifier(Device):
                              label="SnoozedRules")
     DisabledRules = attribute(dtype=('str',), max_dim_x=128,
                               label="DisabledRules")
+    GatedRules = attribute(dtype=('str',), max_dim_x=128, label="GatedRules",
+                           doc="Rules held because the equipment they watch "
+                               "is switched off, with the gate device and the "
+                               "state it reported.")
     LastAlarm = attribute(dtype='str', label="LastAlarm")
     LastAlarmTime = attribute(dtype='str', label="LastAlarmTime")
     LastMailTime = attribute(dtype='str', label="LastMailTime")
@@ -410,9 +443,21 @@ class AlarmNotifier(Device):
                 rule.state = PAUSED
                 continue
             if rule.state == PAUSED:       # woke up; start from a clean slate
-                rule.state = NORM
-                rule.pending = 0
-                rule.unknown = 0
+                self.restart(rule)
+
+            if rule.whendev and not self.gate_open(rule):
+                if rule.state != GATED:
+                    # No RESUELTO mail on the way in: shutting the thing down
+                    # is a fair way to end the problem, but nothing was
+                    # repaired, and a "resolved" mail would say otherwise.
+                    rule.state = GATED
+                    rule.pending = 0
+                    rule.unknown = 0
+                    rule.acked = False
+                continue
+            if rule.state == GATED:
+                self.restart(rule)
+
             try:
                 if rule.op == "edge":
                     self.check_edge(rule, now)
@@ -437,6 +482,43 @@ class AlarmNotifier(Device):
                 paused = len([r for r in self.rules if r.state == PAUSED])
                 self.set_status("All clear (%d rules, %d paused)"
                                 % (len(self.rules), paused))
+
+    def restart(self, rule):
+        """Begin evaluating a rule from scratch.
+
+        Used when a gate opens or a snooze ends. Starting at NORM rather than
+        inheriting is what catches the case that matters: the water was
+        already off, someone switches the magnet on, and the rule has to
+        notice a condition that was true before it was allowed to look.
+        Resetting lastcount stops an op=edge rule firing over a counter that
+        moved while nobody was watching.
+        """
+        rule.state = NORM
+        rule.pending = 0
+        rule.unknown = 0
+        rule.lastcount = None
+
+    def gate_proxy(self, rule):
+        if rule.gateproxy is None:
+            rule.gateproxy = tango.DeviceProxy(rule.whendev)
+            rule.gateproxy.set_timeout_millis(self.ProxyTimeout)
+        return rule.gateproxy
+
+    def gate_open(self, rule):
+        """True when the rule should be evaluated.
+
+        An unreadable gate counts as open. Failing towards a mail you did not
+        need is recoverable; failing towards silence because the gate device
+        happened to be down is how the one alarm that mattered gets lost.
+        """
+        try:
+            current = str(self.gate_proxy(rule).state())
+        except Exception as exc:
+            rule.gateproxy = None
+            rule.gatevalue = "unreadable: %s" % exc
+            return True
+        rule.gatevalue = current
+        return current.upper() in rule.whenstates
 
     def proxy_for(self, rule):
         if rule.proxy is None:
@@ -678,6 +760,13 @@ class AlarmNotifier(Device):
                 lines.append("  %-18s despierta en %.1f h"
                              % (rule.name, (rule.snoozeuntil - now) / 3600.0))
 
+        gated = [r for r in self.rules if r.state == GATED]
+        if gated:
+            lines += ["", "En espera (el equipo vigilado esta apagado):"]
+            for rule in gated:
+                lines.append("  %-18s %s = %s"
+                             % (rule.name, rule.whendev, rule.gatevalue))
+
         off = [r for r in self.rules if not r.enabled]
         if off:
             lines += ["", "Deshabilitadas (enabled=no en Jive):"]
@@ -743,6 +832,12 @@ class AlarmNotifier(Device):
         return ["%s" % r.name for r in self.rules if not r.enabled]
         # PROTECTED REGION END #    //  AlarmNotifier.DisabledRules_read
 
+    def read_GatedRules(self):
+        # PROTECTED REGION ID(AlarmNotifier.GatedRules_read) ENABLED START #
+        return ["%s=%s:%s" % (r.name, r.whendev, r.gatevalue)
+                for r in self.rules if r.state == GATED]
+        # PROTECTED REGION END #    //  AlarmNotifier.GatedRules_read
+
     def read_LastAlarm(self):
         # PROTECTED REGION ID(AlarmNotifier.LastAlarm_read) ENABLED START #
         return self.lastalarm
@@ -787,15 +882,14 @@ class AlarmNotifier(Device):
     # Commands
     # --------
 
-    @command(dtype_in=('str',),
-             doc_in="[rule name, hours]")
-    @DebugIt()
-    def Snooze(self, argin):
-        # PROTECTED REGION ID(AlarmNotifier.Snooze) ENABLED START #
-        if len(argin) != 2:
-            raise ValueError("Snooze takes [name, hours]")
-        rule = self.find(argin[0])
-        hours = float(argin[1])
+    def do_snooze(self, name, hours):
+        """Shared by Snooze and SnoozeFor, so the cap is checked in one place
+        and cannot drift between the two entry points."""
+        rule = self.find(name)
+        try:
+            hours = float(hours)
+        except (TypeError, ValueError):
+            raise ValueError("%r is not a number of hours" % (hours,))
         if hours <= 0:
             raise ValueError("hours must be positive; use Wake to cancel")
         if hours > self.MaxSnoozeHours:
@@ -806,7 +900,34 @@ class AlarmNotifier(Device):
         rule.snoozeuntil = time.time() + hours * 3600.0
         rule.state = PAUSED
         self.save_snoozes()
+        return "%s asleep for %g h" % (rule.name, hours)
+
+    @command(dtype_in=('str',),
+             doc_in="[rule name, hours]")
+    @DebugIt()
+    def Snooze(self, argin):
+        # PROTECTED REGION ID(AlarmNotifier.Snooze) ENABLED START #
+        if len(argin) != 2:
+            raise ValueError("Snooze takes [name, hours]")
+        self.do_snooze(argin[0], argin[1])
         # PROTECTED REGION END #    //  AlarmNotifier.Snooze
+
+    @command(dtype_in='str', dtype_out='str',
+             doc_in="rule name and hours, e.g. 'mossCompresor 8'",
+             doc_out="what was done")
+    @DebugIt()
+    def SnoozeFor(self, argin):
+        # PROTECTED REGION ID(AlarmNotifier.SnoozeFor) ENABLED START #
+        # Same thing as Snooze with a scalar argument. ATKPanel will not offer
+        # a command taking DevVarStringArray, so from the generic panel -- the
+        # only interface most people in the lab will open -- Snooze is
+        # unreachable. This one shows up as a text field.
+        parts = argin.split()
+        if len(parts) != 2:
+            raise ValueError("expected 'rulename hours', e.g. "
+                             "'mossCompresor 8', got %r" % argin)
+        return self.do_snooze(parts[0], parts[1])
+        # PROTECTED REGION END #    //  AlarmNotifier.SnoozeFor
 
     @command(dtype_in='str', doc_in="rule name")
     @DebugIt()
@@ -893,6 +1014,7 @@ class AlarmNotifier(Device):
                 rule.lastmail = previous.lastmail
                 rule.acked = previous.acked
                 rule.snoozeuntil = previous.snoozeuntil
+                rule.gatevalue = previous.gatevalue
         return "%d rules loaded, %d enabled" % (
             len(self.rules), len([r for r in self.rules if r.enabled]))
         # PROTECTED REGION END #    //  AlarmNotifier.ReloadRules

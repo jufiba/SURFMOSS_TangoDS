@@ -73,8 +73,8 @@ an empty registration that has never run. Use the former.
 
 | Scope | Domain | Example |
 |---|---|---|
-| An instrument's safety chain | `<instrument>/safety/` | `xps/safety/interlockxraygun` |
-| Watching that only warns | `<instrument>/warn/` | `mossbauer/warn/watercompressor` |
+| An instrument's safety chain | `<instrument>/safety/` | `xps/safety/waterinterlock` |
+| Watching that only warns | `<instrument>/warn/` | `mossbauer/warn/compressorwater` |
 | Lab-wide service | `lab/` | `lab/alarm/notifier` |
 
 `warn/` describes what the device does rather than what it measures: its output
@@ -169,7 +169,7 @@ Space-separated `key=value` pairs. `msg=` goes **last**, because it swallows
 the rest of the line. Blank lines and lines starting with `#` are skipped.
 
 ```
-name=xpsWater dev=xps/safety/interlockxraygun alarm=ALARM,FAULT ok=ON ctx=xps/safety/water/xray msg=XPS water interlock tripped
+name=xpsWater dev=xps/safety/waterinterlock alarm=ALARM,FAULT ok=ON ctx=xps/safety/water/xray msg=XPS water interlock tripped
 ```
 
 | Field | Req. | Default | Meaning |
@@ -183,6 +183,7 @@ name=xpsWater dev=xps/safety/interlockxraygun alarm=ALARM,FAULT ok=ON ctx=xps/sa
 | `persist` | no | `2` | Consecutive sweeps before tripping. |
 | `enabled` | no | `yes` | `no` leaves it inert but visible. |
 | `onunknown` | no | `alarm` | `ignore` when the device is switched off on purpose. |
+| `when` | no | — | `gatedev:STATE[,STATE]`. Evaluate only while that device is in one of those states. |
 | `to` | no | — | **Replaces** `Recipients`. |
 | `cc` | no | — | **Adds to** `Recipients`. |
 | `ctx` | no | — | Attributes to read into the mail body. |
@@ -197,11 +198,47 @@ Jive out of your inbox.
 A malformed rule leaves the device in `FAULT` with the offending line in
 `Status`. It is never skipped silently, because that is how an alarm gets lost.
 
+### Gating with `when=`
+
+Some cooling water is deliberately shut off while the thing it cools is idle:
+the VSM magnet, the LEEM evaporators. Watching it unconditionally would mail
+you about the normal state of the lab. `when=` holds the rule while the
+equipment is off:
+
+```
+name=vsmWater dev=vsm/warn/magnetwater when=vsm/power/itech6000c:ON ctx=vsm/power/itech6000c/Current msg=VSM magnet water cut with the supply on
+```
+
+The gate belongs here rather than in the interlock. An interlock must withdraw
+its permissive whether or not the equipment is running -- that is the whole
+point of fail-safe -- so what is redundant when the gun is off is the mail, not
+the protection. The interlock stays in ALARM and truthfully so; the notifier
+just does not write to you about it.
+
+Three behaviours that make this more than an `if`:
+
+- **A gate that cannot be read counts as open.** An unnecessary mail is
+  recoverable; silence because the gate device happened to be down is not.
+- **Opening a gate restarts evaluation from NORM.** The case that matters is
+  the water already being off when someone switches the magnet on: the rule has
+  to notice a condition that was true before it was allowed to look.
+- **Shutting a gate on a live alarm sends no RESUELTO.** Switching the magnet
+  off is a fair way to end the problem, but nothing was repaired, and a
+  "resolved" mail would claim otherwise. The rule moves to GATED and appears in
+  the weekly report under the equipment that is off.
+
+⚠️ The gate must not be downstream of the condition. The XPS gun's only Tango
+presence is its `RaspberrySwitch`, and the interlock turns that switch off when
+the water fails -- so gating on it would mean "if there is no water, do not
+warn about the water". That case stays ungated until the gun itself is in
+Tango.
+
 ## Commands
 
 | Command | Argument | Effect |
 |---|---|---|
 | `Snooze` | `[name, hours]` | Sleeps a rule. Refuses more than `MaxSnoozeHours`. |
+| `SnoozeFor` | `"name hours"` → `str` | The same, with a scalar argument so it is reachable from ATKPanel. |
 | `Wake` | `name` | Wakes it early. |
 | `Acknowledge` | `name` | Silences reminders; the alarm stays active and visible. |
 | `AcknowledgeAll` | — | For a bad morning. |
@@ -210,15 +247,50 @@ A malformed rule leaves the device in `FAULT` with the offending line in
 | `SendMessage` | `[subject, body]` | Arbitrary mail. **Not to be called from the loop of a safety device server.** |
 | `ReloadRules` | — → `str` | Re-reads `Rules` without an `Init`, keeping the running state of every rule whose text is unchanged. |
 
+### Silencing a rule
+
+Three different things, worth keeping apart:
+
+| | When | Comes back by itself |
+|---|---|---|
+| `SnoozeFor` / `Snooze` | "I know this is about to happen and it is normal" — the compressor water is being shut to bring the cryostat to RT | yes, when it expires |
+| `Acknowledge` | "I have seen it, stop reminding me" — the alarm stays active and visible | n/a, per alarm |
+| `enabled=no` | the instrument will be down for months | no, back to Jive |
+
+`Snooze` takes a `DevVarStringArray`, which **ATKPanel will not offer**: the
+generic panel only renders commands with no argument or a simple scalar. Since
+the panel is the only interface most people in the lab will open, use
+`SnoozeFor`, which appears there as a text field:
+
+```
+mossCompresor 8
+```
+
+Hours may be fractional (`0.05` is three minutes, handy for testing). Both
+commands share one cap check, so neither can drift past `MaxSnoozeHours`.
+Confirm with the `SnoozedRules` attribute.
+
+`Acknowledge`, `AcknowledgeAll`, `TestMail` and `Report` are already scalar or
+argument-less, so they appear in ATKPanel as buttons.
+
+⚠️ Open ATKPanel from Jive, not from Astor: Astor bundles ATKPanel 5.11, Jive
+bundles 6.0.
+
+`enabled=no` goes in the rule text itself, **before** `msg=`, since `msg=`
+swallows the rest of the line. Then run `ReloadRules` rather than `Init`, so
+the other rules keep their state and an already-acknowledged alarm does not
+mail again. Check the `DisabledRules` attribute: if the name is not there, the
+`enabled=no` ended up inside the subject text.
+
 ## Test procedure
 
 1. `TestMail` from Jive. A mail with the rule table should arrive. If not,
    check `LastMailError` and `sudo tail /var/log/msmtp`.
 2. With the XPS interlock in `ON`, `Report` should show `xpsWater NORM`.
-3. `Trip` on `xps/safety/interlockxraygun`. After two sweeps (`persist=2`, 20 s)
+3. `Trip` on `xps/safety/waterinterlock`. After two sweeps (`persist=2`, 20 s)
    the ALARMA mail should arrive, with the flow in the context block.
 4. `Reset` on the interlock. The RESUELTO mail should arrive.
-5. Stop `AnalogInterlock/1` from Astor. After five minutes
+5. Stop `AnalogInterlock/xps` from Astor. After five minutes
    (`UnknownCycles=30` × 10 s) the SIN LECTURA mail should arrive. **This is
    the step that justifies the whole exercise**: it is the failure a
    threshold-based watchdog cannot see.
