@@ -20,6 +20,11 @@
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
       <DefaultPropValue></DefaultPropValue>
     </deviceProperties>
+    <deviceProperties name="MCS_Channels" description="Channels in one full native MCS sweep (one drive period). 512 here, 256 on some setups. setMCAmode uses it as the channel count, and folding uses it as the N it folds over.">
+      <type xsi:type="pogoDsl:UShortType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <DefaultPropValue>512</DefaultPropValue>
+    </deviceProperties>
     <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
       <argin description="none">
         <type xsi:type="pogoDsl:VoidType"/>
@@ -102,6 +107,15 @@
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
     </commands>
     <commands name="ReadLastChannel" description="" execMethod="read_last_channel" displayLevel="EXPERT" polledPeriod="0" isDynamic="false">
+      <argin description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argin>
+      <argout description="">
+        <type xsi:type="pogoDsl:VoidType"/>
+      </argout>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+    </commands>
+    <commands name="CalibrateFoldPoint" description="Run the mirror-chi2 fold-point search over the full raw MCS sweep and store the result in FoldPoint. Call once at the start of a measurement; not in a loop. MCS analog mode, full untruncated sweep only." execMethod="calibrate_fold_point" displayLevel="OPERATOR" polledPeriod="0" isDynamic="false">
       <argin description="">
         <type xsi:type="pogoDsl:VoidType"/>
       </argin>
@@ -193,6 +207,38 @@
       <dataReadyEvent fire="false" libCheckCriteria="true"/>
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
       <properties description="Width of one Spectrum channel in mV, so that the spectrum can be plotted against the same scale the window limits use: channel c starts at c * ChannelWidth mV. PHA mode only - in MCS the channels are time bins and this reads INVALID." label="Channel Width" unit="mV" standardUnit="" displayUnit="" format="%6.4f" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="FoldedSpectrum" attType="Spectrum" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="4096" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="The MCS spectrum folded about FoldPoint: folded[i] = raw[i] + raw[(FoldPoint - i) mod N], linearly interpolated, i &lt; N/2. Recomputed on every read from the current raw sweep and the stored FoldPoint; does not recalibrate. MCS analog mode and a full untruncated sweep only." label="Folded Spectrum" unit="" standardUnit="counts" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="FoldPoint" attType="Scalar" rwType="READ_WRITE" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false" memorized="true" memorizedInit="true">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="Mirror point for folding, in channels, near the sweep length N. Normally set by CalibrateFoldPoint; writable by hand for edge cases. Validated to N +/- 16." label="Fold Point" unit="" standardUnit="" displayUnit="" format="%8.2f" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="FoldPointAmbiguous" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:BooleanType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="True when the last CalibrateFoldPoint found a flat mirror-chi2 minimum (curvature ratio &lt; 0.02): the fold point is poorly determined, usually too few counts. False after a hand-set FoldPoint." label="Fold Point Ambiguous" unit="" standardUnit="" displayUnit="" format="" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
+    </attributes>
+    <attributes name="FoldPointCurvature" attType="Scalar" rwType="READ" displayLevel="OPERATOR" polledPeriod="0" maxX="" maxY="" allocReadMember="true" isDynamic="false">
+      <dataType xsi:type="pogoDsl:DoubleType"/>
+      <changeEvent fire="false" libCheckCriteria="false"/>
+      <archiveEvent fire="false" libCheckCriteria="false"/>
+      <dataReadyEvent fire="false" libCheckCriteria="true"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <properties description="Sharpness of the mirror-chi2 minimum: local curvature over the scan's overall range, the ratio CalibrateFoldPoint compares against 0.02. NaN until a calibration runs, and after a hand-set FoldPoint." label="Fold Point Curvature" unit="" standardUnit="" displayUnit="" format="%7.4f" maxValue="" minValue="" maxAlarm="" minAlarm="" maxWarning="" minWarning="" deltaTime="" deltaValue=""/>
     </attributes>
     <states name="OFF" description="">
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>

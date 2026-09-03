@@ -30,6 +30,11 @@ import hid
 import struct
 import numpy
 
+try:
+    from .fold import fold, fold_at, curvature_ratio
+except ImportError:          # run as a plain script, not as the package
+    from fold import fold, fold_at, curvature_ratio
+
 # Seconds to wait before trying the USB device again while in FAULT.
 RETRY_PERIOD=10
 
@@ -409,6 +414,14 @@ class WisselMCA(Device):
             'be used for this: these cards report it empty.',
     )
 
+    MCS_Channels = device_property(
+        dtype='uint16', default_value=512,
+        doc='Channels in one full native MCS sweep, i.e. one drive period. '
+            '512 here, 256 on some setups. setMCAmode uses it as the channel '
+            'count, and folding uses it as the N it folds over -- '
+            'CalibrateFoldPoint and FoldedSpectrum need the whole sweep.',
+    )
+
     # ----------
     # Attributes
     # ----------
@@ -489,6 +502,50 @@ class WisselMCA(Device):
             "channels are time bins and this reads INVALID.",
     )
 
+    FoldedSpectrum = attribute(
+        dtype=('double',),
+        max_dim_x=4096,
+        label="Folded Spectrum",
+        standard_unit="counts",
+        doc="The MCS spectrum folded about FoldPoint: "
+            "folded[i] = raw[i] + raw[(FoldPoint - i) mod N], linearly "
+            "interpolated, for i < N/2 (N = MCS_Channels). Recomputed on "
+            "every read from the current raw sweep and the stored FoldPoint; "
+            "it does NOT recalibrate. MCS analog mode and a full untruncated "
+            "sweep only, otherwise it throws.",
+    )
+
+    FoldPoint = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        memorized=True,
+        hw_memorized=False,
+        label="Fold Point",
+        format="%8.2f",
+        doc="Mirror point for folding, in channels, near the sweep length N. "
+            "Normally set by CalibrateFoldPoint; writable by hand for edge "
+            "cases or to force a known value. Validated to N +/- 16.",
+    )
+
+    FoldPointAmbiguous = attribute(
+        dtype='bool',
+        label="Fold Point Ambiguous",
+        doc="True when the last CalibrateFoldPoint found a flat mirror-chi2 "
+            "minimum (curvature ratio < 0.02): the fold point is poorly "
+            "determined, usually because too few counts have accumulated. "
+            "False after a hand-set FoldPoint (no chi2 curve to judge).",
+    )
+
+    FoldPointCurvature = attribute(
+        dtype='double',
+        format="%7.4f",
+        label="Fold Point Curvature",
+        doc="Sharpness of the mirror-chi2 minimum: local curvature over the "
+            "scan's overall range, the ratio CalibrateFoldPoint compares "
+            "against 0.02. NaN until a calibration runs, and after a hand-set "
+            "FoldPoint.",
+    )
+
     # ---------------
     # General methods
     # ---------------
@@ -496,9 +553,14 @@ class WisselMCA(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(WisselMCA.init_device) ENABLED START #
-        self.lastchannel = 512
+        self.lastchannel = self.MCS_Channels
         self.firstchannel = 0
         self.lastconnect = 0
+        # Default until CalibrateFoldPoint runs or the memorized FoldPoint is
+        # written back: fold exactly on the sweep end.
+        self.foldpoint = float(self.MCS_Channels)
+        self.foldpoint_ambiguous = False
+        self.foldpoint_curvature = float("nan")
         self.connect()
         # PROTECTED REGION END #    //  WisselMCA.init_device
 
@@ -551,7 +613,7 @@ class WisselMCA(Device):
             if ok2 and ok3:
                 self.lastchannel = phalastchannel(setup, w[2])
         else:  # MCS analog, MCS digital or None
-            self.lastchannel = 512
+            self.lastchannel = self.MCS_Channels
         self.set_status("Connected to Wissel MCA %x" % self.InstrumentID)
         self.debug_stream("Connected to Wissel MCA %x" % self.InstrumentID)
         return True
@@ -688,6 +750,75 @@ class WisselMCA(Device):
         return w
         # PROTECTED REGION END #    //  WisselMCA.ChannelWidth_read
 
+    def _require_mcs_full_sweep(self, what):
+        # PROTECTED REGION ID(WisselMCA._require_mcs_full_sweep) ENABLED START #
+        """Guard for the folding paths: MCS analog mode and the whole native
+        sweep, or a Tango error. Folding assumes a full drive period; on a
+        truncated array fold()'s search can lock onto a wrong minimum and
+        still look sharp (see fold.py's B5 note)."""
+        mode = checked(self.c.readmode(), "readmode") & 0b11
+        if mode != 2:
+            tango.Except.throw_exception(
+                "WisselMCA_NotMCSanalog",
+                "%s needs MCS analog mode (triangular drive); mode is %d"
+                % (what, mode),
+                "WisselMCA." + what)
+        if self.firstchannel != 0 or self.lastchannel < self.MCS_Channels - 1:
+            tango.Except.throw_exception(
+                "WisselMCA_WindowTruncated",
+                "%s needs the full %d-channel sweep; the read window is "
+                "%d..%d. Reset it with SetFirstChannel 0 and "
+                "SetLastChannel %d." % (what, self.MCS_Channels,
+                                        self.firstchannel, self.lastchannel,
+                                        self.MCS_Channels),
+                "WisselMCA." + what)
+        # PROTECTED REGION END #    //  WisselMCA._require_mcs_full_sweep
+
+    def _read_native_sweep(self):
+        # PROTECTED REGION ID(WisselMCA._read_native_sweep) ENABLED START #
+        """The whole 0..MCS_Channels raw spectrum as float, for folding."""
+        d = checked(self.c.readspectrum_pages(0, self.MCS_Channels),
+                    "readspectrum_pages")
+        return numpy.asarray(d, dtype=float)
+        # PROTECTED REGION END #    //  WisselMCA._read_native_sweep
+
+    def read_FoldedSpectrum(self):
+        # PROTECTED REGION ID(WisselMCA.FoldedSpectrum_read) ENABLED START #
+        self._require_mcs_full_sweep("FoldedSpectrum")
+        counts = self._read_native_sweep()
+        return fold_at(counts, self.foldpoint)
+        # PROTECTED REGION END #    //  WisselMCA.FoldedSpectrum_read
+
+    def read_FoldPoint(self):
+        # PROTECTED REGION ID(WisselMCA.FoldPoint_read) ENABLED START #
+        return self.foldpoint
+        # PROTECTED REGION END #    //  WisselMCA.FoldPoint_read
+
+    def write_FoldPoint(self, value):
+        # PROTECTED REGION ID(WisselMCA.FoldPoint_write) ENABLED START #
+        n = self.MCS_Channels
+        if not (n - 16 <= value <= n + 16):
+            tango.Except.throw_exception(
+                "WisselMCA_BadFoldPoint",
+                "fold point %.3f is outside [%d, %d]; it sits near the sweep "
+                "length %d" % (value, n - 16, n + 16, n),
+                "WisselMCA.write_FoldPoint")
+        self.foldpoint = float(value)
+        # A hand-set point carries no chi2 curve to judge.
+        self.foldpoint_ambiguous = False
+        self.foldpoint_curvature = float("nan")
+        # PROTECTED REGION END #    //  WisselMCA.FoldPoint_write
+
+    def read_FoldPointAmbiguous(self):
+        # PROTECTED REGION ID(WisselMCA.FoldPointAmbiguous_read) ENABLED START #
+        return self.foldpoint_ambiguous
+        # PROTECTED REGION END #    //  WisselMCA.FoldPointAmbiguous_read
+
+    def read_FoldPointCurvature(self):
+        # PROTECTED REGION ID(WisselMCA.FoldPointCurvature_read) ENABLED START #
+        return self.foldpoint_curvature
+        # PROTECTED REGION END #    //  WisselMCA.FoldPointCurvature_read
+
 
     # --------
     # Commands
@@ -737,9 +868,9 @@ class WisselMCA(Device):
         # PROTECTED REGION ID(WisselMCA.setMCAmode) ENABLED START #
         checked(self.c.setmode(2), "setmode")
         self.firstchannel = 0
-        self.lastchannel = 512
+        self.lastchannel = self.MCS_Channels
         self.set_state(tango.DevState.OFF)
-        self.set_status("MCS analog mode, 512 channels")
+        self.set_status("MCS analog mode, %d channels" % self.MCS_Channels)
         # PROTECTED REGION END #    //  WisselMCA.setMCAmode
 
     @command(
@@ -779,6 +910,31 @@ class WisselMCA(Device):
         r = checked(self.c.readlastchannel(), "readlastchannel")
         self.lastchannel = int(r) + 1  # lastchannel+1 = number of channels (first channel is 0)
         # PROTECTED REGION END #    //  WisselMCA.ReadLastChannel
+
+    @command(
+    )
+    @DebugIt()
+    def CalibrateFoldPoint(self):
+        # PROTECTED REGION ID(WisselMCA.CalibrateFoldPoint) ENABLED START #
+        # Run the offline pipeline's mirror-chi2 search over the full raw
+        # sweep and store the result in FoldPoint. Call it once at the start
+        # of a measurement (or again if the drive geometry/range changed) --
+        # NOT in a loop: once fixed for a session the fold point must stay
+        # put, or refolding on the fly adds noise and breaks reproducibility
+        # within one acquisition.
+        self._require_mcs_full_sweep("CalibrateFoldPoint")
+        counts = self._read_native_sweep()
+        _folded, F, robustness, _Fs, resid = fold(counts)
+        self.foldpoint = float(F)
+        self.foldpoint_ambiguous = (robustness == "flat")
+        self.foldpoint_curvature = curvature_ratio(resid)
+        self.set_status(
+            "Fold point %.2f over %d channels (%s, curvature %.4f)%s"
+            % (self.foldpoint, len(counts), robustness,
+               self.foldpoint_curvature,
+               " -- TOO FEW COUNTS, not reliable yet"
+               if self.foldpoint_ambiguous else ""))
+        # PROTECTED REGION END #    //  WisselMCA.CalibrateFoldPoint
 
 # ----------
 # Run server
