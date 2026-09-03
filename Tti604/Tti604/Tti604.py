@@ -191,11 +191,12 @@ class Tti604(Device):
             self.ser=serial.Serial(self.SerialPort,9600,dsrdtr=True,timeout=0.5)
         except IOError as Argument:
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Can't connect to AMLPGC1")
-            self.debug_stream("Can't connect to AMLPGC1")
+            self.set_status("Can't open %s: %s"%(self.SerialPort,Argument))
+            self.debug_stream("Can't open %s: %s"%(self.SerialPort,Argument))
+            return
         self.ser.rts=False
-        self.set_status("Connected to AMLPGC1")
-        self.debug_stream("Connected to AMLPGC1")
+        self.set_status("Connected to TTi 604")
+        self.debug_stream("Connected to TTi 604")
         if (self.status_tti()=="LOGGING"):
             self.set_state(tango.DevState.RUNNING)
         elif (self.status_tti()=="OFF"):
@@ -365,7 +366,7 @@ class Tti604(Device):
             self.command_tti("g")
         if (state==tango.DevState.RUNNING):
             self.command_tti("v")
-        self.set_state(tango.DevEnum.ON)
+        self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  Tti604.Stop
 
     @command(

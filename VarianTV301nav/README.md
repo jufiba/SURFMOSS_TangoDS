@@ -27,7 +27,7 @@ A read reply carries the value in ASCII from byte 6; a write reply is one byte
 | 120 | set rotation speed (Hz) → `setSpeed`, `SetSpeed` |
 | 122 | vent valve (`1` = closed) → `ventValve` |
 | 125 | valve operation / error code → `valveOperation`, `errorCode` |
-| 200–205 | current (mA), voltage (V), power (W), frequency (Hz), temperature (°C), status code → `current`, `voltage`, `power`, `frecuency`, `temperature`, `turboStatus` |
+| 200–205 | current (mA), voltage (V), power (W), frequency (Hz), temperature (°C), status code → `current`, `voltage`, `power`, `frequency`, `temperature`, `turboStatus` |
 
 Status codes: `Stop`, `WaitinIntlk`, `Starting`, `Auto-tuning`, `Braking`,
 `Normal`, `Fail`.
@@ -35,7 +35,7 @@ Status codes: `Stop`, `WaitinIntlk`, `Starting`, `Auto-tuning`, `Braking`,
 ## Interface
 
 - Property `serialPort` (**mandatory**).
-- Read attributes: `temperature`, `power`, `current`, `voltage`, `frecuency`,
+- Read attributes: `temperature`, `power`, `current`, `voltage`, `frequency`,
   `turboStatus`, `errorCode` (EXPERT).
 - Read-write (EXPERT): `setSpeed`, `running`, `valveOperation`, `ventValve`.
 - Commands: `Start`, `Stop`, `SetSpeed(uint16)` (clamped to 150–950).
@@ -48,7 +48,7 @@ Status codes: `Stop`, `WaitinIntlk`, `Starting`, `Auto-tuning`, `Braking`,
   control.
 - Hardened: a switched-off pump faults with the reason instead of taking the
   server down. No reconnect thread.
-- Typos left as found in the interface: attribute `frecuency`, status
-  `Auto-tunning`.
+- The `frequency` attribute was renamed from `frecuency`: a client (synoptic,
+  script) that still asks for `frecuency` needs updating.
 
 Install: in `pyproject.toml`; needs `pyserial`.

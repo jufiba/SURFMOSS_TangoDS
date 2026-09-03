@@ -11,7 +11,7 @@ Three instances on **pi-leem**: `FUGMCP/1` → `leem/power/hv1`, `FUGMCP/2` →
 (`Speed = 115200`).
 
 > `FUGMCP/1` uses the default `Speed` (625000); `/2` and `/3` are set to
-> 115200. Confirm each supply's baud rate — Probus V modules are configurable.
+> `115200`. Confirm each supply's baud rate — Probus V modules are configurable.
 
 ## The protocol
 

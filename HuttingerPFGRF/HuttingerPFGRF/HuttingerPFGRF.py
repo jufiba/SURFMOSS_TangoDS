@@ -404,7 +404,7 @@ class HuttingerPFGRF(Device):
     def Off(self):
         # PROTECTED REGION ID(HuttingerPFGRF.Off) ENABLED START #
         (address,command,data)=self.parse_response(self.sendcommand(0,"4F",0))
-        self.set_state(tango.DevState.ON)
+        self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  HuttingerPFGRF.Off
 
     @command(

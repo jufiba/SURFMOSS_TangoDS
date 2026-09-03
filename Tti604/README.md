@@ -45,14 +45,12 @@ parses the stream).
 
 ## Notes
 
-Not hardened, and it shows:
-
-- `init_device` sets the status to `"Can't connect to AMLPGC1"` / `"Connected
-  to AMLPGC1"` — copy-paste from another server; the open is also not guarded,
-  so a missing port takes the server down.
-- `Stop()` calls `self.set_state(tango.DevEnum.ON)` — a typo that raises.
+- `init_device` now guards the port open (a missing port faults with the
+  reason and returns, instead of the copy-pasted `"…AMLPGC1"` status and a
+  follow-on crash), and `Stop()` sets a real state.
 - The first frames after enabling output are garbage; `read_tti` retries up to
   10 times until `parse_output` succeeds, using a parse failure as the "no
   reading" signal.
+- Still no reconnect thread, and the `parse_output` bit-decoding is fragile.
 
 Install: in `pyproject.toml`; needs `pyserial`.

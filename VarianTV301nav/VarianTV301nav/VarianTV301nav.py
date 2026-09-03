@@ -37,7 +37,7 @@ class VarianTV301nav(Device):
     """
     # PROTECTED REGION ID(VarianTV301nav.class_variable) ENABLED START #
 
-    status_code=["Stop","WaitinIntlk","Starting","Auto-tunning","Braking","Normal","Fail"]
+    status_code=["Stop","WaitinIntlk","Starting","Auto-tuning","Braking","Normal","Fail"]
 
     def sendcommand(self,win,data):
         cmd=b'\x02\x80'+win.encode("ascii")+b'\x31'+data.encode("ascii")+b'\x03'
@@ -162,7 +162,7 @@ class VarianTV301nav(Device):
         format="%d",
     )
 
-    frecuency = attribute(
+    frequency = attribute(
         dtype='uint16',
         label="frequency",
         unit="Hz",
@@ -334,11 +334,11 @@ class VarianTV301nav(Device):
         return(int(response[6:12]))
         # PROTECTED REGION END #    //  VarianTV301nav.voltage_read
 
-    def read_frecuency(self):
-        # PROTECTED REGION ID(VarianTV301nav.frecuency_read) ENABLED START #
+    def read_frequency(self):
+        # PROTECTED REGION ID(VarianTV301nav.frequency_read) ENABLED START #
         response=self.readcommand("203",15)
         return(int(response[6:12]))
-        # PROTECTED REGION END #    //  VarianTV301nav.frecuency_read
+        # PROTECTED REGION END #    //  VarianTV301nav.frequency_read
 
 
     # --------

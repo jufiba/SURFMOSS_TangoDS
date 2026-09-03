@@ -31,9 +31,9 @@ combined pressure reading; `read_Pressure` returns `float(reply[7:15])`.
 ## Notes
 
 - `init_device` is hardened (a missing port faults instead of crashing the
-  server). But `read_Pressure` still **returns `9999`** when the reply does
-  not parse, rather than INVALID quality — a rough edge worth fixing, since
-  9999 mbar is a number an alarm could act on.
+  server). `read_Pressure` returns **INVALID** on a non-ACK, empty or
+  unparseable reply, rather than a plausible number — `0.0` on a pressure
+  gauge reads as perfect vacuum.
 - No reconnect thread.
 - Pressure unit assumed mbar: the 972B can be set to Torr or Pa and the reply
   carries no unit. Confirm the transducer's unit setting matches.

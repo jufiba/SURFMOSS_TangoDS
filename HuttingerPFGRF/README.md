@@ -49,8 +49,6 @@ read-write EXPERT for the nominal / mode settings. Commands: `On`, `Off`,
 
 - `init_device` is hardened (a switched-off generator faults instead of taking
   the server down). No reconnect thread.
-- **Bug:** `Off()` sets the device state to `ON` — the state does not follow
-  the output for `Off`.
 - `HuttingerPFGDC` is the DC sibling (PFG-DC1500) — same house protocol,
   different codes; it has no wiki manual yet, only this RF one.
 

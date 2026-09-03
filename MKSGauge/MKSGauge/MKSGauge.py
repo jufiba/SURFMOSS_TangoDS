@@ -25,6 +25,7 @@ from tango import AttrWriteType
 # PROTECTED REGION ID(MKSGauge.additionnal_import) ENABLED START #
 import os
 import sys
+import time
 import serial
 # PROTECTED REGION END #    //  MKSGauge.additionnal_import
 
@@ -103,11 +104,19 @@ class MKSGauge(Device):
 
     def read_Pressure(self):
         # PROTECTED REGION ID(MKSGauge.Pressure_read) ENABLED START #
+        if self.ser is None:
+            return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
         self.ser.write(b"@254PR4?;FF")
         a=self.ser.read_until(b";FF")
         if (a[0:7]==b"@253ACK"):
-            return float(a[7:15])
-        return 9999
+            try:
+                return float(a[7:15])
+            except ValueError:
+                pass
+        # 0.0 on a pressure gauge reads as perfect vacuum -- the worst value
+        # to hand an interlock or an alarm. A non-ACK, empty or unparseable
+        # reply is INVALID, not 9999 mbar (a number a client could act on).
+        return (0.0, time.time(), tango.AttrQuality.ATTR_INVALID)
         # PROTECTED REGION END #    //  MKSGauge.Pressure_read
 
 
