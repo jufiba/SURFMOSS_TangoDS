@@ -32,11 +32,41 @@ wrong must not be lost to a strict decode).
 
 ## Interface
 
-- Properties `SerialPort` (`/dev/ttyUSB0`), `Speed` (625000).
+- Properties `SerialPort` (`/dev/ttyUSB0`), `Speed` (625000),
+  `DeadmanTimeout` (0.0 = disabled).
 - Read attributes: `Voltage`, `Current`, `Power` (= V·I), `CC` (in current
-  regulation), `CV` (in voltage regulation), `Identification` (EXPERT).
+  regulation), `CV` (in voltage regulation), `Identification` (EXPERT),
+  `TimeSinceKeepalive` (s), `DeadmanTripped`.
 - Read-write: `SetVoltage`, `SetCurrent`.
-- Commands: `OutputOn`, `OutputOff`, `sendCommand(str)` (EXPERT).
+- Commands: `OutputOn`, `OutputOff`, `Keepalive`, `sendCommand(str)` (EXPERT).
+
+## Keepalive / deadman
+
+For the water-jacketed MBE evaporators: an `AnalogInterlock` watches the
+evaporator cooling water and drives this supply's `OutputOn` / `OutputOff`.
+The deadman makes that fail-safe — the same pattern as `RaspberryButton`,
+`ElmitecLEEM2k` and `AMLPGC1`:
+
+- `DeadmanTimeout` property, **default 0.0 = disabled**; with 0 the watchdog
+  thread is never even started and every existing FUGMCP instance is
+  unaffected.
+- Past the timeout with no `Keepalive` and the output asserted, a `_Deadman`
+  thread does what `OutputOff` does — `>BON 0`, HV off — so an `AnalogInterlock`
+  process dying drops the HV by default.
+- `OutputOn` arms and refreshes the deadman and clears a trip; `OutputOff`
+  disarms. `Keepalive` only refreshes the timer — recovery from a trip needs
+  an explicit `OutputOn`.
+- Enable it by setting `DeadmanTimeout` (> the interlock's restart time) in
+  the DB and Init-ing the device. Only do this where a supervisor is
+  committed to sending `Keepalive` — otherwise every manual `OutputOn`
+  self-destructs after the timeout.
+- `AnalogInterlock` config for a FUGMCP output: `OnCommand = OutputOn`,
+  `OffCommand = OutputOff`, `KeepaliveCommand = Keepalive` (already the
+  default).
+
+All serial exchanges now go through one locked `_txn()`: the deadman thread
+runs outside Tango's serialization monitor. `_txn` also raises a clean
+"not connected" error when the port is down, instead of an `AttributeError`.
 
 ## Notes
 

@@ -25,7 +25,55 @@ from tango import AttrWriteType
 # PROTECTED REGION ID(FUGMCP.additionnal_import) ENABLED START #
 import os
 import sys
+import time
+import threading
 import serial
+
+
+class _Deadman(threading.Thread):
+    """Switch the HV output off if no Keepalive arrives within DeadmanTimeout.
+
+    Same owner/decider split as RaspberryButton's DeadmanThread: the process
+    that decides the supply may hold HV -- an AnalogInterlock watching the
+    cooling water of a water-jacketed MBE evaporator -- is not this one. If
+    that process is killed its keepalives stop, and this thread then does what
+    OutputOff does, so the failure of the supervisor drops the HV by default.
+
+    Disabled (DeadmanTimeout = 0) unless a device opts in, so every existing
+    FUGMCP instance is unaffected.
+    """
+
+    def __init__(self, ds):
+        threading.Thread.__init__(self, name="FUGMCP-deadman", daemon=True)
+        self.ds = ds
+        self.stop = threading.Event()
+
+    def run(self):
+        ds = self.ds
+        period = min(0.5, ds.DeadmanTimeout / 4.0)
+        try:
+            while not self.stop.wait(period):
+                if not ds._output_asserted or ds._deadman_tripped:
+                    continue
+                idle = time.monotonic() - ds._last_keepalive
+                if idle > ds.DeadmanTimeout:
+                    try:
+                        ds._txn(b">BON 0\n")
+                    except Exception as e:
+                        ds.error_stream("Deadman could not switch HV off: %s" % e)
+                    ds._output_asserted = False
+                    ds._deadman_tripped = True
+                    msg = ("Deadman expired: no Keepalive for %.1f s (timeout "
+                           "%.1f s). HV output switched off; OutputOn to restore."
+                           % (idle, ds.DeadmanTimeout))
+                    ds.set_state(tango.DevState.OFF)
+                    ds.set_status(msg)
+                    ds.error_stream(msg)
+        except Exception as exc:
+            # A dead deadman must not look healthy.
+            ds.set_state(tango.DevState.FAULT)
+            ds.set_status("Deadman thread died: %s" % exc)
+            ds.error_stream("Deadman thread died: %s" % exc)
 # PROTECTED REGION END #    //  FUGMCP.additionnal_import
 
 __all__ = ["FUGMCP", "main"]
@@ -36,6 +84,21 @@ class FUGMCP(Device):
     Device server for the HV power supply MCP 140-1250 (1250V, 100mA). It has a USB module for digital interfacing, Probus V.
     """
     # PROTECTED REGION ID(FUGMCP.class_variable) ENABLED START #
+    ser = None
+
+    def _txn(self, cmd):
+        """One locked serial exchange: write, return one line. Raises a Tango
+        error if the port is not open. The deadman thread calls in here from
+        outside Tango's serialization monitor, so this is where its serial use
+        is kept from interleaving with a client's."""
+        with self._io_lock:
+            if self.ser is None:
+                tango.Except.throw_exception(
+                    "FUGMCP_NotConnected",
+                    "no serial link to the FUG MCP on %s" % self.SerialPort,
+                    "FUGMCP._txn")
+            self.ser.write(cmd)
+            return self.ser.readline()
     # PROTECTED REGION END #    //  FUGMCP.class_variable
 
     # -----------------
@@ -48,6 +111,15 @@ class FUGMCP(Device):
 
     Speed = device_property(
         dtype='int', default_value=625000
+    )
+
+    DeadmanTimeout = device_property(
+        dtype='double', default_value=0.0,
+        doc='Seconds without a Keepalive command after which the HV output is '
+            'switched off, as OutputOff would. 0 disables the deadman '
+            '(default). Set it comfortably above the restart time of whatever '
+            'sends the keepalives -- an AnalogInterlock watching the cooling '
+            'water of a water-jacketed evaporator.',
     )
 
     # ----------
@@ -111,6 +183,20 @@ class FUGMCP(Device):
         dtype='bool',
     )
 
+    TimeSinceKeepalive = attribute(
+        dtype='double',
+        unit="s",
+        format="%4.1f",
+        doc="Seconds since the last Keepalive (or OutputOn). Only meaningful "
+            "with DeadmanTimeout set.",
+    )
+
+    DeadmanTripped = attribute(
+        dtype='bool',
+        doc="True after the deadman switched the HV off for want of a "
+            "Keepalive. Cleared by OutputOn.",
+    )
+
     # ---------------
     # General methods
     # ---------------
@@ -118,7 +204,12 @@ class FUGMCP(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(FUGMCP.init_device) ENABLED START #
+        self._io_lock=threading.Lock()
         self.ser=None
+        self._deadman=None
+        self._last_keepalive=time.monotonic()
+        self._output_asserted=False
+        self._deadman_tripped=False
         try:
             self.ser=serial.Serial(port=self.SerialPort,baudrate=self.Speed,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=1,timeout=0.5)
             self.ser.write(bytes("*IDN?\n","ascii"))
@@ -149,8 +240,12 @@ class FUGMCP(Device):
             return
         if (resp[:-1]==bytes("BON:1","ascii")):
             self.set_state(tango.DevState.ON)
+            self._output_asserted=True
         else:
             self.set_state(tango.DevState.OFF)
+        if self.DeadmanTimeout > 0.0:
+            self._deadman=_Deadman(self)
+            self._deadman.start()
         # PROTECTED REGION END #    //  FUGMCP.init_device
     def always_executed_hook(self):
         # PROTECTED REGION ID(FUGMCP.always_executed_hook) ENABLED START #
@@ -159,6 +254,12 @@ class FUGMCP(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(FUGMCP.delete_device) ENABLED START #
+        if (getattr(self, "_deadman", None) is not None):
+            self._deadman.stop.set()
+        # Deliberately does NOT switch the HV off: an Init from Jive must not
+        # trip a running evaporation. If this server is gone for good the
+        # deadman cannot help either -- it is the interlock dying that it
+        # guards against, not this server.
         if (self.ser is not None):
             self.ser.close()
         # PROTECTED REGION END #    //  FUGMCP.delete_device
@@ -169,43 +270,32 @@ class FUGMCP(Device):
 
     def read_Voltage(self):
         # PROTECTED REGION ID(FUGMCP.Voltage_read) ENABLED START #
-        self.ser.write(bytes(">M0 ?\n","ascii"))
-        resp=self.ser.readline()
-        v=float(resp[3:-1])
-        return(v)
+        resp=self._txn(b">M0 ?\n")
+        return float(resp[3:-1])
         # PROTECTED REGION END #    //  FUGMCP.Voltage_read
 
     def read_Current(self):
         # PROTECTED REGION ID(FUGMCP.Current_read) ENABLED START #
-        self.ser.write(bytes(">M1 ?\n","ascii"))
-        resp=self.ser.readline()
-        i=float(resp[3:-1])
-        return(i)
+        resp=self._txn(b">M1 ?\n")
+        return float(resp[3:-1])
         # PROTECTED REGION END #    //  FUGMCP.Current_read
 
     def read_Power(self):
         # PROTECTED REGION ID(FUGMCP.Power_read) ENABLED START #
-        self.ser.write(bytes(">M0 ?\n","ascii"))
-        resp=self.ser.readline()
-        v=float(resp[3:-1])
-        self.ser.write(bytes(">M1 ?\n","ascii"))
-        resp=self.ser.readline()
-        i=float(resp[3:-1])
+        v=float(self._txn(b">M0 ?\n")[3:-1])
+        i=float(self._txn(b">M1 ?\n")[3:-1])
         return(v*i)
         # PROTECTED REGION END #    //  FUGMCP.Power_read
 
     def read_SetVoltage(self):
         # PROTECTED REGION ID(FUGMCP.SetVoltage_read) ENABLED START #
-        self.ser.write(bytes(">S0 ?\n","ascii"))
-        resp=self.ser.readline()
-        v=float(resp[3:-1])
-        return(v)
+        resp=self._txn(b">S0 ?\n")
+        return float(resp[3:-1])
         # PROTECTED REGION END #    //  FUGMCP.SetVoltage_read
 
     def write_SetVoltage(self, value):
         # PROTECTED REGION ID(FUGMCP.SetVoltage_write) ENABLED START #
-        self.ser.write(bytes(">S0 %f\n"%value,"ascii"))
-        resp=self.ser.readline()
+        resp=self._txn((">S0 %f\n"%value).encode("ascii"))
         if (resp[:-1]!=bytes("E0","ascii")):
             self.set_state(tango.DevState.FAULT)
             # decode with "replace", not the strict decode used elsewhere
@@ -220,16 +310,13 @@ class FUGMCP(Device):
 
     def read_SetCurrent(self):
         # PROTECTED REGION ID(FUGMCP.SetCurrent_read) ENABLED START #
-        self.ser.write(bytes(">S1 ?\n","ascii"))
-        resp=self.ser.readline()
-        i=float(resp[3:-1])
-        return(i)
+        resp=self._txn(b">S1 ?\n")
+        return float(resp[3:-1])
         # PROTECTED REGION END #    //  FUGMCP.SetCurrent_read
 
     def write_SetCurrent(self, value):
         # PROTECTED REGION ID(FUGMCP.SetCurrent_write) ENABLED START #
-        self.ser.write(bytes(">S1 %f\n"%value,"ascii"))
-        resp=self.ser.readline()
+        resp=self._txn((">S1 %f\n"%value).encode("ascii"))
         if (resp[:-1]!=bytes("E0","ascii")):
             self.set_state(tango.DevState.FAULT)
             self.set_status("Error writing SetCurret from FUG MCP %s"%resp[:-1].decode("ascii","replace"))
@@ -244,8 +331,7 @@ class FUGMCP(Device):
 
     def read_CC(self):
         # PROTECTED REGION ID(FUGMCP.CC_read) ENABLED START #
-        self.ser.write(bytes(">DIR ?\n","ascii"))
-        resp=self.ser.readline()
+        resp=self._txn(b">DIR ?\n")
         if (resp[:-1]==bytes("DIR:1","ascii")):
             return(True)
         else:
@@ -254,13 +340,22 @@ class FUGMCP(Device):
 
     def read_CV(self):
         # PROTECTED REGION ID(FUGMCP.CV_read) ENABLED START #
-        self.ser.write(bytes(">DVR ?\n","ascii"))
-        resp=self.ser.readline()
+        resp=self._txn(b">DVR ?\n")
         if (resp[:-1]==bytes("DVR:1","ascii")):
             return(True)
         else:
             return(False)
         # PROTECTED REGION END #    //  FUGMCP.CV_read
+
+    def read_TimeSinceKeepalive(self):
+        # PROTECTED REGION ID(FUGMCP.TimeSinceKeepalive_read) ENABLED START #
+        return time.monotonic() - self._last_keepalive
+        # PROTECTED REGION END #    //  FUGMCP.TimeSinceKeepalive_read
+
+    def read_DeadmanTripped(self):
+        # PROTECTED REGION ID(FUGMCP.DeadmanTripped_read) ENABLED START #
+        return self._deadman_tripped
+        # PROTECTED REGION END #    //  FUGMCP.DeadmanTripped_read
 
 
     # --------
@@ -272,10 +367,13 @@ class FUGMCP(Device):
     @DebugIt()
     def OutputOn(self):
         # PROTECTED REGION ID(FUGMCP.OutputOn) ENABLED START #
-        self.ser.write(bytes(">BON 1\n","ascii"))
-        resp=self.ser.readline()
-        if (resp[:-1]!=bytes("E0","ascii")):
-                self.set_state(tango.DevState.FAULT)
+        resp=self._txn(b">BON 1\n")
+        if (resp[:-1]!=b"E0"):
+            self.set_state(tango.DevState.FAULT)
+            return
+        self._last_keepalive=time.monotonic()
+        self._output_asserted=True
+        self._deadman_tripped=False
         self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  FUGMCP.OutputOn
 
@@ -284,12 +382,23 @@ class FUGMCP(Device):
     @DebugIt()
     def OutputOff(self):
         # PROTECTED REGION ID(FUGMCP.OutputOff) ENABLED START #
-        self.ser.write(bytes(">BON 0\n","ascii"))
-        resp=self.ser.readline()
-        if (resp[:-1]!=bytes("E0","ascii")):
+        resp=self._txn(b">BON 0\n")
+        self._output_asserted=False
+        if (resp[:-1]!=b"E0"):
             self.set_state(tango.DevState.FAULT)
+            return
         self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  FUGMCP.OutputOff
+
+    @command(
+    )
+    @DebugIt()
+    def Keepalive(self):
+        # PROTECTED REGION ID(FUGMCP.Keepalive) ENABLED START #
+        # Refreshes the deadman timer only. Never touches the output:
+        # recovering from a deadman trip needs an explicit OutputOn.
+        self._last_keepalive=time.monotonic()
+        # PROTECTED REGION END #    //  FUGMCP.Keepalive
 
     @command(
     dtype_in='str', 
@@ -299,9 +408,8 @@ class FUGMCP(Device):
     @DebugIt()
     def sendCommand(self, argin):
         # PROTECTED REGION ID(FUGMCP.sendCommand) ENABLED START #
-        self.ser.write(bytes(argin+"\n","ascii"))
-        result=self.ser.readline()
-        return(result.decode("ascii"))
+        result=self._txn((argin+"\n").encode("ascii"))
+        return(result.decode("ascii","replace"))
         # PROTECTED REGION END #    //  FUGMCP.sendCommand
 
 # ----------
