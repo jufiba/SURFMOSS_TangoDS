@@ -67,14 +67,27 @@ class AMLPGC1(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(AMLPGC1.init_device) ENABLED START #
+        self.ser = None
         try:
             self.ser=serial.Serial(self.SerialPort,baudrate=9600,bytesize=8,parity="N",stopbits=1,timeout=0.5)
             self.ser.write(b"*S0\r\n")
             resp=self.ser.readline()
-        except:
+        except Exception as e:
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Can't connect to AMLPGC1")
-            self.debug_stream("Can't connect to AMLPGC1")
+            self.set_status("Can't open %s: %s" % (self.SerialPort, e))
+            self.error_stream("Can't open %s: %s" % (self.SerialPort, e))
+            return
+        # The status reply is at least 8 bytes; resp[7] bit 0 is the on/off
+        # flag. A short or empty reply means the port opened but the PGC1 did
+        # not answer -- powered off, cable, or a flaky USB-serial adapter.
+        # FAULT and wait for an Init, rather than letting IndexError abort the
+        # whole server (see docs/DS-architecture.md).
+        if len(resp) < 8:
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("No reply from AMLPGC1 on %s (%d bytes)"
+                            % (self.SerialPort, len(resp)))
+            self.error_stream("No reply from AMLPGC1 on %s (%d bytes)"
+                              % (self.SerialPort, len(resp)))
             return
         self.set_status("Connected to AMLPGC1")
         self.debug_stream("Connected to AMLPGC1")
@@ -91,11 +104,16 @@ class AMLPGC1(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(AMLPGC1.delete_device) ENABLED START #
-        self.ser.write(b"*P0\r\n")
-        a=self.ser.readline()
-        if (a[0]&0b10000==0b10000):
-            self.ser.write(b"*R0\r\n")
-            resp=self.ser.readline()
+        if self.ser is None:
+            return                       # init never got a port open
+        try:
+            self.ser.write(b"*P0\r\n")
+            a=self.ser.readline()
+            if (len(a)>0 and a[0]&0b10000==0b10000):
+                self.ser.write(b"*R0\r\n")
+                resp=self.ser.readline()
+        except Exception as e:
+            self.debug_stream("Untidy disconnect: %s" % e)
         self.ser.close()
         # PROTECTED REGION END #    //  AMLPGC1.delete_device
 
@@ -103,8 +121,16 @@ class AMLPGC1(Device):
     # Attributes methods
     # ------------------
 
+    def _require_port(self):
+        if self.ser is None:
+            tango.Except.throw_exception(
+                "AMLPGC1_NotConnected",
+                "no serial link to the AMLPGC1; Init once it is powered and cabled",
+                "AMLPGC1._require_port")
+
     def read_Pressure(self):
         # PROTECTED REGION ID(AMLPGC1.Pressure_read) ENABLED START #
+        self._require_port()
         self.ser.write(b"*S0\r\n")
         self.ser.inWaiting()
         a=self.ser.readline()
@@ -114,9 +140,10 @@ class AMLPGC1(Device):
 
     def read_Remote(self):
         # PROTECTED REGION ID(AMLPGC1.Remote_read) ENABLED START #
+        self._require_port()
         self.ser.write(b"*P0\r\n")
         a=self.ser.readline()
-        if (a[0]&0b10000==0b10000):
+        if (len(a)>0 and a[0]&0b10000==0b10000):
             return True
         else:
             return False
