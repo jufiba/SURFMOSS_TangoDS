@@ -25,6 +25,7 @@ from tango import AttrWriteType
 # PROTECTED REGION ID(ElmitecLEEM2k.additionnal_import) ENABLED START #
 import os
 import sys
+import time
 import socket
 import threading
 
@@ -50,6 +51,49 @@ class _Reconnect(threading.Thread):
         while not self.stop.wait(self.ds.ReconnectPeriod):
             if not self.ds.ElmitecLEEM2kConnected:
                 self.ds.connect()
+
+
+class _Deadman(threading.Thread):
+    """Drop P2Lens to its safe value if no Keepalive arrives within
+    DeadmanTimeout seconds.
+
+    Same owner/decider split as RaspberryButton's DeadmanThread: the process
+    that decides P2Lens may sit at its running value -- an AnalogInterlock
+    watching the P2 cooling water -- is not this one. If that process is
+    killed its keepalives stop, and this thread then does what P2lensOFF
+    does, so the failure of the supervisor de-asserts by default.
+
+    Disabled (DeadmanTimeout = 0) unless a device opts in, so every existing
+    ElmitecLEEM2k instance is unaffected.
+    """
+
+    def __init__(self, ds):
+        threading.Thread.__init__(self, name="ElmitecLEEM2k-deadman", daemon=True)
+        self.ds = ds
+        self.stop = threading.Event()
+
+    def run(self):
+        ds = self.ds
+        period = min(0.5, ds.DeadmanTimeout / 4.0)
+        try:
+            while not self.stop.wait(period):
+                if not ds._p2_asserted or ds._deadman_tripped:
+                    continue
+                idle = time.monotonic() - ds._last_keepalive
+                if idle > ds.DeadmanTimeout:
+                    ds.write_P2Lens(ds._p2lens_off)
+                    ds._p2_asserted = False
+                    ds._deadman_tripped = True
+                    msg = ("Deadman expired: no Keepalive for %.1f s (timeout "
+                           "%.1f s). P2Lens set to %g; P2lensON to restore."
+                           % (idle, ds.DeadmanTimeout, ds._p2lens_off))
+                    ds.set_status(msg)
+                    ds.error_stream(msg)
+        except Exception as exc:
+            # A dead deadman must not look healthy.
+            ds.set_state(tango.DevState.FAULT)
+            ds.set_status("Deadman thread died: %s" % exc)
+            ds.error_stream("Deadman thread died: %s" % exc)
 
 
 def is_number(s):
@@ -125,9 +169,17 @@ class ElmitecLEEM2k(Device):
         Everything past the connect() used to be outside the try, so a program
         that accepted the connection and then said nothing took the whole
         server down from init_device.
+
+        Locked against write_P2Lens: connect() replaces self.s, and both the
+        reconnect thread and the deadman thread call in from outside Tango's
+        serialization monitor.
         """
         if self.ElmitecLEEM2kConnected:
             return True
+        with self._io_lock:
+            return self._connect_locked()
+
+    def _connect_locked(self):
         try:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.s.settimeout(self.Timeout)
@@ -183,6 +235,15 @@ class ElmitecLEEM2k(Device):
     ReconnectPeriod = device_property(
         dtype='float', default_value=10.0,
         doc='Seconds between attempts to rebuild the link while it is down.',
+    )
+
+    DeadmanTimeout = device_property(
+        dtype='double', default_value=0.0,
+        doc='Seconds without a Keepalive command after which P2Lens is dropped '
+            'to P2LensOffValue, as P2lensOFF would. 0 disables the deadman entirely '
+            '(default). Set it comfortably above the restart time of whatever '
+            'sends the keepalives -- an AnalogInterlock watching the P2 '
+            'cooling water -- or restarting that server drops P2 every time.',
     )
 
     # ----------
@@ -292,6 +353,43 @@ class ElmitecLEEM2k(Device):
         unit="mA",
     )
 
+    P2LensOffValue = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        memorized=True,
+        hw_memorized=False,
+        label="P2Lens OFF value",
+        doc="The value P2lensOFF and the deadman drive P2Lens to -- the "
+            "current the P2 lens can hold with no cooling water. Just a "
+            "setpoint; writing it does not move the lens.",
+    )
+
+    P2LensOnValue = attribute(
+        dtype='double',
+        access=AttrWriteType.READ_WRITE,
+        memorized=True,
+        hw_memorized=False,
+        label="P2Lens ON value",
+        doc="The value P2lensON drives P2Lens to -- the normal running "
+            "current. Just a setpoint; writing it does not move the lens.",
+    )
+
+    TimeSinceKeepalive = attribute(
+        dtype='double',
+        label="TimeSinceKeepalive",
+        unit="s",
+        format="%4.1f",
+        doc="Seconds since the last Keepalive (or P2lensON). Only meaningful "
+            "with DeadmanTimeout set.",
+    )
+
+    DeadmanTripped = attribute(
+        dtype='bool',
+        label="DeadmanTripped",
+        doc="True after the deadman dropped P2Lens for want of a Keepalive. "
+            "Cleared by P2lensON.",
+    )
+
     # ---------------
     # General methods
     # ---------------
@@ -301,13 +399,26 @@ class ElmitecLEEM2k(Device):
         # PROTECTED REGION ID(ElmitecLEEM2k.init_device) ENABLED START #
         # connect() reports FAULT and returns rather than raising, so a
         # LEEM2000 that is not running no longer takes the server down.
+        self._io_lock = threading.Lock()
         self.ElmitecLEEM2kConnected = False
         self._reconnect = None
+        self._deadman = None
+        # Deadman state. The setpoints get their real values from the
+        # memorized attribute writes just after init_device; these are only
+        # the fallback if nothing was ever stored.
+        self._p2lens_off = 1400.0
+        self._p2lens_on = 3650.0
+        self._last_keepalive = time.monotonic()
+        self._p2_asserted = False
+        self._deadman_tripped = False
         self.connect()
         # And it keeps trying, so restarting LEEM2000 does not mean
         # restarting this server as well.
         self._reconnect = _Reconnect(self)
         self._reconnect.start()
+        if self.DeadmanTimeout > 0.0:
+            self._deadman = _Deadman(self)
+            self._deadman.start()
         # PROTECTED REGION END #    //  ElmitecLEEM2k.init_device
     def always_executed_hook(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.always_executed_hook) ENABLED START #
@@ -318,6 +429,12 @@ class ElmitecLEEM2k(Device):
         # PROTECTED REGION ID(ElmitecLEEM2k.delete_device) ENABLED START #
         if (getattr(self, "_reconnect", None) is not None):
             self._reconnect.stop.set()
+        if (getattr(self, "_deadman", None) is not None):
+            self._deadman.stop.set()
+        # Deliberately does NOT drop P2Lens: an Init from Jive must not
+        # disturb a running experiment. If this server is gone for good the
+        # deadman cannot help either -- it is the interlock dying that it
+        # guards against, not this server.
         self.disconnect()
         self.set_state(tango.DevState.OFF)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.delete_device
@@ -399,9 +516,43 @@ class ElmitecLEEM2k(Device):
 
     def write_P2Lens(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.P2Lens_write) ENABLED START #
-        self._send(("val 27 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        # Locked: the deadman thread calls in here from outside Tango's
+        # serialization monitor, and connect() (reconnect thread) can be
+        # replacing self.s at the same time.
+        with self._io_lock:
+            self._send(("val 27 "+str(value)).encode("ascii"))
+            data = self.TCPBlockingReceive()
         # PROTECTED REGION END #    //  ElmitecLEEM2k.P2Lens_write
+
+    def read_P2LensOffValue(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.P2LensOffValue_read) ENABLED START #
+        return self._p2lens_off
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.P2LensOffValue_read
+
+    def write_P2LensOffValue(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.P2LensOffValue_write) ENABLED START #
+        self._p2lens_off = float(value)
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.P2LensOffValue_write
+
+    def read_P2LensOnValue(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.P2LensON_read) ENABLED START #
+        return self._p2lens_on
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.P2LensON_read
+
+    def write_P2LensOnValue(self, value):
+        # PROTECTED REGION ID(ElmitecLEEM2k.P2LensON_write) ENABLED START #
+        self._p2lens_on = float(value)
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.P2LensON_write
+
+    def read_TimeSinceKeepalive(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.TimeSinceKeepalive_read) ENABLED START #
+        return time.monotonic() - self._last_keepalive
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.TimeSinceKeepalive_read
+
+    def read_DeadmanTripped(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.DeadmanTripped_read) ENABLED START #
+        return self._deadman_tripped
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.DeadmanTripped_read
 
     def read_SampleTemperature(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.SampleTemperature_read) ENABLED START #
@@ -536,18 +687,35 @@ class ElmitecLEEM2k(Device):
     @DebugIt()
     def P2lensOFF(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.P2lensOFF) ENABLED START #
-        # Response to a P2 lens cooling-water cut: drop P2Lens to a value the
-        # lens can hold without cooling.
-        self.write_P2Lens(1400)
+        # Response to a P2 lens cooling-water cut: drop P2Lens to the value
+        # the lens can hold without cooling. Also disarms the deadman -- P2 is
+        # already at the safe value, nothing left to guard.
+        self.write_P2Lens(self._p2lens_off)
+        self._p2_asserted = False
         # PROTECTED REGION END #    //  ElmitecLEEM2k.P2lensOFF
 
     @command
     @DebugIt()
     def P2lensON(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.P2lensON) ENABLED START #
-        # Put P2Lens back to its running value once the water is flowing again.
-        self.write_P2Lens(3000)
+        # Put P2Lens back to its running value once the water is flowing
+        # again. Also arms/refreshes the deadman and clears a trip: a P2lensON
+        # by hand from Jive then persists only while something keeps sending
+        # Keepalive, which is the point.
+        self.write_P2Lens(self._p2lens_on)
+        self._last_keepalive = time.monotonic()
+        self._p2_asserted = True
+        self._deadman_tripped = False
         # PROTECTED REGION END #    //  ElmitecLEEM2k.P2lensON
+
+    @command
+    @DebugIt()
+    def Keepalive(self):
+        # PROTECTED REGION ID(ElmitecLEEM2k.Keepalive) ENABLED START #
+        # Refreshes the deadman timer only. Never moves P2Lens: recovering
+        # from a deadman trip needs an explicit P2lensON.
+        self._last_keepalive = time.monotonic()
+        # PROTECTED REGION END #    //  ElmitecLEEM2k.Keepalive
 
 # ----------
 # Run server
