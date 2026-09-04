@@ -2,16 +2,16 @@ JDFile v11 {
   Global {
   }
   JDLabel {
-    summit:111,38,543,93
-    origin:150,49
+    summit:111,20,703,84
+    origin:164,33
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,44
+    font:"Dialog",0,51
     text:"XPS Status"
   }
   JDSwingObject {
-    summit:245,179,616,268
-    origin:375,200
+    summit:295,184,803,288
+    origin:473,209
     fillStyle:1
     lineWidth:0
     name:"xps/vacuum/ionpump/Pressure"
@@ -23,27 +23,27 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,44
+    font:"Dialog",0,51
   }
   JDLabel {
-    summit:128,52,226,82
-    origin:161,63
+    summit:134,36,269,71
+    origin:179,49
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,28
+    font:"Dialog",0,33
     text:"Ion pump"
   }
   JDLabel {
-    summit:126,474,228,504
-    origin:159,485
+    summit:498,589,637,624
+    origin:543,602
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,28
+    font:"Dialog",0,33
     text:"X-ray gun"
   }
   JDSwingObject {
-    summit:401,550,610,631
-    origin:490,571
+    summit:508,618,795,712
+    origin:630,642
     fillStyle:1
     lineWidth:0
     name:"xps/safety/water/channel0"
@@ -55,11 +55,11 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,38
+    font:"Dialog",0,44
   }
   JDSwingObject {
-    summit:163,647,279,680
-    origin:211,656
+    summit:201,710,450,749
+    origin:267,732
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -69,12 +69,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,25
+    font:"Dialog",1,29
     border:3
   }
   JDSwingObject {
-    summit:876,739,1081,784
-    origin:1046,776
+    summit:1159,838,1440,891
+    origin:1392,881
     fillStyle:1
     lineWidth:0
     name:"xps/safety/Hygrometer/humidity"
@@ -86,47 +86,47 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,38
+    font:"Dialog",0,44
   }
   JDLabel {
-    summit:521,736,870,792
-    origin:688,747
+    summit:673,835,1151,900
+    origin:902,847
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,28
+    font:"Dialog",0,33
     text:"Room Humidity"
   }
   JDLabel {
-    summit:253,63,348,93
-    origin:285,74
+    summit:306,49,436,84
+    origin:349,62
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,28
+    font:"Dialog",0,33
     text:"Pressure"
   }
   JDRoundRectangle {
-    summit:112,411,629,704
-    origin:235,595
+    summit:112,455,821,797
+    origin:281,670
     name:"RoundRectangle"
   }
   JDBar {
-    summit:84,248,218,278
-    origin:182,256
+    summit:55,254,239,289
+    origin:189,263
     fillStyle:1
     name:"xps/vacuum/ionpump/State"
   }
   JDLabel {
-    summit:658,41,1064,127
-    origin:781,52
+    summit:860,23,1417,124
+    origin:1029,36
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,35
+    font:"Dialog",0,41
     text:"Prep Chamber",
          "Turbo Pump"
   }
   JDSwingObject {
-    summit:828,214,1031,273
-    origin:996,235
+    summit:1093,225,1371,294
+    origin:1324,250
     fillStyle:1
     lineWidth:0
     name:"xps/vacuum/turboPCH/ActualSpeed"
@@ -138,25 +138,25 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,38
+    font:"Dialog",0,44
   }
   JDLabel {
-    summit:737,318,807,348
-    origin:769,329
+    summit:969,347,1065,382
+    origin:1013,360
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,28
+    font:"Dialog",0,33
     text:"Speed"
   }
   JDBar {
-    summit:763,143,961,160
-    origin:789,138
+    summit:1004,142,1276,162
+    origin:1040,137
     fillStyle:1
     name:"xps/vacuum/turboPCH/State"
   }
   JDSwingObject {
-    summit:830,300,1030,361
-    origin:995,321
+    summit:1096,326,1370,397
+    origin:1322,350
     fillStyle:1
     lineWidth:0
     name:"xps/vacuum/turboPCH/Power"
@@ -168,11 +168,11 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,38
+    font:"Dialog",0,44
   }
   JDSwingObject {
-    summit:782,387,973,420
-    origin:830,396
+    summit:1030,427,1292,466
+    origin:1096,438
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -182,12 +182,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,25
+    font:"Dialog",1,29
     border:3
   }
   JDSwingObject {
-    summit:784,445,975,478
-    origin:832,454
+    summit:1033,495,1295,533
+    origin:1099,505
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -197,60 +197,80 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,25
+    font:"Dialog",1,29
     border:3
   }
   JDRoundRectangle {
-    summit:651,21,1068,500
-    origin:831,337
+    summit:851,0,1422,559
+    origin:1097,369
     name:"RoundRectangle"
   }
   JDLabel {
-    summit:660,225,811,264
-    origin:684,236
+    summit:863,238,1070,284
+    origin:896,251
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,30
+    font:"Dialog",0,35
     text:"Speed"
   }
   JDLabel {
-    summit:663,309,818,348
-    origin:687,320
+    summit:867,336,1080,382
+    origin:900,349
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,30
+    font:"Dialog",0,35
     text:"Power"
   }
   JDLabel {
-    summit:30,185,230,224
-    origin:119,196
+    summit:0,191,274,237
+    origin:122,204
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,30
+    font:"Dialog",0,35
     text:"Ion Pump"
   }
   JDLabel {
-    summit:136,427,418,466
-    origin:160,438
+    summit:145,474,532,519
+    origin:178,487
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,30
+    font:"Dialog",0,35
     text:"X-ray Gun & Cooling"
   }
   JDLabel {
-    summit:123,571,375,610
-    origin:241,582
+    summit:127,642,473,688
+    origin:289,655
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,30
+    font:"Dialog",0,35
     text:"Water Flow"
   }
   JDLabel {
-    summit:130,496,370,535
-    origin:237,507
+    summit:190,543,345,589
+    origin:337,556
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,30
-    text:"Gun Power"
+    font:"Dialog",0,35
+    text:"Interlock"
+  }
+  JDRectangle {
+    summit:363,552,473,588
+    origin:418,570
+    fillStyle:1
+    name:"xps/safety/interlockxraygun/State"
+  }
+  JDSwingObject {
+    summit:507,551,756,590
+    origin:561,583
+    background:238,238,238
+    fillStyle:1
+    lineWidth:0
+    name:"xps/safety/interlockxraygun/Reset"
+    extensions:{
+      text:""
+    }
+    className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
+    font:"Lucida Grande",1,29
+    border:3
   }
 }

@@ -3,8 +3,8 @@ JDFile v11 {
     background:229,229,229
   }
   JDSwingObject {
-    summit:422,403,654,442
-    origin:479,412
+    summit:478,504,767,555
+    origin:549,516
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -14,12 +14,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,30
+    font:"Dialog",1,37
     border:3
   }
   JDSwingObject {
-    summit:721,403,953,442
-    origin:778,412
+    summit:851,504,1140,555
+    origin:922,516
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -29,12 +29,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,30
+    font:"Dialog",1,37
     border:3
   }
   JDSwingObject {
-    summit:114,373,291,454
-    origin:164,396
+    summit:94,465,314,570
+    origin:156,495
     background:200,200,200
     fillStyle:1
     lineWidth:0
@@ -44,11 +44,11 @@ JDFile v11 {
       arrowSelColor:"156,154,206"
     }
     className:"fr.esrf.tangoatk.widget.attribute.NumberScalarWheelEditor"
-    font:"Lucida Bright",0,30
+    font:"Lucida Bright",0,37
   }
   JDSwingObject {
-    summit:369,203,608,312
-    origin:496,362
+    summit:412,296,710,437
+    origin:570,501
     fillStyle:1
     lineWidth:0
     name:"mossbauer/temperature/criostat/TemperatureA"
@@ -60,19 +60,19 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,40
+    font:"Dialog",0,50
   }
   JDLabel {
-    summit:49,95,361,183
-    origin:134,106
+    summit:21,130,411,244
+    origin:128,144
     lineWidth:0
     name:"mossbauer/temperature/criostat"
-    font:"Dialog",0,36
+    font:"Dialog",0,45
     text:" CRIOSTAT"
   }
   JDSwingObject {
-    summit:796,119,969,159
-    origin:825,127
+    summit:944,137,1160,189
+    origin:981,147
     fillStyle:1
     lineWidth:0
     name:"mossbauer/safety/waterflow/channel0"
@@ -84,19 +84,19 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,35
+    font:"Dialog",0,44
   }
   JDLabel {
-    summit:370,123,782,156
-    origin:570,134
+    summit:413,142,927,185
+    origin:662,156
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,25
+    font:"Dialog",0,31
     text:"Water flow on compressor"
   }
   JDSwingObject {
-    summit:711,255,816,299
-    origin:763,264
+    summit:838,364,969,421
+    origin:903,376
     fillStyle:1
     lineWidth:0
     name:"mossbauer/temperature/criostat/HeaterLevel"
@@ -105,46 +105,46 @@ JDFile v11 {
       validBackground:"0,255,0"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleEnumScalarViewer"
-    font:"Dialog",0,30
+    font:"Dialog",0,37
   }
   JDLabel {
-    summit:691,212,966,245
-    origin:808,223
+    summit:813,307,1156,350
+    origin:959,322
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,25
+    font:"Dialog",0,31
     text:"Heater Level"
   }
   JDSwingObject {
-    summit:845,254,948,298
-    origin:873,266
+    summit:1006,362,1134,418
+    origin:1040,377
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
     lineWidth:0
     name:"mossbauer/temperature/criostat/HeaterLevel"
     className:"fr.esrf.tangoatk.widget.attribute.EnumScalarComboEditor"
-    font:"Dialog",1,30
+    font:"Dialog",1,37
   }
   JDLabel {
-    summit:268,13,829,68
-    origin:328,24
+    summit:286,0,986,71
+    origin:361,14
     lineWidth:0
     name:"Label"
-    font:"Dialog",1,44
+    font:"Dialog",1,55
     text:"Mössbauer Status"
   }
   JDLabel {
-    summit:579,767,908,799
-    origin:746,779
+    summit:674,975,1084,1016
+    origin:882,990
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,20
+    font:"Dialog",0,25
     text:"Room Temperature"
   }
   JDSwingObject {
-    summit:917,771,1065,805
-    origin:948,779
+    summit:1095,980,1280,1024
+    origin:1134,990
     fillStyle:1
     lineWidth:0
     name:"mossbauer/temperature/roomtemperature/Temperature"
@@ -156,11 +156,11 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,30
+    font:"Dialog",0,37
   }
   JDSwingObject {
-    summit:381,538,980,720
-    origin:781,592
+    summit:427,679,1174,914
+    origin:926,749
     background:180,180,180
     fillStyle:1
     lineWidth:0
@@ -227,19 +227,19 @@ JDFile v11 {
                     "dvy_labelColor:0,0,0"
     }
     className:"fr.esrf.tangoatk.widget.attribute.NumberSpectrumViewer"
-    font:"Dialog",0,12
+    font:"Dialog",0,15
   }
   JDLabel {
-    summit:109,470,344,558
-    origin:194,481
+    summit:87,591,381,705
+    origin:193,605
     lineWidth:0
     name:"mossbauer/temperature/criostat"
-    font:"Dialog",0,36
+    font:"Dialog",0,45
     text:"TEST MCA"
   }
   JDSwingObject {
-    summit:80,609,176,632
-    origin:111,617
+    summit:51,771,171,800
+    origin:90,781
     fillStyle:1
     lineWidth:0
     name:"mossbauer/measurement/mca_crio/Lower_Window_Limit"
@@ -251,11 +251,11 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,12
+    font:"Dialog",0,15
   }
   JDSwingObject {
-    summit:85,559,174,591
-    origin:93,569
+    summit:57,706,168,747
+    origin:67,719
     fillStyle:1
     lineWidth:0
     name:"mossbauer/measurement/mca_crio/Mode"
@@ -264,11 +264,11 @@ JDFile v11 {
       validBackground:"0,255,0"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleEnumScalarViewer"
-    font:"Dialog",0,12
+    font:"Dialog",0,15
   }
   JDSwingObject {
-    summit:212,555,366,583
-    origin:269,564
+    summit:216,701,408,737
+    origin:287,712
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -278,12 +278,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,20
+    font:"Dialog",1,25
     border:3
   }
   JDSwingObject {
-    summit:213,593,367,621
-    origin:270,602
+    summit:217,750,409,786
+    origin:288,762
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -293,12 +293,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,20
+    font:"Dialog",1,25
     border:3
   }
   JDSwingObject {
-    summit:79,644,179,663
-    origin:110,652
+    summit:50,816,175,840
+    origin:89,826
     fillStyle:1
     lineWidth:0
     name:"mossbauer/measurement/mca_crio/Upper_Window_Limit"
@@ -310,11 +310,11 @@ JDFile v11 {
       invalidText:"-----"
     }
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,12
+    font:"Dialog",0,15
   }
   JDSwingObject {
-    summit:213,633,367,661
-    origin:270,642
+    summit:217,802,409,838
+    origin:288,813
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -324,12 +324,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,20
+    font:"Dialog",1,25
     border:3
   }
   JDSwingObject {
-    summit:50,674,204,702
-    origin:107,683
+    summit:14,855,206,891
+    origin:85,866
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -339,12 +339,12 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,20
+    font:"Dialog",1,25
     border:3
   }
   JDSwingObject {
-    summit:213,674,367,702
-    origin:270,683
+    summit:217,855,409,891
+    origin:288,866
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -354,20 +354,20 @@ JDFile v11 {
       text:""
     }
     className:"fr.esrf.tangoatk.widget.command.VoidVoidCommandViewer"
-    font:"Dialog",1,20
+    font:"Dialog",1,25
     border:3
   }
   JDRoundRectangle {
-    summit:39,95,1016,479
-    origin:528,324
+    summit:0,106,1219,603
+    origin:610,402
     name:"RoundRectangle"
   }
   JDLabel {
-    summit:49,237,366,270
-    origin:179,248
+    summit:12,345,408,387
+    origin:175,359
     lineWidth:0
     name:"Label"
-    font:"Dialog",0,25
+    font:"Dialog",0,31
     text:"Sample Temperature"
   }
 }
