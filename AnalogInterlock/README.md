@@ -47,6 +47,103 @@ exit
 # verify /nfs/pi-trixie/etc/resolv.conf, nspawn overwrites it silently
 ```
 
+## The properties, one by one
+
+Every knob is a device property, read once at `init_device`; changing one needs
+an `Init` or a server restart to take effect. The two registration tables below
+are worked examples — this is what each field means. Values in parentheses are
+the defaults, and the running example is `xps/safety/interlockxraygun`.
+
+### What it reads
+
+**`InputDevice`** — the Tango device the measured quantity comes from. No
+default; `init_device` fails without it. For the X-ray gun that is
+`xps/safety/water`, the `SEAWaterflowmeter` on the gun's cooling line.
+
+**`InputAttribute`** (`channel0`) — the attribute on `InputDevice` to read. On
+`interlockxraygun` it is `xray`, the named channel for the gun's flow. Prefer a
+named attribute over a positional one like `channel0`: if the channel order on
+the flowmeter is ever changed, a named attribute simply disappears and this
+server faults, whereas `channel0` silently starts watching a different line.
+
+**`HeartbeatAttribute`** (`UpdateCount`) — a counter on `InputDevice` that
+advances once per acquisition cycle. It is how the server tells a healthy
+reading from a dead acquisition thread handing back its last good value forever.
+Empty string turns staleness detection off on purpose; a name that points at
+nothing is a fault, not an off switch (see _Failure modes_).
+
+### What it commands
+
+**`OutputDevice`** — the device that actually holds the permissive. No default;
+required unless `WatchOnly`. On pi-xps it is `xps/safety/switchxraygun`, a
+`RaspberryButton` driving GPIO 26.
+
+**`OnCommand`** (`On`) / **`OffCommand`** (`Off`) — the commands sent to
+`OutputDevice` to grant and withdraw the permissive. The defaults match
+`RaspberryButton` and `FUGMCP`; set them for an output device that names those
+operations differently.
+
+**`KeepaliveCommand`** (`Keepalive`) — sent to `OutputDevice` on every cycle
+while the permissive is granted, to feed that device's deadman. That is what
+makes this server *dying* drop the permissive rather than leave it frozen
+asserted. Empty string if the output device has no deadman.
+
+**`WatchOnly`** (`false`) — if true, no command is ever sent: the server reads,
+applies the thresholds and hysteresis, and only publishes `Permit` and a state.
+`OutputDevice` must then be empty. See _Which way round, and whether it commands
+anything_.
+
+### The thresholds and their direction
+
+**`ThresholdOn`** (`2.0`) / **`ThresholdOff`** (`1.6`) — the input levels at
+which the permissive is granted and withdrawn. They are deliberately not equal:
+the gap is the hysteresis that stops the output chattering when the input rides
+the trip point. Normally `ThresholdOff` is the lower of the two.
+
+**`Reverse`** (`false`) — which side is safe. `false`: the input must stay
+**high**, as a cooling flow must — granted above `ThresholdOn`, withdrawn below
+`ThresholdOff`. `true`: it must stay **low**, as a temperature or a pressure
+must — the comparisons and the ordering of the two thresholds both flip.
+Declared, not inferred from which threshold is larger, so a pair typed the wrong
+way round is refused at start-up instead of silently inverting the interlock.
+Full account in _Which way round, and whether it commands anything_.
+
+### Tolerance and timing
+
+**`PollPeriod`** (`1.0`) — seconds between cycles. No use polling faster than the
+input device's own integration period.
+
+**`MaxReadFailures`** (`3`) — consecutive failed or `INVALID` reads tolerated
+before the server trips. Absorbs a transient CORBA timeout without leaving the
+output asserted through a real outage.
+
+**`StaleCycles`** (`5`) — how many cycles `HeartbeatAttribute` may fail to
+advance before the server trips on a frozen input publisher.
+
+**`ReassertCycles`** (`30`) — re-send `OnCommand` every N cycles while granted,
+so the permissive comes back on its own if `OutputDevice` was restarted
+underneath the interlock. `0` disables the re-assert.
+
+**`ProxyTimeout`** (`800`) — milliseconds a single read or command may block.
+This sets how long a trip takes when the input device *hangs* rather than
+answering: worst case `MaxReadFailures * (ProxyTimeout + PollPeriod)`, about 5 s
+with the defaults. It has to stay well below the output device's
+`DeadmanTimeout` — see _Timing_.
+
+**`Latching`** (`false`) — if true, a trip stays asserted until the `Reset`
+command is called, even after the input recovers. Leave it `false` where the
+hardware already latches and wants a physical reset button (pi-xps); set it
+`true` for a watch whose whole point is to record that a dip happened
+(pi-mossbauer).
+
+### What it publishes back
+
+Read-only attributes, for a synoptic or AlarmNotifier: `InputValue`, `Permit`,
+`Tripped`, `LastTripTime`, `LastTripValue`, `LastTripReason`, and `ThresholdOn`
+/ `ThresholdOff` as read-backs of the properties in force. Commands: `Trip`
+(manual de-assert, to test the chain without touching the water) and `Reset`
+(clear a latched trip).
+
 ## Registration
 
 Server `AnalogInterlock/1`, class `AnalogInterlock`, device
