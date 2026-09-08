@@ -231,6 +231,7 @@ class AnalogInterlock(Device):
     LastTripReason = attribute(dtype='str', label="LastTripReason")
     ThresholdOnRB = attribute(dtype='double', label="ThresholdOn", format="%6.2f")
     ThresholdOffRB = attribute(dtype='double', label="ThresholdOff", format="%6.2f")
+    LatchingRB = attribute(dtype='bool', label="Latching")
 
     # ---------------
     # General methods
@@ -263,6 +264,14 @@ class AnalogInterlock(Device):
         # A misconfiguration is refused here rather than at the first cycle,
         # because a server that starts and then behaves as though the
         # thresholds meant something else is worse than one that never starts.
+        # The bool properties are checked first, because a bool that did not
+        # survive the trip from the database makes every check below it argue
+        # about the wrong value.
+        for name in ("WatchOnly", "Reverse", "Latching"):
+            complaint = self.bool_property_complaint(name, getattr(self, name))
+            if complaint:
+                return self.misconfigured(complaint)
+
         output = (self.OutputDevice or "").strip()
         if self.WatchOnly and output:
             return self.misconfigured(
@@ -305,6 +314,58 @@ class AnalogInterlock(Device):
         never started, so nothing is polled and nothing is commanded."""
         self.set_state(tango.DevState.FAULT)
         self.set_status(reason)
+
+    def raw_property(self, name):
+        """The property as the database holds it, or None if it is not set.
+
+        The value PyTango handed us has already been through a conversion; this
+        is what went into it.
+        """
+        try:
+            stored = tango.Database().get_device_property(
+                self.get_name(), [name])
+        except Exception:
+            # Not being able to ask is not evidence of a bad value. The
+            # properties were fetched a moment ago, so the database was there.
+            return None
+        values = stored.get(name) or []
+        return values[0] if values else None
+
+    def bool_property_complaint(self, name, value):
+        """Say what is wrong with a bool property, or None if nothing is.
+
+        PyTango converts a dtype='bool' device property with
+
+            seq[0].lower() == "true"
+
+        so 'True\\t' -- the word with a tab pasted into Jive behind it -- and
+        'False\\t' both arrive as False, identically and without a word said.
+        Latching is the one bool here that nothing downstream contradicts: a
+        WatchOnly or a Reverse lost this way runs into one of the checks below
+        and the server refuses to start, whereas a lost Latching just quietly
+        stops latching. leem/safety/interlockP2lens re-granted the P2 permissive
+        on every recovery, with Latching reading True in Jive, until someone
+        thought to look at the string rather than the property.
+        """
+        raw = self.raw_property(name)
+        if raw is None:
+            return None                  # not set; the declared default stands
+        meant = raw.strip().lower()
+        if meant in ("true", "yes", "y", "t", "on", "1"):
+            meant = True
+        elif meant in ("false", "no", "n", "f", "off", "0"):
+            meant = False
+        else:
+            return ("%s is %r in the database, which is not a truth value. "
+                    "Write it as true or false." % (name, raw))
+        if meant != value:
+            return ("%s is %r in the database and arrived here as %s. A bool "
+                    "property is converted by comparing it with the literal "
+                    "\"true\", so anything around the word -- a trailing tab "
+                    "pasted into Jive, most often -- reads as False whatever "
+                    "it says. Rewrite it as %s, with nothing around it."
+                    % (name, raw, value, "true" if meant else "false"))
+        return None
 
     def grants(self, value):
         """Is the input past ThresholdOn, on the safe side?"""
@@ -544,6 +605,13 @@ class AnalogInterlock(Device):
         # PROTECTED REGION ID(AnalogInterlock.ThresholdOffRB_read) ENABLED START #
         return self.ThresholdOff
         # PROTECTED REGION END #    //  AnalogInterlock.ThresholdOffRB_read
+
+    def read_LatchingRB(self):
+        # PROTECTED REGION ID(AnalogInterlock.LatchingRB_read) ENABLED START #
+        # The value in force, not the string in the database: the point of
+        # showing it is that the two can differ.
+        return self.Latching
+        # PROTECTED REGION END #    //  AnalogInterlock.LatchingRB_read
 
     # --------
     # Commands

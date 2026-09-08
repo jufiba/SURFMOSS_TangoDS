@@ -134,15 +134,25 @@ with the defaults. It has to stay well below the output device's
 command is called, even after the input recovers. Leave it `false` where the
 hardware already latches and wants a physical reset button (pi-xps); set it
 `true` for a watch whose whole point is to record that a dip happened
-(pi-mossbauer).
+(pi-mossbauer), or where an operator must look at the machine before the
+permissive comes back (`leem/safety/interlockP2lens`).
+
+Write the three bool properties — `Latching`, `WatchOnly`, `Reverse` — as a bare
+`true` or `false`, with nothing around the word. PyTango converts them by
+comparing the stored string with the literal `"true"`, so `True⇥` and `1` both
+come out `False`. Since 08-Sep-2026 the server compares what it was handed
+against what the database actually holds and refuses to start on a
+disagreement — see _The latch that was never read_.
 
 ### What it publishes back
 
 Read-only attributes, for a synoptic or AlarmNotifier: `InputValue`, `Permit`,
 `Tripped`, `LastTripTime`, `LastTripValue`, `LastTripReason`, and `ThresholdOn`
-/ `ThresholdOff` as read-backs of the properties in force. Commands: `Trip`
-(manual de-assert, to test the chain without touching the water) and `Reset`
-(clear a latched trip).
+/ `ThresholdOff` / `Latching` as read-backs of the properties in force. The
+`Latching` read-back is the value the server is actually using, not the string
+in the database — the point of publishing it is that the two can differ.
+Commands: `Trip` (manual de-assert, to test the chain without touching the
+water) and `Reset` (clear a latched trip).
 
 ## Registration
 
@@ -237,6 +247,51 @@ against exactly this and `grant()` had not.
 leaving the FAULT standing. And the configuration that provoked it is now
 refused outright at start-up instead of running in that state for weeks.
 
+### The latch that was never read
+
+`leem/safety/interlockP2lens` had `Latching` set, and did not latch. Cut the P2
+cooling water and it tripped correctly; restore the water and the permissive
+came straight back, with no `Reset`, exactly as if the property said `false`.
+Setting it to `false` changed nothing either — the same behaviour both ways,
+which is the shape of a value that is not being read at all.
+
+It was not. The database held the string `'True\t'`: the word with a tab behind
+it, from a paste into Jive. PyTango 10.0.2 converts a `dtype='bool'` device
+property in `_seqStr_2_obj_from_type` with
+
+```python
+if tg_type == CmdArgType.DevBoolean:
+    return seq[0].lower() == "true"
+```
+
+and `"true\t"` is not `"true"`, so the property arrived as `False`. `'False\t'`
+arrives as `False` too, which is why both settings behaved identically. Nothing
+in the conversion complains; nothing downstream can tell the difference. The
+other properties were unharmed, because `float("2.0\t")` and `int("30\t")`
+tolerate the whitespace that a string comparison does not.
+
+`Latching` was the one bool here that nothing contradicted. A `WatchOnly` lost
+the same way runs into the `OutputDevice` check and a `Reverse` into the
+threshold check, and the server refuses to start — by accident rather than by
+design, and with the wrong diagnosis in the status. A lost `Latching` just
+quietly stops latching.
+
+Since 08-Sep-2026 `init_device()` reads the three bool properties back from the
+database as raw strings, before any other validation, and refuses to start if
+what it was handed disagrees with what the string plainly means. The status
+names the property, quotes the stored value and says what to write instead.
+`Latching` is also published as a read-back attribute, so an ATKPanel shows what
+the server is actually enforcing.
+
+The trade-off is deliberate and worth knowing: a bool property with a stray tab
+now takes the interlock out of service rather than running it in the wrong mode.
+The output device's `DeadmanTimeout` is what covers the machine while it is
+down, and it drops the lens without raising it again.
+
+Note what this does *not* catch: a `'False\t'` meaning `false` is accepted,
+because the value in force and the value intended agree. The string is just as
+dirty and will bite whoever next edits it to `true`.
+
 ## Registration on pi-mossbauer
 
 Server `AnalogInterlock/2`, class `AnalogInterlock`, device
@@ -269,6 +324,7 @@ it is a choice, and the alarm will not clear by itself.
 | this server dies           | keepalives stop, output device's deadman fires |
 | output device unreachable  | FAULT; nothing else is possible from here    |
 | output command refused     | FAULT, not granted; the status names the command |
+| bool property mangled in the database | refused at start-up; the status quotes the string |
 
 The frozen-publisher case is the one neither the cron script nor a naive
 port could catch: a dead acquisition thread keeps returning its last good
