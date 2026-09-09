@@ -72,6 +72,35 @@ reading from a dead acquisition thread handing back its last good value forever.
 Empty string turns staleness detection off on purpose; a name that points at
 nothing is a fault, not an off switch (see _Failure modes_).
 
+### Whether it evaluates at all
+
+**`GateDevice`** — a Tango device whose state decides whether this interlock
+runs at all. No default; empty means always evaluate, which is
+`leem/safety/interlockP2lens`, the XPS instance and pi-mossbauer, unchanged to
+the cycle. Set it to the thing the interlock protects. For
+`leem/safety/interlockhv1` that is `leem/power/hv1`, so that the resting state
+of the lab — hv1 off, doser cooling water deliberately shut — is not read as a
+trip. See _The trip that was the resting state_.
+
+**`GateStates`** — the comma-separated Tango state names in which the gate is
+**open** and evaluation runs, e.g. `ON` or `ON,RUNNING`. Required once
+`GateDevice` is set; the server refuses to start if it names something that is
+not a Tango state, or if `GateDevice` is set and this is left empty. It is the
+set that means *open*, not an inventory of the gate device's states:
+`leem/power/hv1` only ever reports `ON` or `OFF`, so `GateStates = ON,OFF`
+would leave the gate permanently open and silently restore the pre-gating
+behaviour — the server warns in `Status` when `GateStates` looks like it covers
+everything the gate device can publish.
+
+While the gate is shut the device is `OFF`: it reads nothing, commands nothing,
+and leaves the `LastTrip*` fields alone. A trip that latched before the gate
+shut stays latched. An **unreadable** gate counts as open — for a
+command-on-trip interlock, failing towards acting is recoverable and failing
+towards silence is not — and `Status` says the gate could not be read.
+Reopening the gate restarts evaluation from a clean slate, so a condition that
+was already bad while the gate was shut is caught on the next cycle rather than
+inherited as good.
+
 ### What it commands
 
 **`OutputDevice`** — the device that actually holds the permissive. No default;
@@ -142,7 +171,23 @@ Write the three bool properties — `Latching`, `WatchOnly`, `Reverse` — as a 
 comparing the stored string with the literal `"true"`, so `True⇥` and `1` both
 come out `False`. Since 08-Sep-2026 the server compares what it was handed
 against what the database actually holds and refuses to start on a
-disagreement — see _The latch that was never read_.
+disagreement — see _The latch that was never read_. `MaxBypassHours` and
+`BypassWarnMinutes` are floats and `GateDevice` / `GateStates` are strings, so
+the same stray tab does them no harm; only the bools are fragile.
+
+### The bypass
+
+**`MaxBypassHours`** (`8`) — the most a single `BypassFor` may ask for. A
+larger request is **refused**, not clamped: on a safety device the number the
+operator typed has to be the number in force. Cover a longer run by renewing.
+Mirrors `AlarmNotifier`'s `MaxSnoozeHours`.
+
+**`BypassWarnMinutes`** (`30`) — how long before a bypass expires the state
+goes from `DISABLE` to `STANDBY`, so an `AlarmNotifier` rule can mail ahead of
+the expiry. A bypass requested for less than this stays `DISABLE` for its whole
+life and never raises the warning.
+
+The bypass mechanism itself is in _Bypassing the interlock for a day_.
 
 ### What it publishes back
 
@@ -151,8 +196,40 @@ Read-only attributes, for a synoptic or AlarmNotifier: `InputValue`, `Permit`,
 / `ThresholdOff` / `Latching` as read-backs of the properties in force. The
 `Latching` read-back is the value the server is actually using, not the string
 in the database — the point of publishing it is that the two can differ.
+
+**`UpdateCount`** advances once per poll, gated and bypassed cycles included. A
+rule on it is how a stopped sweep thread becomes a mail — see _Nothing here
+catches this server dying_.
+
+The bypass publishes `Bypassed`, `BypassRemaining` (minutes), `BypassUntil`,
+`BypassSince`, `BypassReason` and `BypassRenewals`. `BypassSince` and
+`BypassRenewals` are the honest numbers for a report — "bypassed 14 h, 3
+renewals" — where `BypassRemaining` is reassuring and says nothing.
+`BypassState` is a memorized JSON blob, not for hand editing, that carries a
+live bypass across a restart.
+
+Since `AlarmNotifier` reads `State` and nothing else, the state machine is the
+whole operator-visible API:
+
+| State | Meaning |
+|---|---|
+| `ON` | gate open, condition good, permissive granted |
+| `ALARM` | tripped — or readable but inside the hysteresis band with no permit |
+| `FAULT` | input unreadable, heartbeat unreadable, or a configuration refused at start-up |
+| `OFF` | gate shut — not evaluating |
+| `DISABLE` | bypassed, more than `BypassWarnMinutes` left |
+| `STANDBY` | bypassed, inside the final `BypassWarnMinutes` before expiry |
+
+`INIT` is the startup state, held until the first reading and after `Reset`;
+`OFF` outranks it, so a device that starts with its gate shut shows `OFF`
+rather than a night of `INIT` that reads as a hang. A frozen input publisher
+trips to `ALARM`, not `FAULT` — the reading cannot be trusted but the device is
+not broken. "The flow is lost" and "the sensor is dead" both arrive as `ALARM`;
+the difference is in `LastTripReason` and in the mail, not in the state.
+
 Commands: `Trip` (manual de-assert, to test the chain without touching the
-water) and `Reset` (clear a latched trip).
+water), `Reset` (clear a latched trip), and `BypassFor` / `Arm` (see
+_Bypassing the interlock for a day_).
 
 ## Registration
 
@@ -292,6 +369,75 @@ Note what this does *not* catch: a `'False\t'` meaning `false` is accepted,
 because the value in force and the value intended agree. The string is just as
 dirty and will bite whoever next edits it to `true`.
 
+## The trip that was the resting state
+
+There are three shapes this server runs in, and they do not fail the same way.
+
+**Permissive** — `leem/safety/interlockP2lens`, the XPS instance, pi-mossbauer.
+The server holds a permissive up continuously and sends `Keepalive` to a
+`RaspberryButton` deadman every cycle. If it dies, the deadman expires and the
+permissive drops. Silence is safe.
+
+**Command-on-trip** — `leem/safety/interlockhv1`, new. The server sends a
+one-shot `OutputOff` to `leem/power/hv1` when the doser cooling water goes bad,
+and otherwise says nothing. No deadman, nothing in hardware behind it. Silence
+is **not** safe.
+
+**Watch-only** — `OutputDevice` empty, `WatchOnly` set. Evaluates, commands
+nothing, publishes a verdict for something else to act on.
+
+`interlockhv1` was brought up with no `GateDevice`, and it cannot see hv1. The
+lab's resting state is hv1 **off** and the doser water **shut** — the water is
+only opened for a run — so the input sits permanently on the unsafe side, which
+is the condition the interlock exists to act on. That produced two faults on
+two different clocks.
+
+**Every cycle.** With hv1 off and the water shut the device sat in `ALARM`. It
+commanded nothing and wrote no `LastTrip*` — the un-granted tail of the poll
+only sets the state — but `AlarmNotifier` reads `State` and nothing else, and a
+standing `ALARM` is indistinguishable from a live trip. A rule on
+`interlockhv1` would have mailed the first evening and every evening after. The
+device was unalarmable, which on a safety layer is the whole of the problem.
+
+**Every working day.** The end-of-day sequence is the start-up one reversed:
+hv1 `OutputOff` first, then the doser water is closed. The interlock knows
+nothing about hv1, so its permissive is still granted when the water closes,
+and that transition is a real trip — one `OutputOff` to a supply already off,
+`LastTripTime` / `LastTripValue` / `LastTripReason` overwritten with a routine
+shutdown so that Tuesday's genuine trip is gone by Wednesday, and with
+`Latching = true` a latch that survives to the next morning and blocks the run
+until someone runs `Reset`. `Latching` was not usable: it latched every night.
+
+### What the gate fixes
+
+`GateDevice = leem/power/hv1`, `GateStates = ON`. While hv1 is off the gate is
+shut, the device is `OFF`, and none of that happens: no `ALARM` to mail on, no
+command sent, the `LastTrip*` record left intact, and a latch from a real trip
+held rather than joined by a nightly one. When hv1 is switched on the gate
+opens and evaluation restarts clean; switch it on with the water still closed
+and the interlock trips at once and sends `OutputOff`, which is correct — that
+is a real attempt to run the gun with no cooling.
+
+### Shutdown order now means something
+
+With the gate in place the order of the end-of-day steps carries weight. hv1
+off, *then* the water closed: the gate shuts before the water moves, the close
+is never evaluated, nothing happens — the intended outcome. The reverse order,
+water closed while hv1 is still energised, is a genuine trip and a correct one.
+The routine the lab already follows is the right one; the gate is what makes
+following it matter.
+
+### Nothing here catches this server dying
+
+The permissive shape is covered by the output device's deadman. The
+command-on-trip shape is not: if this server stops sweeping, no `OutputOff` is
+ever sent and hv1 is unprotected, with nothing to show for it. A process cannot
+watch itself, so this cannot be fixed here. It needs an `AlarmNotifier` rule
+watching `leem/safety/interlockhv1` — its `State` for `ALARM` / `FAULT`, and
+its `UpdateCount` as an `op=edge` rule so that a counter that has stopped
+advancing becomes a mail. For `interlockhv1` that rule is part of the
+deployment, not an extra.
+
 ## Registration on pi-mossbauer
 
 Server `AnalogInterlock/2`, class `AnalogInterlock`, device
@@ -313,6 +459,90 @@ asserted after the flow recovers, until somebody calls `Reset`. On a compressor
 that is usually what is wanted — the point is to learn that it happened — but
 it is a choice, and the alarm will not clear by itself.
 
+## Registration for leem/safety/interlockhv1
+
+Class `AnalogInterlock`, device `leem/safety/interlockhv1`, host pi-leem. The
+command-on-trip shape: a one-shot `OutputOff` to `leem/power/hv1` when the
+doser cooling water fails, gated on hv1 being on.
+
+| Property             | Value                                        |
+|----------------------|----------------------------------------------|
+| `InputDevice`        | `leem/safety/water`                          |
+| `InputAttribute`     | `doser`                                      |
+| `HeartbeatAttribute` | `UpdateCount`                                |
+| `OutputDevice`       | `leem/power/hv1`                             |
+| `OnCommand`          | `OutputOn`                                   |
+| `OffCommand`         | `OutputOff`                                  |
+| `KeepaliveCommand`   | *(empty — the supply has no deadman)*        |
+| `GateDevice`         | `leem/power/hv1`                             |
+| `GateStates`         | `ON`                                         |
+| `ThresholdOn`        | `1.5`                                        |
+| `ThresholdOff`       | `1.0`                                        |
+| `Latching`           | `true` — a real trip must be looked at before hv1 comes back |
+
+`GateStates = ON` because `ON` on `leem/power/hv1` means the output is enabled;
+adding `OFF` would make the gate meaningless. `KeepaliveCommand` is empty
+because the supply implements no deadman — which is exactly why silence is
+unsafe for this device and why it needs the `AlarmNotifier` rule described in
+_Nothing here catches this server dying_.
+
+## Bypassing the interlock for a day
+
+Some runs use an evaporator with no water cooling and need the interlock out of
+the way for a working day. Editing `enabled` in Jive and restarting the server
+is not acceptable under a running instrument, and a plain disable switch is
+worse — it has to be remembered. The bypass expires on its own.
+
+`BypassFor "<hours> <reason>"` — a scalar string, because ATKPanel will not
+render a `DevVarStringArray` command and the generic panel is the only
+interface most of the lab opens; this is why `AlarmNotifier` grew `SnoozeFor`
+next to `Snooze`. The reason is **mandatory** — the command is rejected without
+one. The friction is deliberate: the reason goes into `BypassReason`, into the
+record, and into the mail. `Arm` ends the bypass immediately and forces a fresh
+evaluation, exactly as reopening the gate does.
+
+While bypassed the device is `DISABLE`, then `STANDBY` for the last
+`BypassWarnMinutes`. No trip command is sent, `LastTrip*` is left alone, and
+`Keepalive` **keeps going out** where an output deadman needs it — otherwise
+the bypass would drop the permissive, which is the exact trip it was meant to
+prevent. On `interlockhv1`, which sets no `KeepaliveCommand`, nothing is sent.
+`BypassFor` on a watch-only device is refused: it commands nothing, so there is
+nothing to bypass, and what silences it is `SnoozeFor` on the `AlarmNotifier`
+rule that watches it.
+
+### Renewal is absolute
+
+Renewing is `BypassFor` again on an already-bypassed device — there is no
+separate extend command. It sets the remaining time to the new request from
+*now*, whatever was left before: `BypassFor "4 ..."` on a bypass with two hours
+still to run leaves four, not six. Cumulative renewal would let two distracted
+calls add up to an afternoon nobody decided on, and would stop `MaxBypassHours`
+bounding anything. Renewals are unlimited — each is a deliberate act with its
+own reason and its own mail — and the defence against drift is the record, not
+a refusal: `BypassSince` and `BypassRenewals` do not move or reset on renewal,
+so a report reads "bypassed since 09:12, 3 renewals", not "4 h left".
+
+### It survives a restart, on purpose
+
+A bypass live when the server stops is restored from the memorized
+`BypassState`; the wall-clock expiry is kept, not the remaining duration, so a
+restart cannot extend it. This direction is deliberate and worth not reversing
+on instinct: the bypass exists because someone chose to run without the
+protection, and a Starter restart at 03:00 that silently re-armed would trip
+the very experiment the bypass was holding open. The time cap, not the restart,
+is what stops a bypass being forgotten. If the stored expiry is already in the
+past at start-up the server comes up armed and says so in `Status`.
+
+### The post-trip renewal surprise
+
+If a bypass expires, the interlock trips and switches hv1 off, and the operator
+then calls `BypassFor` again a few minutes later, the bypass is reinstated —
+but hv1 stays off and the latch stays set. The bypass holds the interlock off;
+it does not raise the output. `Status` and the command's return value both say
+so, because the natural reading of "I bypassed it and nothing came back" is
+that the command failed. Clear it with `Reset` and a manual `OutputOn` once the
+bypass is in place.
+
 ## Failure modes
 
 | Condition                  | Response                                     |
@@ -321,10 +551,16 @@ it is a choice, and the alarm will not clear by itself.
 | input unreadable/INVALID   | de-assert after `MaxReadFailures`, FAULT     |
 | heartbeat unreadable       | de-assert after `MaxReadFailures`, FAULT     |
 | input publisher frozen     | de-assert after `StaleCycles`, ALARM         |
-| this server dies           | keepalives stop, output device's deadman fires |
+| this server dies (permissive) | keepalives stop, output device's deadman fires |
+| this server dies (command-on-trip) | no `OutputOff` is ever sent; only an `AlarmNotifier` rule on `State` and `UpdateCount` catches it |
 | output device unreachable  | FAULT; nothing else is possible from here    |
 | output command refused     | FAULT, not granted; the status names the command |
 | bool property mangled in the database | refused at start-up; the status quotes the string |
+| gate device outside `GateStates` | `OFF`, not evaluating; a latched trip is held |
+| gate device unreadable     | evaluated anyway (fail towards acting); the status says the gate could not be read |
+| `GateStates` invalid, or set without `GateDevice` | refused at start-up; the status names the value |
+| bypass expires unnoticed   | re-arms, evaluates from a clean slate, trips if the condition is still bad |
+| `BypassFor` after a trip   | bypass reinstated, but the output stays off and latched; needs `Reset` + a manual on |
 
 The frozen-publisher case is the one neither the cron script nor a naive
 port could catch: a dead acquisition thread keeps returning its last good

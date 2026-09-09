@@ -51,6 +51,19 @@ Failure modes and what this server does about each:
   output device unreachable   -> FAULT; nothing else is possible from here
   output command refused      -> FAULT, and the permissive is not granted. The
                                  status says which command failed and why
+  gate outside GateStates     -> OFF, not evaluating; a latched trip is held,
+                                 LastTrip* is left alone
+  gate unreadable             -> evaluated anyway (fail towards acting); the
+                                 status says the gate could not be read
+  bad gate configuration      -> refused at start-up, the status names the value
+  bypassed (BypassFor)        -> DISABLE, or STANDBY in the last
+                                 BypassWarnMinutes; no trip command, LastTrip*
+                                 untouched, Keepalive still sent for a deadman.
+                                 Expires on its own and re-evaluates from clean
+  this server stops sweeping  -> for the permissive shape the output's deadman
+                                 fires; for the command-on-trip shape nothing
+                                 does. UpdateCount is there for an AlarmNotifier
+                                 rule to catch it
 """
 
 # PyTango imports
@@ -66,6 +79,7 @@ from tango import AttrWriteType
 # PROTECTED REGION ID(AnalogInterlock.additionnal_import) ENABLED START #
 import os
 import sys
+import json
 import time
 import threading
 
@@ -126,6 +140,31 @@ class AnalogInterlock(Device):
         dtype='str', default_value="UpdateCount",
         doc="Monotonic counter on the input device that advances once per "
             "acquisition cycle. Empty string disables staleness detection.",
+    )
+
+    GateDevice = device_property(
+        dtype='str', default_value="",
+        doc="Device whose state decides whether this interlock evaluates at "
+            "all. Empty (the default) means always evaluate, exactly as "
+            "before this property existed -- this is the P2 lens and XPS "
+            "configuration and it must not shift. Set it to what the "
+            "interlock protects: for leem/safety/interlockhv1 that is "
+            "leem/power/hv1, so that while the supply is off the resting "
+            "state of a command-on-trip interlock -- input on the unsafe "
+            "side because the cooling is deliberately closed -- is not read "
+            "as a trip. Mirrors AlarmNotifier's when= gate.",
+    )
+
+    GateStates = device_property(
+        dtype='str', default_value="",
+        doc="Comma-separated Tango state names that mean the gate is OPEN "
+            "and evaluation should run, e.g. 'ON' or 'ON,RUNNING'. Required "
+            "when GateDevice is set, and refused at start-up if it names "
+            "anything that is not a Tango state. This is the set that means "
+            "*open*, not a list of every state the gate device can be in: "
+            "for a supply that only reports ON and OFF, listing both leaves "
+            "the gate permanently open and silently restores the pre-gating "
+            "behaviour.",
     )
 
     OutputDevice = device_property(
@@ -219,6 +258,25 @@ class AnalogInterlock(Device):
             "The old 3000 ms default gave 12 s, which lost that race.",
     )
 
+    MaxBypassHours = device_property(
+        dtype='double', default_value=8.0,
+        doc="Cap on a single BypassFor request. A larger request is "
+            "refused, not clamped -- on a safety device the number the "
+            "operator typed must be the number in force. To bypass for "
+            "longer, renew with BypassFor again once the first one is "
+            "running; each renewal is a deliberate act with its own reason "
+            "and its own record. Mirrors AlarmNotifier's MaxSnoozeHours.",
+    )
+
+    BypassWarnMinutes = device_property(
+        dtype='double', default_value=30.0,
+        doc="Width of the warning window before a bypass expires. Inside it "
+            "the state is STANDBY instead of DISABLE, so an AlarmNotifier "
+            "rule can mail 'the bypass on interlockhv1 expires at 18:00' "
+            "half an hour ahead. A bypass requested for less than this stays "
+            "DISABLE for its whole life and never raises the warning.",
+    )
+
     # ----------
     # Attributes
     # ----------
@@ -233,6 +291,32 @@ class AnalogInterlock(Device):
     ThresholdOffRB = attribute(dtype='double', label="ThresholdOff", format="%6.2f")
     LatchingRB = attribute(dtype='bool', label="Latching")
 
+    UpdateCount = attribute(
+        dtype='int', label="UpdateCount",
+        doc="Advances once per poll, gated and bypassed cycles included. A "
+            "rule on this catches a sweep thread that has stopped -- the "
+            "failure this server cannot report on itself, and for a "
+            "command-on-trip interlock the only cover it has for its own "
+            "death.")
+
+    Bypassed = attribute(dtype='bool', label="Bypassed")
+    BypassRemaining = attribute(dtype='double', label="BypassRemaining",
+                                format="%g",
+                                doc="Minutes until the bypass expires, 0 when "
+                                    "not bypassed.")
+    BypassUntil = attribute(dtype='str', label="BypassUntil")
+    BypassSince = attribute(dtype='str', label="BypassSince",
+                            doc="Start of the first bypass of this run. "
+                                "Renewals do not move it.")
+    BypassReason = attribute(dtype='str', label="BypassReason")
+    BypassRenewals = attribute(dtype='int', label="BypassRenewals")
+    BypassState = attribute(
+        dtype='str', access=AttrWriteType.READ_WRITE, memorized=True,
+        hw_memorized=True, display_level=DispLevel.EXPERT, label="BypassState",
+        doc="JSON of the live bypass, kept memorized so it survives a "
+            "restart of this server. Not meant to be edited by hand.",
+    )
+
     # ---------------
     # General methods
     # ---------------
@@ -243,6 +327,7 @@ class AnalogInterlock(Device):
         self.stop_event = threading.Event()
         self.stop_event.set()
         self.ctrlloop = None
+        self.lock = threading.Lock()
 
         self.inputvalue = float('nan')
         self.permit = False
@@ -257,9 +342,37 @@ class AnalogInterlock(Device):
         self.manuallatch = False
         self.lastheartbeat = None
         self.cyclessincereassert = 0
+        self.updatecount = 0
 
         self.inputproxy = None
         self.outputproxy = None
+        self.gateproxy = None
+
+        # Gate: evaluation runs only while GateDevice is in one of
+        # GateStates. An empty GateDevice turns all of this off at the first
+        # line of cycle(), so the P2 lens and XPS keep today's behaviour to
+        # the cycle.
+        self.gatestates = set()
+        self.gatewasopen = False        # was the gate open on the last cycle?
+        self.cleanslate = False         # one-shot: re-evaluate fresh
+        #                                 (gate reopen, or a bypass ending)
+        self.gatevalue = ""             # last gate state seen, for Status
+        self.gatewarn = ""              # standing note: GateStates never gates
+        self.gatefault = ""             # standing note: gate device unreadable
+        self.everread = False           # has a reading been taken yet?
+
+        # Bypass: a time-limited, self-expiring suspension of the whole
+        # interlock, set with BypassFor and ended early with Arm. Outranks
+        # the gate. Absolute epoch times, so a restart resumes to the same
+        # wall-clock expiry; 0.0 means armed. self.lock guards this block
+        # against BypassFor / Arm on a client thread.
+        self.bypassuntil = 0.0
+        self.bypasssince = 0.0
+        self.bypassreason = ""
+        self.bypassrenewals = 0
+        self.bypassshort = False        # request shorter than the warn window
+        self.bypassrestored = ""        # startup note: a stored bypass expired
+        self.pendingbypass = getattr(self, "pendingbypass", "")
 
         # A misconfiguration is refused here rather than at the first cycle,
         # because a server that starts and then behaves as though the
@@ -295,13 +408,28 @@ class AnalogInterlock(Device):
                 "input is meant to stay low rather than high, that is Reverse"
                 % (self.ThresholdOff, self.ThresholdOn))
 
+        # Gate configuration. Mirrors AlarmNotifier's when=: a device and the
+        # set of its states in which this interlock is allowed to evaluate. A
+        # bad value is refused, not defaulted -- a typo in a gate that stops
+        # a safety device acting is worse than one that stops it starting.
+        complaint = self.gate_config()
+        if complaint:
+            return self.misconfigured(complaint)
+
+        # A bypass that was live when the server stopped is restored; one
+        # that has since expired is not -- the server comes up armed and
+        # says so. The time cap, not the restart, is what stops a bypass
+        # being forgotten, and a Starter restart at 03:00 that silently
+        # re-armed would trip the very experiment the bypass protects.
+        self.apply_bypass(self.pendingbypass)
+
         # Deliberately no command is sent here. This server restarting must not
         # by itself disturb a running experiment: the output device keeps
         # whatever state it had, and the first cycle a fraction of a second
         # later decides on the basis of a real reading. If this server stays
         # down, the output device's deadman is what de-asserts the permissive.
         self.set_state(tango.DevState.INIT)
-        self.set_status("Waiting for first reading")
+        self.set_status(self.bypassrestored or "Waiting for first reading")
 
         self.stop_event.clear()
         self.ctrlloop = ControlThread(self)
@@ -314,6 +442,65 @@ class AnalogInterlock(Device):
         never started, so nothing is polled and nothing is commanded."""
         self.set_state(tango.DevState.FAULT)
         self.set_status(reason)
+
+    def now(self):
+        """Wall clock as a single call, so the bypass tests can pin it."""
+        return time.time()
+
+    def _stamp(self, epoch):
+        """Epoch -> the same 'YYYY-MM-DD HH:MM:SS' the trip fields use."""
+        if not epoch:
+            return "-"
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(epoch))
+
+    def gate_config(self):
+        """Parse GateDevice / GateStates. Returns a complaint to refuse
+        start-up with, or None. On success fills self.gatestates and, when the
+        open-set looks like it names every state the gate device can be in,
+        the standing self.gatewarn note. Kept out of init_device so it can be
+        exercised without a database, and follows the threshold checks' style:
+        the caller turns a non-None return into self.misconfigured()."""
+        gatedev = (self.GateDevice or "").strip()
+        gateraw = (self.GateStates or "").strip()
+        if gatedev and "/" not in gatedev:
+            return ("GateDevice %r is not a device name (domain/family/member)"
+                    % self.GateDevice)
+        if gatedev and not gateraw:
+            return ("GateDevice is %s but GateStates is empty. GateStates must "
+                    "name the state(s) in which the gate is open, e.g. ON"
+                    % gatedev)
+        if gateraw and not gatedev:
+            return ("GateStates is %r but GateDevice is empty. Name the gate "
+                    "device, or clear GateStates" % self.GateStates)
+        if not gatedev:
+            return None
+        valid = set(tango.DevState.names)
+        names = [s.strip().upper() for s in gateraw.split(",") if s.strip()]
+        bad = [s for s in names if s not in valid]
+        if bad:
+            return ("GateStates names %s, which %s not a Tango state. Valid "
+                    "names: %s" % (", ".join(bad),
+                                   "is" if len(bad) == 1 else "are",
+                                   ", ".join(sorted(valid))))
+        self.gatestates = set(names)
+        if {"ON", "OFF"} <= self.gatestates or len(self.gatestates) >= 4:
+            self.gatewarn = (
+                "GateStates = %s looks like it covers every state %s can "
+                "publish; the gate would never shut and evaluation would run "
+                "just as if no GateDevice were set" % (gateraw, gatedev))
+        return None
+
+    def set_status(self, text):
+        """Every status line carries any standing gate note. A GateStates
+        that never actually gates, or a gate device that cannot be read,
+        otherwise shows up only as "the interlock behaves as though it had no
+        gate" with nothing on the device to explain why. getattr keeps this
+        safe if Tango calls set_status before init_device sets the fields."""
+        for note in (getattr(self, "gatefault", ""),
+                     getattr(self, "gatewarn", "")):
+            if note:
+                text = note + "\n" + text
+        Device.set_status(self, text)
 
     def raw_property(self, name):
         """The property as the database holds it, or None if it is not set.
@@ -392,6 +579,63 @@ class AnalogInterlock(Device):
             self.outputproxy.set_timeout_millis(self.ProxyTimeout)
         return self.outputproxy
 
+    def gate_proxy(self):
+        if self.gateproxy is None:
+            self.gateproxy = tango.DeviceProxy(self.GateDevice)
+            self.gateproxy.set_timeout_millis(self.ProxyTimeout)
+        return self.gateproxy
+
+    def gate_open(self):
+        """True when evaluation should run this cycle. An unreadable gate
+        counts as open and says so in Status: for a command-on-trip interlock
+        failing towards acting is recoverable and failing towards silence is
+        not. Mirrors AlarmNotifier.gate_open."""
+        try:
+            current = str(self.gate_proxy().state())
+        except Exception as exc:
+            self.gateproxy = None
+            self.gatevalue = "unreadable"
+            self.gatefault = ("gate %s unreadable, evaluating anyway: %s"
+                              % (self.GateDevice, exc))
+            return True
+        self.gatefault = ""
+        self.gatevalue = current
+        return current.upper() in self.gatestates
+
+    def save_bypass(self):
+        """Serialise the live bypass for the memorized attribute. Absolute
+        epoch times. Call with the lock held."""
+        data = {}
+        if self.bypassuntil:
+            data = {"until": self.bypassuntil, "since": self.bypasssince,
+                    "reason": self.bypassreason,
+                    "renewals": self.bypassrenewals, "short": self.bypassshort}
+        self.pendingbypass = json.dumps(data)
+        return self.pendingbypass
+
+    def apply_bypass(self, blob):
+        """Restore a bypass from the memorized blob. A stored expiry already
+        in the past does NOT re-bypass: bypassrestored is set instead and the
+        caller shows it in Status."""
+        try:
+            data = json.loads(blob) if blob else {}
+        except ValueError:
+            return
+        until = data.get("until", 0.0)
+        if not until:
+            return
+        with self.lock:
+            if until > self.now():
+                self.bypassuntil = until
+                self.bypasssince = data.get("since", until)
+                self.bypassreason = data.get("reason", "")
+                self.bypassrenewals = int(data.get("renewals", 0))
+                self.bypassshort = bool(data.get("short", False))
+            else:
+                self.bypassrestored = (
+                    "a bypass restored from before the restart had already "
+                    "expired at %s; came up armed" % self._stamp(until))
+
     def send(self, cmd):
         if self.WatchOnly:
             return True
@@ -445,8 +689,102 @@ class AnalogInterlock(Device):
                            self.InputAttribute, self.inputvalue))
         return True
 
+    def enter_gated(self):
+        """Gate shut: do not read, do not command, do not touch LastTrip* or
+        the latch. Keepalive alone continues where a granted permissive is
+        held up by an output deadman, so closing the gate on the plant does
+        not by itself drop the permissive. A command-on-trip interlock sets
+        no KeepaliveCommand, so this does nothing there."""
+        self.gatewasopen = False
+        if self.permit and self.KeepaliveCommand:
+            if not self.send(self.KeepaliveCommand):
+                return              # send() set FAULT and named the command
+        self.set_state(tango.DevState.OFF)
+        if self.manuallatch or (self.Latching and self.tripped):
+            self.set_status(
+                "Gate %s = %s: not evaluating. A latched trip from before the "
+                "gate shut is still held; Reset is still required before the "
+                "permissive can return" % (self.GateDevice, self.gatevalue))
+        elif not self.everread:
+            self.set_status("Gate %s = %s: not evaluating (no reading yet)"
+                            % (self.GateDevice, self.gatevalue))
+        else:
+            self.set_status("Gate %s = %s: not evaluating"
+                            % (self.GateDevice, self.gatevalue))
+
+    def reopen_gate(self):
+        """Gate just opened. Re-arm the failure counters so evaluation starts
+        from a clean slate -- as AlarmNotifier.restart does -- and set a
+        one-shot so the next lines can trip straight out of the un-granted
+        state if the input is already on the unsafe side. permit, tripped and
+        the latch are left alone: a condition that is still good is correctly
+        carried over, and a real latch must survive until Reset."""
+        self.readfailures = 0
+        self.beatfailures = 0
+        self.stalecount = 0
+        self.lastheartbeat = None
+        self.cyclessincereassert = 0
+        self.cleanslate = True
+
+    def serve_bypass(self):
+        """One cycle while bypassed. No trip command, LastTrip* untouched.
+        Keepalive still goes out where a deadman needs it, or the bypass
+        would cause the very trip it was meant to prevent. The state is the
+        whole operator-visible API: DISABLE while there is time to spare,
+        STANDBY inside the final BypassWarnMinutes."""
+        if self.permit and self.KeepaliveCommand:
+            if not self.send(self.KeepaliveCommand):
+                return               # send() set FAULT and named the command
+        remaining = self.bypassuntil - self.now()
+        warn = (not self.bypassshort
+                and remaining <= self.BypassWarnMinutes * 60.0)
+        self.set_state(tango.DevState.STANDBY if warn
+                       else tango.DevState.DISABLE)
+        text = ("Bypass expiring: " if warn else "Bypassed: ")
+        text += ("%g min left, until %s, reason: %s"
+                 % (remaining / 60.0, self._stamp(self.bypassuntil),
+                    self.bypassreason))
+        if self.bypassrenewals:
+            text += (" (%d renewal%s this run, since %s)"
+                     % (self.bypassrenewals,
+                        "" if self.bypassrenewals == 1 else "s",
+                        self._stamp(self.bypasssince)))
+        if self.tripped:
+            text += (". The output was already commanded off and the latch "
+                     "is set; when the bypass ends, Reset then a manual %s "
+                     "are needed -- the interlock will not raise it for you"
+                     % self.OnCommand)
+        self.set_status(text)
+
     def cycle(self):
         """One poll. Called only from the control thread."""
+        # --- bypass ----------------------------------------------------------
+        # Outranks the gate and the evaluation. The expiry transition is
+        # taken under the lock so a BypassFor arriving in the same instant
+        # either renews before it or is refused after it, never straddles.
+        with self.lock:
+            self.updatecount += 1
+            expired = bool(self.bypassuntil) and self.bypassuntil <= self.now()
+            if expired:
+                self.bypassuntil = 0.0
+                self.cleanslate = True      # evaluate fresh, like a gate reopen
+                self.save_bypass()
+            bypassed = self.bypassuntil > self.now()
+        if bypassed:
+            self.serve_bypass()
+            return
+
+        # --- gate --------------------------------------------------------
+        # Cheap early return. With no GateDevice this is a single falsy test
+        # and every line below runs exactly as it did before gating existed.
+        if self.GateDevice:
+            if not self.gate_open():
+                self.enter_gated()
+                return
+            if not self.gatewasopen:
+                self.gatewasopen = True
+                self.reopen_gate()
+
         # --- read the input -------------------------------------------------
         try:
             reading = self.proxy("input").read_attribute(self.InputAttribute)
@@ -464,6 +802,7 @@ class AnalogInterlock(Device):
             return
         self.readfailures = 0
         self.inputvalue = value
+        self.everread = True
 
         # --- is the publisher still alive? ----------------------------------
         if self.HeartbeatAttribute:
@@ -499,6 +838,23 @@ class AnalogInterlock(Device):
                           "%.2f cannot be trusted"
                           % (self.InputDevice, self.HeartbeatAttribute,
                              self.stalecount, value))
+                return
+
+        # --- fresh evaluation after a gate reopen or a bypass ending ----
+        # A normal cycle only trips out of the granted state. Just after the
+        # gate opens, or a bypass expires or is Armed off, the interlock may
+        # be starting from un-granted -- the supply was switched on with the
+        # cooling still closed -- and that must trip and command the supply
+        # off, not sit in ALARM beside a live supply. A real latch still
+        # wins and clears only with Reset.
+        if self.cleanslate:
+            self.cleanslate = False
+            latched = self.manuallatch or (self.Latching and self.tripped)
+            if not self.permit and not latched and self.withdraws(value):
+                self.trip("re-armed with %s = %.2f already %s ThresholdOff "
+                          "(%.2f)" % (self.InputAttribute, value,
+                                      "above" if self.Reverse else "below",
+                                      self.ThresholdOff))
                 return
 
         # --- threshold with hysteresis --------------------------------------
@@ -549,6 +905,8 @@ class AnalogInterlock(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(AnalogInterlock.delete_device) ENABLED START #
+        with self.lock:
+            self.save_bypass()
         self.stop_event.set()
         if self.ctrlloop is not None and self.ctrlloop.is_alive():
             self.ctrlloop.join(timeout=2.0 + self.PollPeriod)
@@ -613,6 +971,40 @@ class AnalogInterlock(Device):
         return self.Latching
         # PROTECTED REGION END #    //  AnalogInterlock.LatchingRB_read
 
+    def read_UpdateCount(self):
+        return self.updatecount
+
+    def read_Bypassed(self):
+        return self.bypassuntil > self.now()
+
+    def read_BypassRemaining(self):
+        rem = self.bypassuntil - self.now()
+        return rem / 60.0 if rem > 0 else 0.0
+
+    def read_BypassUntil(self):
+        return self._stamp(self.bypassuntil)
+
+    def read_BypassSince(self):
+        return self._stamp(self.bypasssince if self.bypassuntil else 0.0)
+
+    def read_BypassReason(self):
+        return self.bypassreason if self.bypassuntil else ""
+
+    def read_BypassRenewals(self):
+        return self.bypassrenewals if self.bypassuntil else 0
+
+    def read_BypassState(self):
+        with self.lock:
+            return self.save_bypass()
+
+    def write_BypassState(self, value):
+        # Tango replays the memorized value at start-up, possibly before
+        # init_device has built the fields. Keep the blob either way and
+        # apply what can be applied now.
+        self.pendingbypass = value
+        if getattr(self, "lock", None) is not None:
+            self.apply_bypass(value)
+
     # --------
     # Commands
     # --------
@@ -647,6 +1039,92 @@ class AnalogInterlock(Device):
         self.manuallatch = True
         self.trip("Tripped manually; Reset to clear")
         # PROTECTED REGION END #    //  AnalogInterlock.Trip
+
+    def do_bypass(self, argin):
+        """Shared body of BypassFor, so parsing and the cap live in one
+        place. Renewal is BypassFor again on an already-bypassed device;
+        it is absolute -- 'BypassFor 4 ...' means four hours from now,
+        whatever was left -- so two distracted calls cannot compound."""
+        if self.WatchOnly:
+            raise ValueError(
+                "this is a watch-only device: it commands nothing, so there "
+                "is nothing to bypass. What silences it is SnoozeFor on the "
+                "AlarmNotifier rule that watches it")
+        parts = (argin or "").split(None, 1)
+        if len(parts) < 2 or not parts[1].strip():
+            raise ValueError(
+                "expected 'hours reason', e.g. '8 evaporador sin "
+                "refrigeracion'. The reason is mandatory: it goes into the "
+                "record and into the mail")
+        try:
+            hours = float(parts[0])
+        except ValueError:
+            raise ValueError("%r is not a number of hours" % parts[0])
+        if hours <= 0:
+            raise ValueError("hours must be positive; use Arm to end a bypass")
+        if hours > self.MaxBypassHours:
+            raise ValueError(
+                "at most %g h in one request (MaxBypassHours). Renew with "
+                "BypassFor again for another %g h from then; each renewal "
+                "needs its own reason and leaves its own record"
+                % (self.MaxBypassHours, self.MaxBypassHours))
+        reason = parts[1].strip()
+        now = self.now()
+        with self.lock:
+            renewal = self.bypassuntil > now
+            self.bypassuntil = now + hours * 3600.0
+            self.bypassreason = reason
+            self.bypassshort = hours * 3600.0 < self.BypassWarnMinutes * 60.0
+            self.bypassrestored = ""
+            if renewal:
+                self.bypassrenewals += 1
+            else:
+                self.bypasssince = now
+                self.bypassrenewals = 0
+            posttrip = self.tripped
+            self.save_bypass()
+        msg = ("bypassed for %g h%s, reason: %s"
+               % (hours,
+                  " (renewal #%d)" % self.bypassrenewals if renewal else "",
+                  reason))
+        if posttrip:
+            msg += (". NOTE: the output is already off and the latch set; "
+                    "the bypass holds off the interlock but does not raise "
+                    "the output -- Reset then a manual %s once it ends"
+                    % self.OnCommand)
+        return msg
+
+    @command(dtype_in='str', dtype_out='str',
+             doc_in="hours and a mandatory reason, e.g. "
+                    "'8 evaporador sin refrigeracion'",
+             doc_out="what was done")
+    @DebugIt()
+    def BypassFor(self, argin):
+        # PROTECTED REGION ID(AnalogInterlock.BypassFor) ENABLED START #
+        # Scalar DevString: ATKPanel -- the only interface most of the lab
+        # opens -- will not offer a DevVarStringArray command. Same reason
+        # AlarmNotifier grew SnoozeFor alongside Snooze.
+        return self.do_bypass(argin)
+        # PROTECTED REGION END #    //  AnalogInterlock.BypassFor
+
+    def do_arm(self):
+        """Body of Arm, kept out of the command wrapper so it is callable
+        without a logger. Ends the bypass now and forces a fresh evaluation
+        before the next action decision, exactly as a gate reopening does."""
+        now = self.now()
+        with self.lock:
+            was = self.bypassuntil > now
+            self.bypassuntil = 0.0
+            self.cleanslate = True
+            self.save_bypass()
+        return "armed" if was else "was not bypassed; armed anyway"
+
+    @command(dtype_out='str')
+    @DebugIt()
+    def Arm(self):
+        # PROTECTED REGION ID(AnalogInterlock.Arm) ENABLED START #
+        return self.do_arm()
+        # PROTECTED REGION END #    //  AnalogInterlock.Arm
 
 # ----------
 # Run server

@@ -30,6 +30,7 @@ Exit:   0 all passed, 1 failures, 2 could not run.
 import os
 import subprocess
 import sys
+import threading
 import time
 
 DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,6 +81,10 @@ def build_fake(cls):
         Latching = False
         ReassertCycles = 0
         ProxyTimeout = 800
+        GateDevice = ""
+        GateStates = ""
+        MaxBypassHours = 8.0
+        BypassWarnMinutes = 30.0
 
         def __init__(self, **kw):
             self.value = 0.0
@@ -101,8 +106,25 @@ def build_fake(cls):
             self.manuallatch = False
             self.lastheartbeat = None
             self.cyclessincereassert = 0
+            self.updatecount = 0
             self.inputproxy = None
             self.outputproxy = None
+            self.gateproxy = None
+            self.gatestates = set()
+            self.gatewasopen = False
+            self.cleanslate = False
+            self.gatevalue = ""
+            self.gatewarn = ""
+            self.gatefault = ""
+            self.everread = False
+            self.lock = threading.Lock()
+            self.bypassuntil = 0.0
+            self.bypasssince = 0.0
+            self.bypassreason = ""
+            self.bypassrenewals = 0
+            self.bypassshort = False
+            self.bypassrestored = ""
+            self.pendingbypass = ""
 
         def set_state(self, state):
             self.state = state
