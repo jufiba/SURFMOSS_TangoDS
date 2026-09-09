@@ -737,7 +737,7 @@ JDFile v11 {
     summit:1132,364,1206,392
     origin:1185,347
     fillStyle:1
-    name:"leem/safety/interlockP2lens//State"
+    name:"leem/safety/interlockP2lens/State"
   }
   JDSwingObject {
     summit:1132,403,1207,426
