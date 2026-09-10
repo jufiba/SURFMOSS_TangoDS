@@ -21,3 +21,6 @@ release.py
 # stray vim swap files (one had been committed as .txt.swp)
 *.swp
 *.swo
+
+#Claude worktrees
+.claude/worktrees/
