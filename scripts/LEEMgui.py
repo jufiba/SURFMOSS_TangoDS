@@ -465,6 +465,7 @@ class LEEMWindow(QtWidgets.QWidget):
 
 
 _window=None
+_app=None
 
 def _under_ipython():
     """ True when an IPython shell is driving this process.
@@ -489,14 +490,23 @@ def leem_gui_main():
     returns immediately and the console stays usable, provided ipython drives
     the Qt event loop -- start it with --gui=qt6, or run %gui qt6 before this.
     The leemgui script does that for you.
+
+    The QApplication is kept in a module global. Under "ipython --gui=qt6 -c",
+    ipython installs its Qt inputhook -- and the QApplication that comes with it
+    -- only when the prompt first appears, which is after this startup code has
+    run. So QApplication.instance() is still None here and we create our own; if
+    only a local held it, it would be garbage-collected as this function
+    returns, and destroying a QApplication destroys its top-level widgets, so
+    the window would vanish before the prompt ever drew it. Seen on IPython 8
+    and 9 alike.
     """
-    global _window
+    global _window,_app
     existing=QtWidgets.QApplication.instance()
-    app=existing or QtWidgets.QApplication(sys.argv)
+    _app=existing or QtWidgets.QApplication(sys.argv)
     _window=LEEMWindow()
     _window.show()
     if existing is None and not _under_ipython():
-        app.exec()
+        _app.exec()
     return _window
 
 

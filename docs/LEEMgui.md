@@ -71,6 +71,26 @@ and blocks the console until the window closes.
 `from LEEMgui import ...` and finds it on the same path. The import is lazy, so a
 command-line session that never calls `gui()` does not need PyQt6.
 
+### The QApplication has to be held past `gui()` returning
+
+Under `ipython --gui=qt6 -c "…; gui()"` — which is what `leemgui` runs — IPython
+installs its Qt inputhook, *and creates the QApplication that goes with it*, only
+when the prompt first draws, which is **after** the `-c` startup code. So when
+`gui()` runs, `QApplication.instance()` is still `None` and `leem_gui_main()`
+constructs its own.
+
+That QApplication must be kept alive in a module global (`_app`), next to
+`_window`. If only a local held it, it would be collected the instant `gui()`
+returned, and **destroying a QApplication destroys its top-level widgets** — the
+window would be gone before the prompt ever appeared. The visible symptom is
+`leemgui` reaching the `In [1]:` prompt normally with no panel and no error.
+
+This bites IPython 8 and 9 the same way (checked on 8.39 and 9.17); it is not a
+version regression. It went unnoticed because the earlier instrument test predates
+the `leemgui` launcher and drove the GUI with `%gui qt6` then `gui()` typed at the
+prompt, where the inputhook's QApplication already exists and nothing throwaway
+gets made.
+
 ### `%gui qt` failing with "could not load the requested Qt binding"
 
 IPython's Qt integration imports more PyQt6 submodules than the GUI does, and

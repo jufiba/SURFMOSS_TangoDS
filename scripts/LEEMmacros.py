@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.10 10/09/2026 leem_gui_main() now keeps the QApplication it creates in a module global (_app), like _window. Under "ipython --gui=qt6 -c" the Qt inputhook, and the QApplication that comes with it, is only installed when the prompt first appears -- after the startup code -- so QApplication.instance() is None when gui() runs and leem_gui_main() builds its own. It was held only in a local, so it was garbage-collected the moment gui() returned; destroying a QApplication destroys its top-level widgets, so the window was torn down before the prompt drew it. Symptom: leemgui reaches the prompt normally but no panel appears. Reproduced on IPython 8.39 and 9.17 alike, so this is not a version regression; the leemgui launcher's -c path had simply never been run on the instrument (the Aug 2026 test predates the launcher and used %gui qt6 then gui() at the prompt, where a QApplication already exists). Standalone "python LEEMgui.py" still blocks in _app.exec() as before.
+#
 # v3.9 02/09/2026 Added leem_log(command): the GUI now appends every acquisition it launches, as the exact call it makes, to <dayfolder>/<YYYYMMDD>_commands.log next to the data, with a timestamp. Opens and closes per line so nothing is lost if a run hangs. Only the final call from a Run button is logged -- typed commands are not intercepted. leem_log never raises; if there is no counter file it silently does nothing.
 #
 # v3.8 02/09/2026 LEEMgui.py moved from PySide6 to PyQt6: PyQt6 is a single Debian package (python3-pyqt6) that is already on the instrument, no new dependency, and IPython 8.x's qt inputhook works with it where it broke on PySide6 >= 6.7 (lazy submodule attributes). Changes were mechanical: import, QtCore.Signal -> QtCore.pyqtSignal, and the QFontDatabase.FixedFont enum now needs its SystemFont scope. leemgui pins QT_API=pyqt6.
@@ -49,7 +51,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.9"
+__version__ = "3.10"
 
 from datetime import date
 import tango
