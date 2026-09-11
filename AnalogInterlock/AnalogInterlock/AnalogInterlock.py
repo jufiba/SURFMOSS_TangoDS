@@ -39,11 +39,14 @@ Failure modes and what this server does about each:
   input past ThresholdOff     -> de-assert, ALARM
   input attribute unreadable  -> de-assert after MaxReadFailures, FAULT
   input attribute INVALID     -> counted as a read failure
-  input publisher frozen      -> de-assert after StaleCycles, ALARM
-                                 (detected via HeartbeatAttribute; a frozen
-                                 publisher keeps returning its last good value,
-                                 which is otherwise indistinguishable from a
-                                 healthy reading)
+  input publisher frozen      -> de-assert after StaleCycles, ALARM, but only
+                                 where HeartbeatAttribute is named (opt-in, and
+                                 meaningful only for a cached-acquisition
+                                 input). A frozen publisher keeps returning its
+                                 last good value, otherwise indistinguishable
+                                 from a healthy reading
+  no HeartbeatAttribute        -> staleness is not checked; every status line
+                                 says so
   this server dies            -> keepalives stop; the output device's own
                                  deadman de-asserts. Not handled here, by
                                  construction: a process cannot be its own
@@ -137,9 +140,17 @@ class AnalogInterlock(Device):
     )
 
     HeartbeatAttribute = device_property(
-        dtype='str', default_value="UpdateCount",
+        dtype='str', default_value="none",
         doc="Monotonic counter on the input device that advances once per "
-            "acquisition cycle. Empty string disables staleness detection.",
+            "acquisition cycle -- name it and this server refuses a reading "
+            "whose publisher has frozen. Default 'none': staleness detection "
+            "is opt-in, because the counter only exists on a cached-"
+            "acquisition input (a SEAWaterflowmeter, where a dead thread "
+            "hands back the last good value forever) and naming it on a "
+            "read-on-demand input (a serial pump controller, where a dead "
+            "instrument just raises) can only fault. Set it to 'none' (also "
+            "'-') to be explicit; an empty string cannot express it, PyTango "
+            "substitutes this default for one before the server sees it.",
     )
 
     GateDevice = device_property(
@@ -359,6 +370,7 @@ class AnalogInterlock(Device):
         self.gatevalue = ""             # last gate state seen, for Status
         self.gatewarn = ""              # standing note: GateStates never gates
         self.gatefault = ""             # standing note: gate device unreadable
+        self.heartbeatoff = ""          # standing note: no heartbeat named
         self.everread = False           # has a reading been taken yet?
 
         # Bypass: a time-limited, self-expiring suspension of the whole
@@ -374,6 +386,12 @@ class AnalogInterlock(Device):
         self.bypassrestored = ""        # startup note: a stored bypass expired
         self.pendingbypass = getattr(self, "pendingbypass", "")
 
+        # Strip and de-quote the str properties once, into self.prop, and
+        # record in self.propnotes anything the database or a Jive paste had
+        # altered so set_status can show it on every cycle. Done before the
+        # checks below so they argue about the cleaned values.
+        self.clean_properties()
+
         # A misconfiguration is refused here rather than at the first cycle,
         # because a server that starts and then behaves as though the
         # thresholds meant something else is worse than one that never starts.
@@ -385,10 +403,10 @@ class AnalogInterlock(Device):
             if complaint:
                 return self.misconfigured(complaint)
 
-        output = (self.OutputDevice or "").strip()
+        output = self.prop["OutputDevice"]
         if self.WatchOnly and output:
             return self.misconfigured(
-                "WatchOnly is set, but OutputDevice is %s. Watching and "
+                "WatchOnly is set, but OutputDevice is %r. Watching and "
                 "commanding are different jobs; pick one" % output)
         if not self.WatchOnly and not output:
             return self.misconfigured(
@@ -460,18 +478,18 @@ class AnalogInterlock(Device):
         the standing self.gatewarn note. Kept out of init_device so it can be
         exercised without a database, and follows the threshold checks' style:
         the caller turns a non-None return into self.misconfigured()."""
-        gatedev = (self.GateDevice or "").strip()
-        gateraw = (self.GateStates or "").strip()
+        gatedev = self.prop["GateDevice"]
+        gateraw = self.prop["GateStates"]
         if gatedev and "/" not in gatedev:
             return ("GateDevice %r is not a device name (domain/family/member)"
-                    % self.GateDevice)
+                    % gatedev)
         if gatedev and not gateraw:
-            return ("GateDevice is %s but GateStates is empty. GateStates must "
+            return ("GateDevice is %r but GateStates is empty. GateStates must "
                     "name the state(s) in which the gate is open, e.g. ON"
                     % gatedev)
         if gateraw and not gatedev:
             return ("GateStates is %r but GateDevice is empty. Name the gate "
-                    "device, or clear GateStates" % self.GateStates)
+                    "device, or clear GateStates" % gateraw)
         if not gatedev:
             return None
         valid = set(tango.DevState.names)
@@ -485,19 +503,25 @@ class AnalogInterlock(Device):
         self.gatestates = set(names)
         if {"ON", "OFF"} <= self.gatestates or len(self.gatestates) >= 4:
             self.gatewarn = (
-                "GateStates = %s looks like it covers every state %s can "
+                "GateStates = %r looks like it covers every state %r can "
                 "publish; the gate would never shut and evaluation would run "
                 "just as if no GateDevice were set" % (gateraw, gatedev))
         return None
 
     def set_status(self, text):
-        """Every status line carries any standing gate note. A GateStates
-        that never actually gates, or a gate device that cannot be read,
-        otherwise shows up only as "the interlock behaves as though it had no
-        gate" with nothing on the device to explain why. getattr keeps this
-        safe if Tango calls set_status before init_device sets the fields."""
+        """Every status line carries the standing notes: staleness detection
+        switched off, a str property that clean_properties had to strip or
+        de-quote, a GateStates that never actually gates, a gate device that
+        cannot be read. Without this a disabled heartbeat or an altered value
+        shows up only as changed behaviour with nothing on the device to
+        explain it. getattr keeps this safe if Tango calls set_status before
+        init_device sets the fields."""
         for note in (getattr(self, "gatefault", ""),
-                     getattr(self, "gatewarn", "")):
+                     getattr(self, "gatewarn", ""),
+                     getattr(self, "heartbeatoff", "")):
+            if note:
+                text = note + "\n" + text
+        for note in getattr(self, "propnotes", {}).values():
             if note:
                 text = note + "\n" + text
         Device.set_status(self, text)
@@ -554,6 +578,70 @@ class AnalogInterlock(Device):
                     % (name, raw, value, "true" if meant else "false"))
         return None
 
+    def clean_properties(self):
+        """Strip, and unwrap any matched leading/trailing quote pair from,
+        every str property used as a name or an enumerated value. Runs once;
+        results go in self.prop, and any value the database or a Jive paste
+        had altered is recorded in self.propnotes, which set_status prepends
+        to every status line -- so the alteration shows on every cycle, not
+        once at start-up.
+
+        The string sibling of bool_property_complaint. That one refuses a
+        bool the database converted past saving ('True\\t' -> False); this
+        one repairs a string the same route merely padded or wrapped in
+        quotes -- the "" that was pasted into Jive to disable the heartbeat
+        and disabled nothing -- and names what it used instead.
+        """
+        self.propnotes = {}
+        self.prop = {}
+        for name in ("HeartbeatAttribute", "InputDevice", "InputAttribute",
+                     "GateDevice", "GateStates", "OutputDevice",
+                     "OnCommand", "OffCommand", "KeepaliveCommand"):
+            self.prop[name] = self._clean_one(name, getattr(self, name, "") or "")
+
+    def _clean_one(self, name, raw):
+        """One property: strip, then peel any matched leading/trailing quote
+        pairs. A change that the operator would not otherwise see -- quotes
+        removed, or a whitespace-only value read as unset -- is recorded in
+        propnotes; a plain strip of surrounding blanks is not worth a note.
+        Returns the cleaned value.
+        """
+        val = raw.strip()
+        peeled = val
+        while (len(peeled) >= 2 and peeled[0] in "\"'"
+               and peeled[-1] == peeled[0]):
+            peeled = peeled[1:-1].strip()
+        if peeled != val:
+            self.propnotes[name] = (
+                "%s was %r in the database; the quotes are not part of the "
+                "value -- using %r. Rewrite it without them."
+                % (name, raw, peeled))
+            return peeled
+        if raw and not val:
+            self.propnotes[name] = (
+                "%s was %r in the database (whitespace only); treated as unset."
+                % (name, raw))
+            return ""
+        return val
+
+    def heartbeat_name(self):
+        """The input attribute to watch for staleness, or "" when detection
+        is off.
+
+        clean_properties has already stripped and de-quoted the stored
+        value; here the word ``none`` (also ``-``) is the off switch. An
+        empty string cannot be the mechanism: PyTango's device_property
+        layer substitutes default_value for an empty value before this
+        server sees it (the database itself stores '' faithfully -- confirmed
+        on production MariaDB -- so this is a PyTango layer, not a database
+        one). A genuine empty string is still honoured, for any layer or
+        version that does deliver one.
+        """
+        raw = self.prop["HeartbeatAttribute"]
+        if raw.strip().lower() in ("none", "-"):
+            return ""
+        return raw
+
     def grants(self, value):
         """Is the input past ThresholdOn, on the safe side?"""
         if self.Reverse:
@@ -571,17 +659,17 @@ class AnalogInterlock(Device):
         yet delays the interlock rather than killing it at start-up."""
         if which == "input":
             if self.inputproxy is None:
-                self.inputproxy = tango.DeviceProxy(self.InputDevice)
+                self.inputproxy = tango.DeviceProxy(self.prop["InputDevice"])
                 self.inputproxy.set_timeout_millis(self.ProxyTimeout)
             return self.inputproxy
         if self.outputproxy is None:
-            self.outputproxy = tango.DeviceProxy(self.OutputDevice)
+            self.outputproxy = tango.DeviceProxy(self.prop["OutputDevice"])
             self.outputproxy.set_timeout_millis(self.ProxyTimeout)
         return self.outputproxy
 
     def gate_proxy(self):
         if self.gateproxy is None:
-            self.gateproxy = tango.DeviceProxy(self.GateDevice)
+            self.gateproxy = tango.DeviceProxy(self.prop["GateDevice"])
             self.gateproxy.set_timeout_millis(self.ProxyTimeout)
         return self.gateproxy
 
@@ -595,8 +683,8 @@ class AnalogInterlock(Device):
         except Exception as exc:
             self.gateproxy = None
             self.gatevalue = "unreadable"
-            self.gatefault = ("gate %s unreadable, evaluating anyway: %s"
-                              % (self.GateDevice, exc))
+            self.gatefault = ("gate %r unreadable, evaluating anyway: %s"
+                              % (self.prop["GateDevice"], exc))
             return True
         self.gatefault = ""
         self.gatevalue = current
@@ -645,8 +733,8 @@ class AnalogInterlock(Device):
         except Exception as exc:
             self.outputproxy = None
             self.set_state(tango.DevState.FAULT)
-            self.set_status("Cannot command %s on %s: %s"
-                            % (cmd, self.OutputDevice, exc))
+            self.set_status("Cannot command %r on %r: %s"
+                            % (cmd, self.prop["OutputDevice"], exc))
             return False
 
     def trip(self, reason, state=tango.DevState.ALARM):
@@ -664,13 +752,13 @@ class AnalogInterlock(Device):
             self.lasttriptime = time.strftime("%Y-%m-%d %H:%M:%S")
             self.lasttripvalue = self.inputvalue
             self.lasttripreason = reason
-        self.send(self.OffCommand)
+        self.send(self.prop["OffCommand"])
         if self.get_state() != tango.DevState.FAULT or state == tango.DevState.FAULT:
             self.set_state(state)
             self.set_status(reason)
 
     def grant(self):
-        if not self.send(self.OnCommand):
+        if not self.send(self.prop["OnCommand"]):
             # send() has already set FAULT and said which command failed. The
             # caller must stop here: falling through to the tail of cycle()
             # would overwrite that with "must rise above", which is both wrong
@@ -684,9 +772,9 @@ class AnalogInterlock(Device):
         self.tripped = False
         self.cyclessincereassert = 0
         self.set_state(tango.DevState.ON)
-        self.set_status("%s granted (%s = %.2f)"
+        self.set_status("%s granted (%r = %.2f)"
                         % ("Watch" if self.WatchOnly else "Permit",
-                           self.InputAttribute, self.inputvalue))
+                           self.prop["InputAttribute"], self.inputvalue))
         return True
 
     def enter_gated(self):
@@ -696,21 +784,22 @@ class AnalogInterlock(Device):
         not by itself drop the permissive. A command-on-trip interlock sets
         no KeepaliveCommand, so this does nothing there."""
         self.gatewasopen = False
-        if self.permit and self.KeepaliveCommand:
-            if not self.send(self.KeepaliveCommand):
+        if self.permit and self.prop["KeepaliveCommand"]:
+            if not self.send(self.prop["KeepaliveCommand"]):
                 return              # send() set FAULT and named the command
         self.set_state(tango.DevState.OFF)
         if self.manuallatch or (self.Latching and self.tripped):
             self.set_status(
-                "Gate %s = %s: not evaluating. A latched trip from before the "
+                "Gate %r = %s: not evaluating. A latched trip from before the "
                 "gate shut is still held; Reset is still required before the "
-                "permissive can return" % (self.GateDevice, self.gatevalue))
+                "permissive can return"
+                % (self.prop["GateDevice"], self.gatevalue))
         elif not self.everread:
-            self.set_status("Gate %s = %s: not evaluating (no reading yet)"
-                            % (self.GateDevice, self.gatevalue))
+            self.set_status("Gate %r = %s: not evaluating (no reading yet)"
+                            % (self.prop["GateDevice"], self.gatevalue))
         else:
-            self.set_status("Gate %s = %s: not evaluating"
-                            % (self.GateDevice, self.gatevalue))
+            self.set_status("Gate %r = %s: not evaluating"
+                            % (self.prop["GateDevice"], self.gatevalue))
 
     def reopen_gate(self):
         """Gate just opened. Re-arm the failure counters so evaluation starts
@@ -732,8 +821,8 @@ class AnalogInterlock(Device):
         would cause the very trip it was meant to prevent. The state is the
         whole operator-visible API: DISABLE while there is time to spare,
         STANDBY inside the final BypassWarnMinutes."""
-        if self.permit and self.KeepaliveCommand:
-            if not self.send(self.KeepaliveCommand):
+        if self.permit and self.prop["KeepaliveCommand"]:
+            if not self.send(self.prop["KeepaliveCommand"]):
                 return               # send() set FAULT and named the command
         remaining = self.bypassuntil - self.now()
         warn = (not self.bypassshort
@@ -751,9 +840,9 @@ class AnalogInterlock(Device):
                         self._stamp(self.bypasssince)))
         if self.tripped:
             text += (". The output was already commanded off and the latch "
-                     "is set; when the bypass ends, Reset then a manual %s "
+                     "is set; when the bypass ends, Reset then a manual %r "
                      "are needed -- the interlock will not raise it for you"
-                     % self.OnCommand)
+                     % self.prop["OnCommand"])
         self.set_status(text)
 
     def cycle(self):
@@ -777,7 +866,7 @@ class AnalogInterlock(Device):
         # --- gate --------------------------------------------------------
         # Cheap early return. With no GateDevice this is a single falsy test
         # and every line below runs exactly as it did before gating existed.
-        if self.GateDevice:
+        if self.prop["GateDevice"]:
             if not self.gate_open():
                 self.enter_gated()
                 return
@@ -787,7 +876,8 @@ class AnalogInterlock(Device):
 
         # --- read the input -------------------------------------------------
         try:
-            reading = self.proxy("input").read_attribute(self.InputAttribute)
+            reading = self.proxy("input").read_attribute(
+                self.prop["InputAttribute"])
             if reading.quality == tango.AttrQuality.ATTR_INVALID:
                 raise ValueError("attribute quality is INVALID")
             value = float(reading.value)
@@ -795,8 +885,9 @@ class AnalogInterlock(Device):
             self.inputproxy = None
             self.readfailures += 1
             if self.readfailures >= self.MaxReadFailures:
-                self.trip("Cannot read %s/%s (%d consecutive failures): %s"
-                          % (self.InputDevice, self.InputAttribute,
+                self.trip("Cannot read %r/%r (%d consecutive failures): %s"
+                          % (self.prop["InputDevice"],
+                             self.prop["InputAttribute"],
                              self.readfailures, exc),
                           tango.DevState.FAULT)
             return
@@ -805,26 +896,28 @@ class AnalogInterlock(Device):
         self.everread = True
 
         # --- is the publisher still alive? ----------------------------------
-        if self.HeartbeatAttribute:
+        heartbeat = self.heartbeat_name()
+        if heartbeat:
+            self.heartbeatoff = ""
             try:
-                beat = self.proxy("input").read_attribute(
-                    self.HeartbeatAttribute).value
+                beat = self.proxy("input").read_attribute(heartbeat).value
                 self.beatfailures = 0
             except Exception as exc:
                 # A heartbeat that is configured but cannot be read is a
                 # failure, not an absent heartbeat. Swallowing it would leave
                 # this server reporting ON while silently unable to tell a live
                 # publisher from a frozen one -- the single thing it exists to
-                # detect. Set HeartbeatAttribute to "" to disable it on purpose.
+                # detect. To turn staleness detection off on purpose, set
+                # HeartbeatAttribute to  none  (the word, no quotes).
                 # Returning here also skips the keepalive below, on purpose:
                 # while the state of the publisher is unknown there is no
                 # reason to go on reassuring the output device's deadman.
                 self.beatfailures += 1
                 if self.beatfailures >= self.MaxReadFailures:
-                    self.trip("Cannot read heartbeat %s/%s (%d consecutive "
+                    self.trip("Cannot read heartbeat %r/%r (%d consecutive "
                               "failures): %s. Staleness cannot be detected, so "
                               "the reading of %.2f cannot be trusted"
-                              % (self.InputDevice, self.HeartbeatAttribute,
+                              % (self.prop["InputDevice"], heartbeat,
                                  self.beatfailures, exc, value),
                               tango.DevState.FAULT)
                 return
@@ -834,11 +927,22 @@ class AnalogInterlock(Device):
                 self.stalecount = 0
                 self.lastheartbeat = beat
             if self.stalecount >= self.StaleCycles:
-                self.trip("%s/%s frozen for %d cycles; the reading of "
+                self.trip("%r/%r frozen for %d cycles; the reading of "
                           "%.2f cannot be trusted"
-                          % (self.InputDevice, self.HeartbeatAttribute,
+                          % (self.prop["InputDevice"], heartbeat,
                              self.stalecount, value))
                 return
+        else:
+            # No heartbeat named. This server cannot then tell a live
+            # publisher from one frozen on its last good value -- the failure
+            # UpdateCount exists to catch. Opt-in by default since the
+            # counter is only on a cached-acquisition input; where it is off,
+            # every status line says so, not just the first.
+            self.heartbeatoff = (
+                "staleness detection is OFF (HeartbeatAttribute=%r): a "
+                "reading frozen by a dead acquisition thread on %r would be "
+                "trusted" % (self.prop["HeartbeatAttribute"],
+                             self.prop["InputDevice"]))
 
         # --- fresh evaluation after a gate reopen or a bypass ending ----
         # A normal cycle only trips out of the granted state. Just after the
@@ -851,8 +955,8 @@ class AnalogInterlock(Device):
             self.cleanslate = False
             latched = self.manuallatch or (self.Latching and self.tripped)
             if not self.permit and not latched and self.withdraws(value):
-                self.trip("re-armed with %s = %.2f already %s ThresholdOff "
-                          "(%.2f)" % (self.InputAttribute, value,
+                self.trip("re-armed with %r = %.2f already %s ThresholdOff "
+                          "(%.2f)" % (self.prop["InputAttribute"], value,
                                       "above" if self.Reverse else "below",
                                       self.ThresholdOff))
                 return
@@ -861,8 +965,8 @@ class AnalogInterlock(Device):
         latched = self.manuallatch or (self.Latching and self.tripped)
         if self.permit:
             if self.withdraws(value):
-                self.trip("%s = %.2f %s ThresholdOff (%.2f)"
-                          % (self.InputAttribute, value,
+                self.trip("%r = %.2f %s ThresholdOff (%.2f)"
+                          % (self.prop["InputAttribute"], value,
                              "above" if self.Reverse else "below",
                              self.ThresholdOff))
                 return
@@ -873,13 +977,13 @@ class AnalogInterlock(Device):
 
         # --- maintain the permissive ----------------------------------------
         if self.permit:
-            if self.KeepaliveCommand:
-                self.send(self.KeepaliveCommand)
+            if self.prop["KeepaliveCommand"]:
+                self.send(self.prop["KeepaliveCommand"])
             if self.ReassertCycles > 0:
                 self.cyclessincereassert += 1
                 if self.cyclessincereassert >= self.ReassertCycles:
                     self.cyclessincereassert = 0
-                    self.send(self.OnCommand)
+                    self.send(self.prop["OnCommand"])
             return
 
         # Not granted and nothing tripped this cycle: the input is readable but
@@ -888,12 +992,12 @@ class AnalogInterlock(Device):
         # leave the device stuck in FAULT while reading perfectly well.
         self.set_state(tango.DevState.ALARM)
         if latched:
-            self.set_status("No permit: latched off, Reset to clear (%s = %.2f)"
-                            % (self.InputAttribute, value))
+            self.set_status("No permit: latched off, Reset to clear (%r = %.2f)"
+                            % (self.prop["InputAttribute"], value))
         else:
-            self.set_status("No %s: %s = %.2f, must %s %.2f"
+            self.set_status("No %s: %r = %.2f, must %s %.2f"
                             % ("watch" if self.WatchOnly else "permit",
-                               self.InputAttribute, value,
+                               self.prop["InputAttribute"], value,
                                "fall below" if self.Reverse else "rise above",
                                self.ThresholdOn))
     # PROTECTED REGION END #    //  AnalogInterlock.protected_methods
@@ -1090,8 +1194,8 @@ class AnalogInterlock(Device):
         if posttrip:
             msg += (". NOTE: the output is already off and the latch set; "
                     "the bypass holds off the interlock but does not raise "
-                    "the output -- Reset then a manual %s once it ends"
-                    % self.OnCommand)
+                    "the output -- Reset then a manual %r once it ends"
+                    % self.prop["OnCommand"])
         return msg
 
     @command(dtype_in='str', dtype_out='str',

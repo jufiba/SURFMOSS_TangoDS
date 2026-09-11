@@ -66,7 +66,8 @@ def build_fake(cls):
     class Fake(cls):
         InputDevice = "stub/in/1"
         InputAttribute = "flow"
-        HeartbeatAttribute = ""
+        HeartbeatAttribute = "UpdateCount"   # decision tests want it on and
+        #                                      quiet; sentinel() overrides it
         OutputDevice = "stub/out/1"
         OnCommand = "On"
         OffCommand = "Off"
@@ -94,6 +95,7 @@ def build_fake(cls):
             self.status = ""
             for key, val in kw.items():
                 setattr(self, key, val)
+            self.clean_properties()          # sets self.prop and self.propnotes
             self.inputvalue = float("nan")
             self.permit = False
             self.tripped = False
@@ -116,6 +118,7 @@ def build_fake(cls):
             self.gatevalue = ""
             self.gatewarn = ""
             self.gatefault = ""
+            self.heartbeatoff = ""
             self.everread = False
             self.lock = threading.Lock()
             self.bypassuntil = 0.0
@@ -133,6 +136,17 @@ def build_fake(cls):
             return self.state
 
         def set_status(self, status):
+            # Mirror the real set_status: the standing notes are prepended so
+            # a test can see an altered property or a dead gate in Status.
+            # With clean config every note is empty and status is unchanged.
+            for note in (getattr(self, "gatefault", ""),
+                         getattr(self, "gatewarn", ""),
+                         getattr(self, "heartbeatoff", "")):
+                if note:
+                    status = note + "\n" + status
+            for note in getattr(self, "propnotes", {}).values():
+                if note:
+                    status = note + "\n" + status
             self.status = status
 
         def proxy(self, which):
@@ -162,7 +176,7 @@ def decisions(cls):
     check("below ThresholdOn -> no permit", dev.permit, False)
     check("state", dev.state, tango.DevState.ALARM)
     check("status", dev.status,
-          "No permit: flow = 5.00, must rise above 9.00")
+          "No permit: 'flow' = 5.00, must rise above 9.00")
     dev.value = 10.0
     dev.cycle()
     check("above ThresholdOn -> permit", dev.permit, True)
@@ -176,7 +190,7 @@ def decisions(cls):
     check("below ThresholdOff -> tripped", (dev.permit, dev.tripped),
           (False, True))
     check("reason", dev.lasttripreason,
-          "flow = 7.00 below ThresholdOff (8.00)")
+          "'flow' = 7.00 below ThresholdOff (8.00)")
     check("Off sent", dev.sent[-1], "Off")
 
     print("\nreverse: the input must stay low")
@@ -186,7 +200,7 @@ def decisions(cls):
     dev.cycle()
     check("above ThresholdOn -> no permit", dev.permit, False)
     check("status", dev.status,
-          "No permit: temperature = 40.00, must fall below 30.00")
+          "No permit: 'temperature' = 40.00, must fall below 30.00")
     dev.value = 25.0
     dev.cycle()
     check("below ThresholdOn -> permit", dev.permit, True)
@@ -198,7 +212,7 @@ def decisions(cls):
     check("above ThresholdOff -> tripped", (dev.permit, dev.tripped),
           (False, True))
     check("reason", dev.lasttripreason,
-          "temperature = 36.00 above ThresholdOff (35.00)")
+          "'temperature' = 36.00 above ThresholdOff (35.00)")
 
     print("\nwatch only: the same decisions, no commands at all")
     dev = Fake(WatchOnly=True, OutputDevice="")
@@ -206,7 +220,7 @@ def decisions(cls):
     dev.cycle()
     check("granted", dev.permit, True)
     check("state", dev.state, tango.DevState.ON)
-    check("status says watch", dev.status, "Watch granted (flow = 10.00)")
+    check("status says watch", dev.status, "Watch granted ('flow' = 10.00)")
     check("nothing commanded", dev.sent, [])
     dev.value = 7.0
     dev.cycle()
@@ -221,9 +235,84 @@ def decisions(cls):
     check("not granted", dev.permit, False)
     check("state is FAULT", dev.state, tango.DevState.FAULT)
     check("the status names the command",
-          dev.status.startswith("Cannot command On on"), True)
+          dev.status.startswith("Cannot command 'On' on"), True)
     check("and does not lie about the threshold",
           "must rise above" in dev.status, False)
+
+
+def sentinel(cls):
+    """HeartbeatAttribute's off switch, and the quote / whitespace repair
+    clean_properties does to every str property. Written for the third
+    property-parsing incident: '' pasted into Jive to disable the heartbeat,
+    stored as the two-character "", which is truthy and disabled nothing.
+    """
+    Fake = build_fake(cls)
+
+    print("\nheartbeat off switch: 'none', '-', empty, whitespace")
+    for spelling in ("none", "None", "NONE", " none ", "-", " - "):
+        d = Fake(HeartbeatAttribute=spelling)
+        check("%-8r disables staleness" % spelling, d.heartbeat_name(), "")
+    check("'' disables (unit level)",
+          Fake(HeartbeatAttribute="").heartbeat_name(), "")
+    check("whitespace-only disables",
+          Fake(HeartbeatAttribute="   ").heartbeat_name(), "")
+    check("plain 'none' is not flagged as altered",
+          "HeartbeatAttribute" in Fake(HeartbeatAttribute="none").propnotes,
+          False)
+
+    print("\nliteral quotes detected, unwrapped, and shown in Status")
+    d = Fake(HeartbeatAttribute='""')
+    check("'\"\"' -> disabled", d.heartbeat_name(), "")
+    check("'\"\"' -> altered-value note recorded",
+          "HeartbeatAttribute" in d.propnotes, True)
+    d.set_status("body")
+    check("'\"\"' -> note reaches Status every line",
+          d.status.startswith("HeartbeatAttribute was") and
+          d.status.endswith("\nbody"), True)
+    check("\"''\" -> disabled",
+          Fake(HeartbeatAttribute="''").heartbeat_name(), "")
+    d = Fake(HeartbeatAttribute='"UpdateCount"')
+    check("'\"UpdateCount\"' -> UpdateCount", d.heartbeat_name(), "UpdateCount")
+    check("  and the unwrap is noted", "HeartbeatAttribute" in d.propnotes, True)
+    d = Fake(HeartbeatAttribute="  UpdateCount  ")
+    check("padded -> stripped and used", d.heartbeat_name(), "UpdateCount")
+    check("  a plain strip is not noted",
+          "HeartbeatAttribute" in d.propnotes, False)
+
+    print("\nheartbeat off -> Status says so, on every cycle not just the first")
+    d = Fake(HeartbeatAttribute="none", WatchOnly=True, OutputDevice="")
+    d.value = 12.0
+    d.cycle()
+    first = d.status
+    d.cycle()
+    check("cycle 1 Status carries the OFF note",
+          first.startswith("staleness detection is OFF"), True)
+    check("cycle 2 Status still carries it",
+          d.status.startswith("staleness detection is OFF"), True)
+    check("the note names the input device", "'stub/in/1'" in d.status, True)
+    on = Fake(HeartbeatAttribute="UpdateCount", WatchOnly=True, OutputDevice="")
+    on.value = 12.0
+    on.cycle()
+    check("a named heartbeat leaves no OFF note", on.heartbeatoff, "")
+
+    print("\na configured but unreadable heartbeat still trips FAULT")
+
+    class NoBeat(Fake):
+        def read_attribute(self, name):
+            if name == "UpdateCount":
+                raise tango.DevFailed("no such attribute")
+            r = type("R", (), {})()
+            r.value, r.quality = self.value, tango.AttrQuality.ATTR_VALID
+            return r
+
+    d = NoBeat(HeartbeatAttribute="UpdateCount", MaxReadFailures=3)
+    d.value = 12.0
+    for _ in range(3):
+        d.cycle()
+    check("state", d.state, tango.DevState.FAULT)
+    check("reason names the heartbeat, in repr",
+          "heartbeat" in d.lasttripreason and
+          "'UpdateCount'" in d.lasttripreason, True)
 
 
 PORT = 10123
@@ -309,6 +398,7 @@ def main(argv):
     from AnalogInterlock.AnalogInterlock import AnalogInterlock
 
     decisions(AnalogInterlock)
+    sentinel(AnalogInterlock)
     refusals(repo)
 
     print("\n%s" % ("FAILURES: %d" % FAILS if FAILS else "all checks passed"))
