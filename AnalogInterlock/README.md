@@ -66,11 +66,42 @@ named attribute over a positional one like `channel0`: if the channel order on
 the flowmeter is ever changed, a named attribute simply disappears and this
 server faults, whereas `channel0` silently starts watching a different line.
 
-**`HeartbeatAttribute`** (`UpdateCount`) — a counter on `InputDevice` that
-advances once per acquisition cycle. It is how the server tells a healthy
-reading from a dead acquisition thread handing back its last good value forever.
-Empty string turns staleness detection off on purpose; a name that points at
-nothing is a fault, not an off switch (see _Failure modes_).
+**`HeartbeatAttribute`** (`none`) — a counter on `InputDevice` that advances
+once per acquisition cycle. Name it and the server tells a healthy reading from
+a dead acquisition thread handing back its last good value forever; it trips
+after `StaleCycles` if the counter stops.
+
+Staleness detection is **opt-in**, and which family of input you have decides
+whether to opt in:
+
+- **Cached-acquisition input** — a `SEAWaterflowmeter`, which reads GPIO in its
+  own loop and serves the last value. Its characteristic failure is that loop
+  dying while the server stays up and `State` stays `ON`: the flow freezes and
+  nothing looks wrong. Name `HeartbeatAttribute` here — it is `UpdateCount`,
+  and it is the only defence against that failure.
+- **Read-on-demand input** — a serial or socket pump controller that talks to
+  the hardware inside each `read_*`. There is no cached value to freeze; a dead
+  instrument raises and the interlock already reports it as `FAULT`. Leave
+  `HeartbeatAttribute` at `none` — a counter there would be decorative.
+
+The off switch is the word `none` (or `-`), no quotes. A name that points at
+nothing is a fault, not an off switch (see _Failure modes_). An empty string is
+honoured if a database layer delivers one, but PyTango substitutes the default
+for an empty value before the server sees it, so it cannot be relied on — use
+the word.
+
+When the heartbeat is off, every status line says so: _staleness detection is
+OFF … a frozen reading would be trusted_. It is not raised in `State` — an
+`AlarmNotifier` rule wanting to catch it should match the status text, not a
+state, so that a healthy read-on-demand interlock is not parked permanently in
+`ALARM`.
+
+**Migration note.** Changing this default from `UpdateCount` to `none`
+(10-Sep-2026) silently disables staleness detection on any interlock that was
+relying on the default — which was every `SEAWaterflowmeter` input in the lab.
+The explicit `HeartbeatAttribute=UpdateCount` was written to the six affected
+devices **before** the code change; it must never be applied after. See
+_Registration_ for the list.
 
 ### Whether it evaluates at all
 
@@ -369,6 +400,35 @@ Note what this does *not* catch: a `'False\t'` meaning `false` is accepted,
 because the value in force and the value intended agree. The string is just as
 dirty and will bite whoever next edits it to `true`.
 
+### The disable that never disabled
+
+`leem/warn/turbotemp` watches `leem/vacuum/turboPCH`, a turbo controller that
+has no `UpdateCount`, so its heartbeat had to be switched off. The property doc
+said an empty string does that, and an empty string was entered in Jive — as
+`""`, the two quote characters. That is a non-empty string, so the guard passed
+and the server asked its input for an attribute literally named `""`. The error
+came back as `attribute "" not found`, indistinguishable from *the name was
+blank*: the bug wore its own diagnosis, and cost a day.
+
+Entered as a genuine empty string it fared no better. The database stores `''`
+faithfully, but PyTango's `device_property` layer substitutes `default_value`
+for an empty value before the server sees it, so the device asked for
+`UpdateCount` — 181 consecutive faults on a turbo that does not publish one.
+The off switch the code documented could not be written from the database at
+all.
+
+Since 10-Sep-2026 the off switch is the **word** `none` (or `-`), which stores
+and round-trips intact (see `HeartbeatAttribute` above). Alongside it,
+`init_device()` now runs `clean_properties()` over every string property used
+as a name or an enumerated value — `HeartbeatAttribute`, `InputDevice`,
+`InputAttribute`, `GateDevice`, `GateStates`, `OutputDevice` and the three
+command names. Each is stripped; a value wrapped in a matched pair of quotes is
+unwrapped and the value actually used is named in a standing status line, so
+`""` now reads as *disabled, and here is why your value was changed* rather than
+as a mystery attribute. Every status and error message that quotes a property
+value or an attribute name now uses `repr()`: `attribute '""'` is legible where
+`attribute ""` was not.
+
 ## The trip that was the resting state
 
 There are three shapes this server runs in, and they do not fail the same way.
@@ -550,12 +610,14 @@ bypass is in place.
 | input past `ThresholdOff`  | de-assert, ALARM                             |
 | input unreadable/INVALID   | de-assert after `MaxReadFailures`, FAULT     |
 | heartbeat unreadable       | de-assert after `MaxReadFailures`, FAULT     |
-| input publisher frozen     | de-assert after `StaleCycles`, ALARM         |
+| input publisher frozen     | de-assert after `StaleCycles`, ALARM (only if `HeartbeatAttribute` is named) |
+| no `HeartbeatAttribute` named (the default) | staleness not checked; every status line says so |
 | this server dies (permissive) | keepalives stop, output device's deadman fires |
 | this server dies (command-on-trip) | no `OutputOff` is ever sent; only an `AlarmNotifier` rule on `State` and `UpdateCount` catches it |
 | output device unreachable  | FAULT; nothing else is possible from here    |
 | output command refused     | FAULT, not granted; the status names the command |
 | bool property mangled in the database | refused at start-up; the status quotes the string |
+| str property quoted or whitespace-padded in the database | stripped and de-quoted at start-up; a status line names the value actually used |
 | gate device outside `GateStates` | `OFF`, not evaluating; a latched trip is held |
 | gate device unreadable     | evaluated anyway (fail towards acting); the status says the gate could not be read |
 | `GateStates` invalid, or set without `GateDevice` | refused at start-up; the status names the value |
@@ -565,13 +627,15 @@ bypass is in place.
 The frozen-publisher case is the one neither the cron script nor a naive
 port could catch: a dead acquisition thread keeps returning its last good
 reading, which is indistinguishable from healthy flow. `UpdateCount` is what
-makes it visible.
+makes it visible — but only on an interlock that names it, which since
+10-Sep-2026 is not the default (see `HeartbeatAttribute` above). Where it is
+not named, every status line says staleness detection is off.
 
 A heartbeat that is **configured but unreadable** counts as a failure, not as an
 absent heartbeat. Pointing `HeartbeatAttribute` at something that does not exist
 — an older `SEAWaterflowmeter` without `UpdateCount`, say — therefore faults
 loudly instead of leaving the server ON with its staleness detection silently
-switched off. To run without it on purpose, set the property to the empty string.
+switched off. To run without it on purpose, set the property to `none` (or `-`).
 
 ### Timing
 
