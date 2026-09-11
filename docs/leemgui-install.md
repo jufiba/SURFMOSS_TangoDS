@@ -155,6 +155,7 @@ copy would silently win over the checkout. Delete such copies.
 | `from LEEMmacros import *` hangs, or `DevFailed … TRANSIENT_CallTimedout` / `DB_DeviceNotDefined` | `TANGO_HOST` unset or the database unreachable. See _Point it at the instrument_. |
 | `could not load the Qt platform plugin "xcb"` | missing xcb runtime libs: `sudo apt install libxcb-cursor0 libxkbcommon-x11-0`. Diagnose with `QT_DEBUG_PLUGINS=1`. |
 | Window never appears, no error | no display. `echo "$DISPLAY $WAYLAND_DISPLAY"`; on Windows 10 start an X server and set `DISPLAY`. |
+| `leemgui` reaches the `In [1]:` prompt but no panel opens, and a display *is* available | checkout predates v3.10, where `leem_gui_main()` dropped the `QApplication` it created as soon as `gui()` returned, taking the window with it. `git pull`. Affects IPython 8 and 9 alike. |
 | apt-installed modules not found by IPython | IPython is in a virtualenv without `--system-site-packages`. Use the system IPython, or `pip install` the deps into the venv. |
 | `leemgui: WARNING …/LEEMmacros.py DIFFERS …` | a stale copy in the data directory is the one being imported. Delete `$LEEM_RUNDIR/LEEMmacros.py` and `$LEEM_RUNDIR/LEEMgui.py`. |
 | segfault when exiting the IPython session | omniORB / interpreter-finalisation race; `LEEMmacros` registers an `atexit` `tango.ApiUtil.cleanup()` for it. If it still happens, update the checkout. |
