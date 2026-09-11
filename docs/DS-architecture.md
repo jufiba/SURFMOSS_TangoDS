@@ -302,6 +302,40 @@ combinations of `Reverse` x `WatchOnly` plus the refused-command case, and the
 three start-up refusals against a real server run from a `-file=` database.
 Neither test touches the live chains.
 
+### Update, 11-Sep-2026: the same class of bug, the other direction
+
+Found testing the new `GateDevice`/`GateStates` gate live on
+`leem/warn/turbotemp` and `leem/safety/interlockhv1`. Where section 3's bug
+was a later line overwriting a correct diagnosis, this one is a later cycle
+that should have overwritten a stale one and didn't: reopening the gate — or
+a bypass ending — while the permit granted before the closure was still good
+left `State`/`Status` stuck at `OFF` / `Gate ... not evaluating` (or
+`DISABLE`) forever.
+
+The gate itself was never stale — `gate_open()` re-reads the gate device on
+every cycle. What was missing is that `cycle()`'s *maintain the permissive*
+tail, reached whenever the permit is already granted and stays that way, only
+sent `Keepalive` and returned. Normally that is correct: the device is
+already showing `ON` from the cycle that granted it, so there is nothing to
+refresh. But `enter_gated()`/`serve_bypass()` had in the meantime forced
+`State`/`Status` to something else, and because the permit itself never
+changed, neither `grant()` nor `trip()` ever ran again to put the display
+back — the one code path that could have refreshed it never fires when there
+is nothing new to grant or trip.
+
+The fix: that tail now refreshes `State`/`Status` to the granted values on
+every cycle it runs, exactly as the *no permit* tail at the bottom of
+`cycle()` already refreshes `ALARM` unconditionally rather than only on a
+fresh trip — the asymmetry was that one tail self-healed every cycle and the
+other only healed on a transition. The `send()` failure guard this section's
+original bug turned on (`if not self.send(...): return`) is what keeps a
+`Keepalive`/reassert `FAULT` from being overwritten by the new refresh, same
+as `grant()`.
+
+Tested by `gate()` in `tools/test_analoginterlock.py`: a stub gate device
+driving both shapes — reopened gate, ended bypass — with the permit held
+across each. Neither touches a live chain.
+
 ---
 
 ## 4. A read with no deadline, inside the serialization monitor
