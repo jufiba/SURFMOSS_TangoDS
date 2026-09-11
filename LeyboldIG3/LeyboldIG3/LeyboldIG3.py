@@ -160,6 +160,11 @@ class LeyboldIG3(Device):
 
     def always_executed_hook(self):
         # PROTECTED REGION ID(LeyboldIG3.always_executed_hook) ENABLED START #
+        # Read-on-demand: every read_* talks to the hardware when called, no
+        # background loop and no cached value to freeze. UpdateCount would be
+        # decorative here -- a count of client reads, not a heartbeat -- so
+        # none is published; a dead instrument surfaces as an unreadable
+        # attribute, which AnalogInterlock already reports as FAULT.
         pass
         # PROTECTED REGION END #    //  LeyboldIG3.always_executed_hook
 

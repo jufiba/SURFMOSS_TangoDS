@@ -201,6 +201,11 @@ class GranvillePhillips350(Device):
             self.ser.close()
 
     def always_executed_hook(self):
+        # Read-on-demand: every read_* talks to the hardware when called, no
+        # background loop and no cached value to freeze. UpdateCount would be
+        # decorative here -- a count of client reads, not a heartbeat -- so
+        # none is published; a dead instrument surfaces as an unreadable
+        # attribute, which AnalogInterlock already reports as FAULT.
         pass
 
     # ------------------

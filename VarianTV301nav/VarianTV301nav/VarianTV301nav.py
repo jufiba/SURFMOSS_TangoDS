@@ -212,6 +212,13 @@ class VarianTV301nav(Device):
         # PROTECTED REGION END #    //  VarianTV301nav.init_device
     def always_executed_hook(self):
         # PROTECTED REGION ID(VarianTV301nav.always_executed_hook) ENABLED START #
+        # Read-on-demand, like its siblings (no UpdateCount -- see the other
+        # vacuum servers). Unlike them, readcommand() has no checksum, no
+        # input-buffer flush and no check that a reply answers the window
+        # asked -- a lagging port can hand one attribute's reply to another
+        # (e.g. read_power's answer read back as read_temperature) and it
+        # parses silently. A live defect independent of any interlock; fix
+        # the framing before any caching work here.
         pass
         # PROTECTED REGION END #    //  VarianTV301nav.always_executed_hook
 
