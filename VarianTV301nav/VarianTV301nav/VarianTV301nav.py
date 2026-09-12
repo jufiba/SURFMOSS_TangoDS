@@ -31,6 +31,10 @@ import serial
 __all__ = ["VarianTV301nav", "main"]
 
 
+class VarianError(Exception):
+    pass
+
+
 class VarianTV301nav(Device):
     """
     Driver for interfacing with the Varian/Agilent TV301 Navigator pump with integrated controller.
@@ -46,10 +50,50 @@ class VarianTV301nav(Device):
         return(self.ser.read(6)[2])
 
     def readcommand(self,win,nb):
+        """Send a window-read request and return its validated data field.
+
+        Frame: STX ADDR WIN(3) COM DATA(n) ETX CRC(2), confirmed against the
+        controller manual ("RS 232/RS 485 COMMUNICATION DESCRIPTION"): a read
+        reply mirrors the request, so WIN and COM are echoed and DATA holds
+        the value. Every field but DATA is checked before anything is
+        trusted: STX marks the frame start, WIN and COM confirm this is the
+        reply to *this* request and not a stale or mismatched one still in
+        the pipe -- the failure mode where read_power's reply could be read
+        back as read_temperature, both being 6 ASCII digits at the same
+        offset with nothing checking which window answered -- and the CRC is
+        the same XOR crc_code() computes for outgoing frames, verified by
+        hand against the manual's own worked example. Any mismatch raises
+        VarianError; nothing downstream sees an unvalidated byte.
+        """
+        self.ser.reset_input_buffer()
         cmd=b'\x02\x80'+win.encode("ascii")+b'\x30\x03'
         full_cmd=cmd+self.crc_code(cmd).encode("ascii")
         self.ser.write(full_cmd)
-        return(self.ser.read(nb).decode("ascii"))
+        resp=self.ser.read(nb)
+        if len(resp)!=nb:
+            raise VarianError("short reply to window %s: %d of %d bytes "
+                              "arrived (timeout, cable, or wrong baud rate)"
+                              %(win,len(resp),nb))
+        if resp[0:1]!=b'\x02':
+            raise VarianError("reply to window %s does not start with STX: "
+                              "%r"%(win,resp))
+        rwin=resp[2:5].decode("ascii","replace")
+        if rwin!=win:
+            raise VarianError("asked for window %s and the reply is for %s "
+                              "(the exchange is out of step)"%(win,rwin))
+        if resp[5:6]!=b'0':
+            raise VarianError("reply to window %s is not a read reply: "
+                              "command byte %r"%(win,resp[5:6]))
+        if resp[-3:-2]!=b'\x03':
+            raise VarianError("reply to window %s has no ETX where expected "
+                              "-- the frame is not %d bytes for this window"
+                              %(win,nb))
+        rcrc=resp[-2:].decode("ascii","replace")
+        want=self.crc_code(resp[:-2])
+        if rcrc.lower()!=want.lower():
+            raise VarianError("checksum mismatch on the reply to window %s: "
+                              "computed %s, received %s"%(win,want,rcrc))
+        return resp[6:-3].decode("ascii")
 
     def crc_code(self,a):
         result=0
@@ -212,13 +256,11 @@ class VarianTV301nav(Device):
         # PROTECTED REGION END #    //  VarianTV301nav.init_device
     def always_executed_hook(self):
         # PROTECTED REGION ID(VarianTV301nav.always_executed_hook) ENABLED START #
-        # Read-on-demand, like its siblings (no UpdateCount -- see the other
-        # vacuum servers). Unlike them, readcommand() has no checksum, no
-        # input-buffer flush and no check that a reply answers the window
-        # asked -- a lagging port can hand one attribute's reply to another
-        # (e.g. read_power's answer read back as read_temperature) and it
-        # parses silently. A live defect independent of any interlock; fix
-        # the framing before any caching work here.
+        # Read-on-demand: every read_* talks to the hardware when called, no
+        # background loop and no cached value to freeze. UpdateCount would be
+        # decorative here -- a count of client reads, not a heartbeat -- so
+        # none is published; a dead instrument surfaces as an unreadable
+        # attribute, which AnalogInterlock already reports as FAULT.
         pass
         # PROTECTED REGION END #    //  VarianTV301nav.always_executed_hook
 
@@ -234,8 +276,7 @@ class VarianTV301nav(Device):
         # PROTECTED REGION END #    //  VarianTV301nav.delete_device
     def read_setSpeed(self):
         # PROTECTED REGION ID(VarianTV301nav.setSpeed_read) ENABLED START #
-        response=self.readcommand("120",15)
-        return(int(response[6:12]))
+        return(int(self.readcommand("120",15)))
         # PROTECTED REGION END #    //  VarianTV301nav.setSpeed_read
 
     def write_setSpeed(self, value):
@@ -254,25 +295,22 @@ class VarianTV301nav(Device):
 
     def read_temperature(self):
         # PROTECTED REGION ID(VarianTV301nav.temperature_read) ENABLED START #
-        response=self.readcommand("204",15)
-        return(int(response[6:12]))
+        return(int(self.readcommand("204",15)))
         # PROTECTED REGION END #    //  VarianTV301nav.temperature_read
 
     def read_power(self):
         # PROTECTED REGION ID(VarianTV301nav.power_read) ENABLED START #
-        response=self.readcommand("202",15)
-        return(int(response[6:12]))
+        return(int(self.readcommand("202",15)))
         # PROTECTED REGION END #    //  VarianTV301nav.power_read
 
     def read_turboStatus(self):
         # PROTECTED REGION ID(VarianTV301nav.turboStatus_read) ENABLED START #
-        response=self.readcommand("205",15)
-        return(self.status_code[int(response[6:12])])
+        return(self.status_code[int(self.readcommand("205",15))])
         # PROTECTED REGION END #    //  VarianTV301nav.turboStatus_read
 
     def read_running(self):
         # PROTECTED REGION ID(VarianTV301nav.running_read) ENABLED START #
-        response=int(self.readcommand("000",10)[6:7])
+        response=int(self.readcommand("000",10))
         if (response==0):
             return False
         else:
@@ -289,7 +327,7 @@ class VarianTV301nav(Device):
 
     def read_valveOperation(self):
         # PROTECTED REGION ID(VarianTV301nav.valveOperation_read) ENABLED START #
-        response=int(self.readcommand("125",10)[6:7])
+        response=int(self.readcommand("125",10))
         if (response==0):
             return False
         elif (response==1):
@@ -307,7 +345,7 @@ class VarianTV301nav(Device):
 
     def read_ventValve(self):
         # PROTECTED REGION ID(VarianTV301nav.ventValve_read) ENABLED START #
-        response=int(self.readcommand("122",10)[6:7])
+        response=int(self.readcommand("122",10))
         if (response==0):
             return False
         elif (response==1):
@@ -325,26 +363,31 @@ class VarianTV301nav(Device):
 
     def read_errorCode(self):
         # PROTECTED REGION ID(VarianTV301nav.errorCode_read) ENABLED START #
-        response=self.readcommand("125",10)
-        return(int(response[6:7]))
+        # Window 206 ("Error code", Numeric, 6 bytes) per the controller
+        # manual -- this used to read window 125 ("Set the vent valve
+        # operation", Logic, 1 byte), the same window read_valveOperation
+        # reads, so this attribute never reported a fault code: only ever 0
+        # or 1, borrowed from the wrong window. Window 206 is an 8-bit fault
+        # mask (NO CONNECTION / PUMP OVERTEMP / CONTROLL. OVERTEMP /
+        # POWER FAIL / AUX FAIL / OVERVOLTAGE / SHORT CIRCUIT / TOO HIGH
+        # LOAD per the manual's bit figure); returned raw here, as
+        # turboStatus's code is the only one decoded in this server.
+        return(int(self.readcommand("206",15)))
         # PROTECTED REGION END #    //  VarianTV301nav.errorCode_read
 
     def read_current(self):
         # PROTECTED REGION ID(VarianTV301nav.current_read) ENABLED START #
-        response=self.readcommand("200",15)
-        return(int(response[6:12]))
+        return(int(self.readcommand("200",15)))
         # PROTECTED REGION END #    //  VarianTV301nav.current_read
 
     def read_voltage(self):
         # PROTECTED REGION ID(VarianTV301nav.voltage_read) ENABLED START #
-        response=self.readcommand("201",15)
-        return(int(response[6:12]))
+        return(int(self.readcommand("201",15)))
         # PROTECTED REGION END #    //  VarianTV301nav.voltage_read
 
     def read_frequency(self):
         # PROTECTED REGION ID(VarianTV301nav.frequency_read) ENABLED START #
-        response=self.readcommand("203",15)
-        return(int(response[6:12]))
+        return(int(self.readcommand("203",15)))
         # PROTECTED REGION END #    //  VarianTV301nav.frequency_read
 
 
