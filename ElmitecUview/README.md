@@ -27,7 +27,7 @@ tokens:
 | `giw` / `gih` / `bin` | image width / height / binning |
 | `asi -1` | acquire a single image |
 | `exp 0,0,<path>` / `exp 1,2,<path>` | save the current image as `.dat` / `.png` |
-| ROI intensity queries | → `IntensityROI1` / `IntensityROI2` (change events) |
+| `roi 1` / `roi 2` | ROI intensity → `IntensityROI1` / `IntensityROI2` (change events) |
 
 ## Interface
 
@@ -44,6 +44,20 @@ tokens:
 
 ## Notes
 
+- **`IntensityROI1`/`IntensityROI2` raised `AttributeError` on every read**
+  (found 11-Sep-2026, `leem/measurement/Uview`): both called
+  `self.getROIdata(roiid)`, a method that was never defined anywhere in the
+  file. UView itself answered fine the whole time (`roi 1` / `roi 2` gave
+  `0.350777` / `0.350592`, checked live through `sendCommand`); nothing was
+  wrong with the instrument or the connection, only the missing method.
+  `getROIdata` now sends `roi $ROIid` and returns the value exactly as UView
+  reports it — a percentage of full range already, in this UView build,
+  despite `Software_UViewScript.pdf`'s "ROIdata TCP" section describing an
+  additional ×100 that this build's replies do not need. UView's own error
+  replies (a negative value, or the text `ErrorCode $n`) raise
+  `ElmitecUviewError` with the documented reason (intensity window not open
+  / ROI invalid / ROI not active) rather than handing a client a number that
+  reads as a valid, very wrong, intensity.
 - **Reconnect thread.** UView is restarted often; a `_Reconnect` thread
   rebuilds the socket every `ReconnectPeriod` while it is down, so a UView
   restart no longer needs this server restarted.

@@ -105,6 +105,33 @@ class ElmitecUview(Device):
             self._drop("could not send to UView: %s" % e)
             raise ElmitecUviewError("could not send to UView: %s" % e)
 
+    def getROIdata(self, roiid):
+        """Intensity in ROI `roiid` (1 or 2), as UView reports it.
+
+        Protocol: send "roi $ROIid", receive "$value" -- >=0.0 is a reading,
+        <0.0 or the text "ErrorCode $n" is UView refusing (Software_UView
+        Script.pdf, "ROIdata TCP"): -1 the intensity window is not open, -2
+        the ROI is invalid, -3 it is defined but not active. Confirmed live
+        on leem/measurement/Uview: 0.350777, already a percentage of full
+        range in this UView build (the manual's "multiplied by 100" wording
+        notwithstanding) -- returned exactly as UView sends it, no rescaling.
+
+        read_IntensityROI1/2 called this and it did not exist, so both
+        attributes raised AttributeError on every read.
+        """
+        self._send(("roi %d" % roiid).encode("ascii"))
+        data = self.TCPBlockingReceive().strip()
+        if data.startswith("ErrorCode"):
+            raise ElmitecUviewError("UView refused ROI %d: %s" % (roiid, data))
+        value = float(data)
+        if value < 0.0:
+            reason = {-1: "the intensity window is not open",
+                      -2: "ROI %d is invalid" % roiid,
+                      -3: "ROI %d is defined but not active" % roiid,
+                      }.get(int(value), "unrecognised error %g" % value)
+            raise ElmitecUviewError("UView: %s" % reason)
+        return value
+
     def _drop(self, why):
         """Forget the connection; the reconnect thread will rebuild it."""
         self.ElmitecUviewConnected = False
