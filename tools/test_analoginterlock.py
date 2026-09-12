@@ -315,6 +315,78 @@ def sentinel(cls):
           "'UpdateCount'" in d.lasttripreason, True)
 
 
+class _GateStub:
+    """Just enough of a DeviceProxy for gate_open(): a .state() to read."""
+
+    def __init__(self):
+        self.st = tango.DevState.OFF
+
+    def state(self):
+        return self.st
+
+
+def gate(cls):
+    """GateDevice / GateStates. The gate itself is rechecked every cycle --
+    gate_open() reads the stub fresh each time -- but until 11-Sep-2026
+    nothing put State/Status back once the gate reopened, or a bypass ended,
+    while a permit granted before the closure was carried straight through
+    underneath: cycle()'s 'maintain the permissive' tail only sent Keepalive
+    and returned, since neither grant() nor trip() had anything to do. Found
+    on leem/warn/turbotemp and leem/safety/interlockhv1, both of which can
+    sit safely granted across a gate cycle. See docs/DS-architecture.md
+    section 3.
+    """
+    Base = build_fake(cls)
+
+    class Gated(Base):
+        GateDevice = "stub/gate/1"
+        GateStates = "ON"
+
+        def __init__(self, **kw):
+            super().__init__(**kw)
+            self.gate = _GateStub()
+            err = self.gate_config()      # populate self.gatestates, as
+            assert err is None, err       # init_device does
+
+        def gate_proxy(self):
+            return self.gate
+
+    print("\ngate: reopening while a permit is carried through must not get "
+          "stuck")
+    dev = Gated()
+    dev.value = 10.0                      # stays on the safe side throughout
+    dev.gate.st = tango.DevState.ON
+    dev.cycle()
+    check("gate open -> granted", (dev.state, dev.permit),
+          (tango.DevState.ON, True))
+    dev.gate.st = tango.DevState.OFF
+    dev.cycle()
+    check("gate shuts -> OFF, not evaluating, permit held underneath",
+          (dev.state, dev.permit), (tango.DevState.OFF, True))
+    check("status says not evaluating",
+          "not evaluating" in dev.status, True)
+    dev.gate.st = tango.DevState.ON
+    dev.cycle()
+    check("gate reopens, still safe -> ON restored, not stuck at OFF",
+          (dev.state, dev.permit), (tango.DevState.ON, True))
+    check("status says granted again",
+          dev.status, "Permit granted ('flow' = 10.00)")
+
+    print("\nbypass ending while a permit is carried through: same fix")
+    dev2 = Base()
+    dev2.value = 10.0
+    dev2.cycle()
+    dev2.bypassuntil = dev2.now() + 3600.0
+    dev2.bypasssince = dev2.now()
+    dev2.cycle()
+    check("bypassed -> DISABLE, permit held underneath",
+          (dev2.state, dev2.permit), (tango.DevState.DISABLE, True))
+    dev2.bypassuntil = dev2.now() - 1.0   # force expiry
+    dev2.cycle()
+    check("bypass ends, still safe -> ON restored, not stuck at DISABLE",
+          (dev2.state, dev2.permit), (tango.DevState.ON, True))
+
+
 PORT = 10123
 NAME = "mossbauer/test/interlock"
 
@@ -399,6 +471,7 @@ def main(argv):
 
     decisions(AnalogInterlock)
     sentinel(AnalogInterlock)
+    gate(AnalogInterlock)
     refusals(repo)
 
     print("\n%s" % ("FAILURES: %d" % FAILS if FAILS else "all checks passed"))
