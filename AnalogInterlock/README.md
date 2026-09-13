@@ -478,6 +478,41 @@ opens and evaluation restarts clean; switch it on with the water still closed
 and the interlock trips at once and sends `OutputOff`, which is correct — that
 is a real attempt to run the gun with no cooling.
 
+### The display that stayed shut after the gate reopened
+
+Found 11-Sep-2026, testing the gate live on `leem/warn/turbotemp` and
+`leem/safety/interlockhv1`. Both can sit granted across a gate cycle — the
+turbo stays hot with the gate open, hv1 stays on with the doser water good —
+and in that case reopening the gate left `State`/`Status` stuck at `OFF` /
+`Gate ... not evaluating` forever, even though the gate device itself had
+gone back to `GateStates` and the permit was, underneath, still correctly
+held.
+
+The gate condition was never the problem: `gate_open()` re-reads the gate
+device's state on every cycle, with no caching. What was missing is that
+`cycle()`'s *maintain the permissive* tail — reached whenever the permit is
+already granted and stays that way — only sent `KeepaliveCommand` and
+returned; it never touched `State`/`Status`, because normally there is
+nothing to say: the device was already showing `ON` from the cycle that
+granted it. `enter_gated()` (and `serve_bypass()`, ending a bypass is the
+same shape) had in the meantime forced `State`/`Status` to something else
+entirely, and nothing downstream put them back once the reason for that had
+gone away, because the permit itself never changed and so neither `grant()`
+nor `trip()` ever ran again to refresh the display.
+
+The fix makes that tail refresh `State`/`Status` to the granted values on
+every cycle it runs, the same way the *no permit* tail at the bottom of
+`cycle()` already refreshes `ALARM` unconditionally rather than only on a
+fresh trip. A `Keepalive` or reassert failure still faults and returns before
+that refresh, exactly as before — the same guard `grant()` already had (see
+“The status that a later line overwrote”, `docs/DS-architecture.md` section
+3) is what stops the granted refresh from overwriting a `FAULT` `send()` just
+set.
+
+`tools/test_analoginterlock.py`'s `gate()` drives both shapes — a permit held
+across a gate reopen, and one held across a bypass ending — against a stub
+gate device, without touching a live chain.
+
 ### Shutdown order now means something
 
 With the gate in place the order of the end-of-day steps carries weight. hv1

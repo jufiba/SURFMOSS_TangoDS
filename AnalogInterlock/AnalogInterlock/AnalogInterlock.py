@@ -59,6 +59,13 @@ Failure modes and what this server does about each:
   gate unreadable             -> evaluated anyway (fail towards acting); the
                                  status says the gate could not be read
   bad gate configuration      -> refused at start-up, the status names the value
+  gate reopens, or a bypass
+  ends, with the permit still
+  good                        -> State/Status refreshed back to granted every
+                                 cycle the permit holds, not only on a fresh
+                                 grant(); otherwise the display stays stuck on
+                                 whatever enter_gated()/serve_bypass() last
+                                 set, since the permit itself never changes
   bypassed (BypassFor)        -> DISABLE, or STANDBY in the last
                                  BypassWarnMinutes; no trip command, LastTrip*
                                  untouched, Keepalive still sent for a deadman.
@@ -978,12 +985,25 @@ class AnalogInterlock(Device):
         # --- maintain the permissive ----------------------------------------
         if self.permit:
             if self.prop["KeepaliveCommand"]:
-                self.send(self.prop["KeepaliveCommand"])
+                if not self.send(self.prop["KeepaliveCommand"]):
+                    return          # send() set FAULT and named the command
             if self.ReassertCycles > 0:
                 self.cyclessincereassert += 1
                 if self.cyclessincereassert >= self.ReassertCycles:
                     self.cyclessincereassert = 0
-                    self.send(self.prop["OnCommand"])
+                    if not self.send(self.prop["OnCommand"]):
+                        return      # send() set FAULT and named the command
+            # Refresh State/Status every cycle, not only on the transition into
+            # the permissive. enter_gated() and serve_bypass() overwrite them
+            # (to OFF, STANDBY, DISABLE) while a live permit is carried through
+            # unchanged underneath; without this, closing and reopening the
+            # gate -- or a bypass ending -- while the condition stays safe
+            # leaves the device showing "not evaluating"/bypassed forever,
+            # since nothing else here fires to put ON back.
+            self.set_state(tango.DevState.ON)
+            self.set_status("%s granted (%r = %.2f)"
+                            % ("Watch" if self.WatchOnly else "Permit",
+                               self.prop["InputAttribute"], self.inputvalue))
             return
 
         # Not granted and nothing tripped this cycle: the input is readable but
