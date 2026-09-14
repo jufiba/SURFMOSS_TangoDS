@@ -186,7 +186,7 @@ name=xpsWater dev=xps/safety/waterinterlock alarm=ALARM,FAULT ok=ON ctx=xps/safe
 | `when` | no | — | `gatedev:STATE[,STATE]`. Evaluate only while that device is in one of those states. |
 | `to` | no | — | **Replaces** `Recipients`. |
 | `cc` | no | — | **Adds to** `Recipients`. |
-| `ctx` | no | — | Attributes to read into the mail body. |
+| `ctx` | no | — | What to read into the mail body: a **device** (`domain/family/member`, gives its State and Status) or an **attribute** (`domain/family/member/attribute`, gives its value). Comma-separated, may mix both. Anything else is refused when the rule is parsed. |
 | `msg` | no | `name` | Subject text. Goes last. |
 
 ¹ `dev` for `op=state`, `attr` for `op=edge`.
@@ -232,6 +232,25 @@ presence is its `RaspberrySwitch`, and the interlock turns that switch off when
 the water fails -- so gating on it would mean "if there is no water, do not
 warn about the water". That case stays ungated until the gun itself is in
 Tango.
+
+### `ctx=` was silently broken for the commoner of its two forms
+
+Until 14-Sep-2026 `read_context()` split every entry with `rpartition("/")`,
+which only works for the attribute form. Eight of the ten rules name the
+watched device instead, and that form came out as `leem/safety` +
+`interlockP2lens`, so every mail from those rules carried
+
+```
+leem/safety/interlockP2lens = <no se pudo leer: DevFailed[
+   desc = Wrong device name syntax (domain/family/member) in leem/safety
+```
+
+where the context should have been — the context is worth least exactly when
+it is needed most. Found in a real alarm mail about `leem/safety/interlockP2lens`.
+
+Both forms now work, told apart by the number of fields, and a `ctx=` that is
+neither is refused when the rule is parsed rather than when the mail goes out.
+`ReloadRules` therefore catches a bad one while the old rules keep running.
 
 ## Commands
 

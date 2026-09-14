@@ -172,7 +172,16 @@ class Rule(object):
 
         self.to = _split(fields.get("to", ""))
         self.cc = _split(fields.get("cc", ""))
+        # ctx= takes a device (3 fields) or an attribute (4). Anything else
+        # is refused here rather than at the moment of mailing: a context
+        # that turns into an error message is discovered in the one mail you
+        # most wanted it in, and by then it is too late to fix.
         self.ctx = _split(fields.get("ctx", ""))
+        for entry in self.ctx:
+            if len(entry.split("/")) not in (3, 4):
+                raise ValueError(
+                    "ctx=%s is neither a device (domain/family/member) nor an "
+                    "attribute (domain/family/member/attribute)" % entry)
 
         self.reset_runtime()
 
@@ -646,17 +655,39 @@ class AlarmNotifier(Device):
                         "\n".join(body))
 
     def read_context(self, full):
-        """Read one domain/family/member/attribute for the mail body. A
-        context attribute that cannot be read says so; it is never left out
-        silently, or the mail would quietly lose the number you wanted."""
+        """Read one ctx= entry for the mail body. Two shapes, told apart by
+        how many fields the name has:
+
+            domain/family/member            a device    -> its State and Status
+            domain/family/member/attribute  an attribute -> its value
+
+        Both are in use, and the device form is the commoner one: eight of the
+        ten rules name the watched device itself, to put what it says next to
+        the alarm. rpartition() alone read that form as leem/safety +
+        interlockP2lens, so every one of those mails carried "Wrong device
+        name syntax" where the context should have been -- the context is
+        worth least exactly when it is needed most.
+
+        Whatever fails says so; it is never left out silently, or the mail
+        would quietly lose the number you wanted.
+        """
         try:
-            dev, _, attr = full.rpartition("/")
-            proxy = tango.DeviceProxy(dev)
-            proxy.set_timeout_millis(self.ProxyTimeout)
-            reading = proxy.read_attribute(attr)
-            if reading.quality == tango.AttrQuality.ATTR_INVALID:
-                return "<INVALID>"
-            return "%s" % (reading.value,)
+            parts = full.split("/")
+            if len(parts) == 3:
+                proxy = tango.DeviceProxy(full)
+                proxy.set_timeout_millis(self.ProxyTimeout)
+                return "%s | %s" % (proxy.state(),
+                                    proxy.status().replace("\n", " "))
+            if len(parts) == 4:
+                dev, _, attr = full.rpartition("/")
+                proxy = tango.DeviceProxy(dev)
+                proxy.set_timeout_millis(self.ProxyTimeout)
+                reading = proxy.read_attribute(attr)
+                if reading.quality == tango.AttrQuality.ATTR_INVALID:
+                    return "<INVALID>"
+                return "%s" % (reading.value,)
+            return ("<%r no es ni un device (dominio/familia/miembro) ni un "
+                    "atributo (dominio/familia/miembro/atributo)>" % full)
         except Exception as exc:
             return "<no se pudo leer: %s>" % exc
 
