@@ -30,6 +30,17 @@ import threading
 import serial
 
 
+# How many lines _read_reply will look at before giving up on one attempt.
+# The supply answers in one line; the allowance is for the echo of the command
+# and for at most a couple of stale lines left by an earlier timed-out read.
+_MAX_REPLY_LINES = 4
+
+# Attempts per _txn. Two, not more: one drain-and-retry recovers a buffer that
+# has slipped out of step, and anything beyond that is a supply that is not
+# answering, which the caller should hear about rather than wait through.
+_TXN_ATTEMPTS = 2
+
+
 class _Deadman(threading.Thread):
     """Switch the HV output off if no Keepalive arrives within DeadmanTimeout.
 
@@ -86,19 +97,95 @@ class FUGMCP(Device):
     # PROTECTED REGION ID(FUGMCP.class_variable) ENABLED START #
     ser = None
 
-    def _txn(self, cmd):
-        """One locked serial exchange: write, return one line. Raises a Tango
-        error if the port is not open. The deadman thread calls in here from
-        outside Tango's serialization monitor, so this is where its serial use
-        is kept from interleaving with a client's."""
+    @staticmethod
+    def _reply_prefix(cmd):
+        """What the supply should answer to this command.
+
+        Probus V answers a query '> <word> ?' with '<word>:<value>', and a
+        setting command with 'E0' (or 'E<n>' when it refuses). Deriving the
+        prefix from the command leaves all sixteen call sites unchanged, and
+        keeps the next attribute added from becoming one more place to get it
+        wrong. Returns None when nothing can be predicted.
+        """
+        text = cmd.decode("ascii", "replace").strip()
+        if not text or text.startswith("*"):
+            return None                 # *IDN? has no fixed prefix
+        body = text[1:] if text.startswith(">") else text
+        words = body.split()
+        word = words[0] if words else ""
+        if text.endswith("?"):
+            # '>BON?' has no space, '>M0 ?' has one; both land here.
+            return (word.rstrip("?") + ":").encode("ascii")
+        return b"E"
+
+    def _read_reply(self, expected, seen):
+        """Read lines until one answers the command, or the supply goes quiet.
+
+        Skips the echo of the command, which the supply emits in some states,
+        and any stale line left over from an earlier exchange. Returns the raw
+        line, newline included, because the callers slice it as resp[3:-1] and
+        resp[:-1]. Returns None if nothing matching arrives, so _txn can drain
+        and try once more.
+        """
+        for _ in range(_MAX_REPLY_LINES):
+            line = self.ser.readline()
+            if not line:
+                return None             # timed out: the supply went quiet
+            text = line.strip()
+            seen.append(text)
+            if not text or text.startswith(b">") or text.startswith(b"*"):
+                continue                # echo of a command, not an answer
+            if expected is None or text.startswith(expected):
+                return line
+        return None
+
+    def _txn(self, cmd, validate=True):
+        """One locked serial exchange: write, return the line that answers
+        *this* command. Raises a Tango error if the port is not open, or if
+        the supply never answers what was asked.
+
+        The port is drained before writing and the reply is checked against
+        the prefix the command implies. Without the drain, one read that hits
+        its 0.5 s timeout leaves its bytes in the buffer and every later
+        exchange reads the previous answer instead -- silently, because the
+        stale values still parse as numbers. Without the check, nothing
+        notices the shift. That is how leem/power/hv2 came to report
+
+            Error writing SetVoltage from FUG MCP 429774>S0 984.429774
+
+        on 15-sep-2026: the tail of an earlier reply glued to the echo of the
+        command just sent, while the supply itself was healthy at 619 V.
+
+        Retrying once is only safe because every Probus V command used here is
+        idempotent ('>S0 <v>', '>S1 <i>', '>BON 1', '>BON 0' and the queries).
+        An incremental command would have to fail on the first try instead.
+
+        The deadman thread calls in here from outside Tango's serialization
+        monitor, so this is where its serial use is kept from interleaving
+        with a client's.
+        """
+        expected = self._reply_prefix(cmd) if validate else None
         with self._io_lock:
             if self.ser is None:
                 tango.Except.throw_exception(
                     "FUGMCP_NotConnected",
                     "no serial link to the FUG MCP on %s" % self.SerialPort,
                     "FUGMCP._txn")
-            self.ser.write(cmd)
-            return self.ser.readline()
+            seen = []
+            for _attempt in range(_TXN_ATTEMPTS):
+                self.ser.reset_input_buffer()
+                self.ser.write(cmd)
+                resp = self._read_reply(expected, seen)
+                if resp is not None:
+                    return resp
+            # What was actually read goes in the message: without it, the
+            # hv2 diagnosis on 15-sep-2026 would not have been possible.
+            tango.Except.throw_exception(
+                "FUGMCP_BadReply",
+                "no valid answer to %r on %s after %d tries; read %r"
+                % (cmd, self.SerialPort, _TXN_ATTEMPTS,
+                   b" | ".join(seen[-4:])),
+                "FUGMCP._txn")
     # PROTECTED REGION END #    //  FUGMCP.class_variable
 
     # -----------------
@@ -212,8 +299,13 @@ class FUGMCP(Device):
         self._deadman_tripped=False
         try:
             self.ser=serial.Serial(port=self.SerialPort,baudrate=self.Speed,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=1,timeout=0.5)
-            self.ser.write(bytes("*IDN?\n","ascii"))
-            self.identification=self.ser.readline()
+            # Through _txn, so this first exchange is drained and locked like
+            # every other. It matters most here: a port just opened can still
+            # carry the tail of whatever the previous process was doing when
+            # it died, which is the state hv2 was found in on 15-sep-2026.
+            # validate=False because *IDN? has no predictable prefix.
+            self.identification=self._txn(bytes("*IDN?\n","ascii"),
+                                          validate=False)
         except Exception as e:
             self.set_state(tango.DevState.FAULT)
             self.set_status("Can't connect to FUG MCP on %s: %s"%(self.SerialPort,e))
@@ -230,8 +322,7 @@ class FUGMCP(Device):
         # the output is disabled, which is the supply answering -- not the
         # supply being unreachable, which is FAULT above.
         try:
-            self.ser.write(bytes(">BON?\n","ascii"))
-            resp=self.ser.readline()
+            resp=self._txn(bytes(">BON?\n","ascii"))
         except Exception as e:
             self.set_state(tango.DevState.FAULT)
             self.set_status("The FUG MCP identified itself and then stopped "
@@ -408,7 +499,9 @@ class FUGMCP(Device):
     @DebugIt()
     def sendCommand(self, argin):
         # PROTECTED REGION ID(FUGMCP.sendCommand) ENABLED START #
-        result=self._txn((argin+"\n").encode("ascii"))
+        # The expert escape hatch for arbitrary Probus V commands: no prefix to
+        # predict, so no validation. It still gets the drain and the lock.
+        result=self._txn((argin+"\n").encode("ascii"), validate=False)
         return(result.decode("ascii","replace"))
         # PROTECTED REGION END #    //  FUGMCP.sendCommand
 

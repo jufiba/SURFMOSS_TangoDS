@@ -30,6 +30,39 @@ ASCII, `\n`-terminated. Queries end `?`, replies are `<tag>:<value>`.
 text (decoded with `errors="replace"` — the one message that says what went
 wrong must not be lost to a strict decode).
 
+## Framing: the reply must answer the command that asked for it
+
+`_txn()` drains the port before every write and checks the reply against the
+prefix the command implies (`>M0 ?` → `M0:`, a setting command → `E`). On a
+mismatch it drains and retries once, then raises with what it actually read.
+
+This is not belt and braces. Before it existed, one read that hit its 0.5 s
+timeout left its bytes in the port, and **every later exchange read the
+previous answer** — permanently, and in silence, because a stale reply still
+parses as a number. On 15-sep-2026 `leem/power/hv2` was found in `FAULT`
+reporting
+
+```
+Error writing SetVoltage from FUG MCP 429774>S0 984.429774
+```
+
+— the tail of an earlier reply glued to the echo of the command just sent,
+while the supply was healthy and holding 619 V on the LEEM's microchannel
+plate. The visible `FAULT` was the lucky part. In the same state
+`read_Voltage()` returns the *previous* answer: 984 V reported for a supply
+sitting at 619 V, green on the panel, with nothing anywhere saying otherwise.
+`tools/test_fugmcp.py` pins exactly that case.
+
+Retrying once is only sound because every Probus V command used here is
+idempotent. An incremental command would have to fail on the first try.
+
+A second consequence is worth knowing, because it is not local to this server:
+`leem/safety/interlockhv2` gates on hv2 being `ON`, so while hv2 reported
+`FAULT` its water interlock read `not evaluating` — an energised supply
+outside its own protection, at the moment it was misbehaving. Gating on device
+state means a faulted-but-live device falls out of the gate; see
+`AnalogInterlock/README.md`.
+
 ## Interface
 
 - Properties `SerialPort` (`/dev/ttyUSB0`), `Speed` (625000),
