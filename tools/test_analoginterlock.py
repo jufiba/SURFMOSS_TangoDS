@@ -315,6 +315,51 @@ def sentinel(cls):
           "'UpdateCount'" in d.lasttripreason, True)
 
 
+def no_restore(cls):
+    """OnCommand = none/-: cut-only interlocks (leem/safety/interlockP2lens)
+    that must never push the output back up on their own. grant() and the
+    ReassertCycles reassert must both send nothing; OffCommand must still
+    run normally on a trip.
+    """
+    Fake = build_fake(cls)
+
+    print("\nOnCommand = none: granted internally, nothing sent to the output")
+    for spelling in ("none", "None", " - ", "-"):
+        d = Fake(OnCommand=spelling)
+        check("on_command() is empty for %r" % spelling, d.on_command(), "")
+    # KeepaliveCommand disabled here to isolate OnCommand's own effect --
+    # Keepalive firing on every granted cycle is separate, correct behaviour.
+    d = Fake(OnCommand="none", KeepaliveCommand="")
+    d.value = 10.0
+    d.cycle()
+    check("granted", d.permit, True)
+    check("state", d.state, tango.DevState.ON)
+    check("status still says granted", d.status,
+          "Permit granted ('flow' = 10.00)")
+    check("nothing sent on grant", d.sent, [])
+
+    print("\nReassertCycles never sends anything either")
+    d = Fake(OnCommand="none", KeepaliveCommand="", ReassertCycles=2)
+    d.value = 10.0
+    for _ in range(5):
+        d.cycle()
+    check("still granted", d.permit, True)
+    check("still nothing sent", d.sent, [])
+
+    print("\nOffCommand still runs normally on a trip")
+    d = Fake(OnCommand="none", KeepaliveCommand="")
+    d.value = 10.0
+    d.cycle()
+    d.value = 7.0
+    d.cycle()
+    check("tripped", d.tripped, True)
+    check("Off sent", d.sent, ["Off"])
+
+    print("\na real command name is unaffected")
+    check("on_command() passes a real name through",
+          Fake(OnCommand="On").on_command(), "On")
+
+
 class _GateStub:
     """Just enough of a DeviceProxy for gate_open(): a .state() to read."""
 
@@ -471,6 +516,7 @@ def main(argv):
 
     decisions(AnalogInterlock)
     sentinel(AnalogInterlock)
+    no_restore(AnalogInterlock)
     gate(AnalogInterlock)
     refusals(repo)
 

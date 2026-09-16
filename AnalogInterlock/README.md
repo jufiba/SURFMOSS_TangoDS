@@ -143,6 +143,19 @@ required unless `WatchOnly`. On pi-xps it is `xps/safety/switchxraygun`, a
 `RaspberryButton` and `FUGMCP`; set them for an output device that names those
 operations differently.
 
+`OnCommand = none` (also `-`) grants the permissive internally — `Permit`
+true, state `ON` — without sending anything at all, on a fresh grant or on a
+`ReassertCycles` reassert alike. `OffCommand` still runs normally on a trip.
+For an interlock that may only ever *cut*, never *restore*, on its own:
+`leem/safety/interlockP2lens` protects the P2 lens coil from running above
+1.5 A with no cooling water, but recovering from a water cut must not by
+itself push the coil back up to its running current (up to 3.6 A depending
+on the configuration) — only an operator's own `P2lensON`, at whatever
+value is right for the current setup, should do that. The word, not an
+empty string, for the same reason `HeartbeatAttribute` uses one: PyTango
+substitutes `OnCommand`'s `default_value` (`On`) for an empty database
+value before this server ever sees it.
+
 **`KeepaliveCommand`** (`Keepalive`) — sent to `OutputDevice` on every cycle
 while the permissive is granted, to feed that device's deadman. That is what
 makes this server *dying* drop the permissive rather than leave it frozen
@@ -182,7 +195,8 @@ advance before the server trips on a frozen input publisher.
 
 **`ReassertCycles`** (`30`) — re-send `OnCommand` every N cycles while granted,
 so the permissive comes back on its own if `OutputDevice` was restarted
-underneath the interlock. `0` disables the re-assert.
+underneath the interlock. `0` disables the re-assert, and so, in effect, does
+`OnCommand = none` — there is nothing to reassert.
 
 **`ProxyTimeout`** (`800`) — milliseconds a single read or command may block.
 This sets how long a trip takes when the input device *hangs* rather than
@@ -533,6 +547,37 @@ its `UpdateCount` as an `op=edge` rule so that a counter that has stopped
 advancing becomes a mail. For `interlockhv1` that rule is part of the
 deployment, not an extra.
 
+### The reassert that kept nudging the lens voltage
+
+Found 16-Sep-2026 on `leem/safety/interlockP2lens`, which grants its
+permissive by calling `P2lensON` on `leem/measurement/LEEM2k` — a command
+that does not just *ensure* the P2 lens coil is on, it re-writes the coil's
+current setpoint to the instrument every time it runs. `ReassertCycles` was
+still at its default (`30`), so every 30 cycles the interlock re-sent
+`P2lensON` regardless of whether anything had changed, and the live current
+was confirmed unchanged at exactly `P2LensOnValue` the whole time — it was
+the repeated write itself, not a drifting value, nudging the real supply.
+
+`ElmitecLEEM2k` had already grown its own `Keepalive` command and
+`DeadmanTimeout` (see its own history) specifically so an output device
+does not need `OnCommand` reasserted to survive this interlock dying —
+`interlockP2lens`'s `KeepaliveCommand` was already (by default) the cheap
+`Keepalive`, confirmed refreshing `TimeSinceKeepalive` every cycle with the
+10 s deadman never tripping. The `ReassertCycles` reassert of `OnCommand`
+was therefore redundant *and* the thing causing the unwanted voltage
+nudges — first mitigated by setting `ReassertCycles = 0` on
+`interlockP2lens`.
+
+The lens itself set a harder constraint than "stop nudging it": above 1.5 A
+the coil relies on the cooling water to survive; a water cut must still
+drop it to `P2LensOffValue` (`OffCommand` = `P2lensOff`) every time, without
+question. But recovering water flow must **not** by itself push the coil
+back up to its running current (as high as 3.6 A `P2LensOnValue`, though
+not every configuration runs it that high) — that decision, and the actual
+value, belongs to an operator calling `P2lensON` by hand. `OnCommand = none`
+is what makes an interlock structurally one-directional: it can only ever
+cut, never restore, on its own.
+
 ## Registration on pi-mossbauer
 
 Server `AnalogInterlock/2`, class `AnalogInterlock`, device
@@ -658,6 +703,7 @@ bypass is in place.
 | `GateStates` invalid, or set without `GateDevice` | refused at start-up; the status names the value |
 | bypass expires unnoticed   | re-arms, evaluates from a clean slate, trips if the condition is still bad |
 | `BypassFor` after a trip   | bypass reinstated, but the output stays off and latched; needs `Reset` + a manual on |
+| `OnCommand = none`/`-`     | permit granted internally (state ON), nothing sent to `OutputDevice`, ever — not on grant, not on a `ReassertCycles` reassert; `OffCommand` still trips normally |
 
 The frozen-publisher case is the one neither the cron script nor a naive
 port could catch: a dead acquisition thread keeps returning its last good
