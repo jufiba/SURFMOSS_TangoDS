@@ -1,0 +1,49 @@
+#!/bin/sh
+# Wait for every device this Pi's own drawing references to answer before
+# opening it. synopticappli's widgets do not retry a device that was not yet
+# reachable the moment they were first drawn: confirmed on pi-xps, where the
+# ion pump and turbo pump widgets stayed blank for the whole session because
+# GammaVacuumDigitel and PfeifferTC100 were still ~45 s into tango-starter's
+# ~50 s, one-server-at-a-time launch sequence when the panel had already
+# opened and tried them. A device that goes down and comes back mid-session,
+# on a widget that connected fine the first time, does reconnect on its own
+# without help -- confirmed by hand, restarting CryoCon32 under a live
+# mossbauer.jdw session on pi-rackmossbauer. So this only needs to cover each
+# device's very first connection attempt, at panel start-up.
+#
+# Only the top-level per-host drawing is checked, not the LEEM_*.jdw
+# sub-panels reachable from within leem.jdw: those open on demand, generally
+# long after boot, so the same race is far less likely to bite there.
+#
+# Bounded, not indefinite: after timeout seconds this proceeds anyway and
+# says so with logger, so a device that is genuinely down does not keep the
+# panel from opening at all -- the failure this is fixing is a race, not a
+# reason to trade one silent failure mode for another.
+
+jdw="/etc/synoptic/$(hostname).jdw"
+timeout=120
+interval=2
+waited=0
+pending=""
+
+devices=$(grep -oE '[A-Za-z0-9_]+/[A-Za-z0-9_]+/[A-Za-z0-9_]+' "$jdw" 2>/dev/null | sort -u)
+
+while [ "$waited" -lt "$timeout" ]; do
+    pending=""
+    for dev in $devices; do
+        tango_admin --ping-device "$dev" 1 >/dev/null 2>&1 || pending="$pending $dev"
+    done
+    [ -z "$pending" ] && break
+    sleep "$interval"
+    waited=$((waited + interval))
+done
+
+if [ -n "$pending" ]; then
+    logger -t synoptic-session "gave up waiting after ${timeout}s, still unreachable:$pending"
+elif [ "$waited" -gt 0 ]; then
+    logger -t synoptic-session "all devices reachable after ${waited}s"
+fi
+
+xset s off -dpms s noblank
+matchbox-window-manager -use_titlebar no &
+exec synopticappli "$jdw"

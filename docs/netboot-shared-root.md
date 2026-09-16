@@ -686,15 +686,26 @@ sudo apt install --no-install-recommends \
 - X11 forwarding over SSH needs `xauth` (on the intermediate hops too, e.g.
   wolframite).
 
-### Per-Pi autostart — solved, pending deployment
+### Per-Pi autostart — deployed
 
 Because `/etc` is shared, enabling synoptic autostart would affect all seven Pis
-rather than the three with monitors. **The mechanism is now settled**: use
-`ExecCondition=/usr/local/sbin/host-is <pi>` in the unit, per the "Per-host
-service activation" section. `ConditionHost=` must not be used — it fails
-silently at boot.
+rather than the three with monitors (`pi-xps`, `pi-leem`, `pi-rackmossbauer`).
+Deployed as `synoptic.service`, gated per host not with `ExecCondition=host-is`
+as first planned but with `ConditionPathExists=/etc/synoptic/%H.jdw`: each
+panel Pi has a symlink named after its own hostname
+(`/etc/synoptic/pi-rackmossbauer.jdw -> .../synoptics/mossbauer.jdw`, and so
+on) in the shared `/etc/synoptic/`, so the unit is `enabled` fleet-wide but
+only actually starts where that file exists. `ConditionHost=` is still not
+used — it fails silently at boot, as noted above.
 
-Still to be deployed as of 23-Aug-2026.
+`synoptic.service` and `synoptic-session` are kept in
+`synoptics/` in this repo (not symlinked into the shared root like the
+`.jdw` files — a unit change needs `systemctl daemon-reload` too, so it is
+copied by hand; see that directory's README for the deploy steps). That
+README also has the 16-Sep-2026 fix for a start-up race that left some
+widgets permanently blank for a whole session — `tango-starter` launches a
+Pi's device servers one at a time, tens of seconds apart, and the panel used
+to open immediately behind it with no dependency on that finishing.
 
 ---
 
@@ -724,7 +735,6 @@ Still to be deployed as of 23-Aug-2026.
   It keeps its microSD at `10.43.88.16`.
 - **Reboot the five Pis still carrying the old shared machine-id** so they pick up
   their own. Until then they keep colliding with each other over DHCP.
-- Deploy the synoptic autostart using the `host-is` pattern.
 - Decide whether `/home` deserves to be per-Pi (currently shared; with a single
   `pi` user and little content, it doesn't seem necessary).
 - `/var/lib/systemd` sits inside the per-Pi `/var`, so systemd and timesyncd state

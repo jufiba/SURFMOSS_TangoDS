@@ -1,0 +1,18 @@
+[Unit]
+Description=Panel synoptic ATK (%H)
+ConditionPathExists=/etc/synoptic/%H.jdw
+After=network-online.target time-sync.target tango-starter.service
+Wants=network-online.target tango-starter.service
+
+[Service]
+User=pi
+EnvironmentFile=/etc/tangorc
+Environment=HOME=/var/lib/synoptic
+TTYPath=/dev/tty7
+StandardInput=tty
+ExecStart=/usr/bin/xinit /usr/local/bin/synoptic-session -- :0 vt7 -nolisten tcp
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
