@@ -54,6 +54,11 @@ Failure modes and what this server does about each:
   output device unreachable   -> FAULT; nothing else is possible from here
   output command refused      -> FAULT, and the permissive is not granted. The
                                  status says which command failed and why
+  OnCommand = none/-           -> the permissive is granted internally
+                                 (state ON) with nothing sent to
+                                 OutputDevice, not even on a ReassertCycles
+                                 reassert; for an interlock that may only
+                                 ever cut, never restore, on its own
   gate outside GateStates     -> OFF, not evaluating; a latched trip is held,
                                  LastTrip* is left alone
   gate unreadable             -> evaluated anyway (fail towards acting); the
@@ -199,7 +204,18 @@ class AnalogInterlock(Device):
             "warning rather than a permissive.",
     )
 
-    OnCommand = device_property(dtype='str', default_value="On")
+    OnCommand = device_property(
+        dtype='str', default_value="On",
+        doc="Command sent to OutputDevice when the permissive is granted, "
+            "and resent every ReassertCycles while it holds. The word "
+            "'none' (also '-') sends nothing at all: the permissive is "
+            "still granted internally (state ON, Permit true), but for an "
+            "interlock that must only ever cut and never restore on its "
+            "own -- leem/safety/interlockP2lens, where recovering from a "
+            "water cut must not by itself push P2Lens back up to its "
+            "running current -- nothing is commanded. OffCommand still "
+            "runs normally on a trip.",
+    )
     OffCommand = device_property(dtype='str', default_value="Off")
 
     KeepaliveCommand = device_property(
@@ -649,6 +665,25 @@ class AnalogInterlock(Device):
             return ""
         return raw
 
+    def on_command(self):
+        """The command to send when granting the permissive, or "" to grant
+        it with nothing sent at all -- same convention as HeartbeatAttribute
+        and the same reason an empty string cannot be the mechanism: PyTango
+        substitutes OnCommand's default_value ('On') for an empty database
+        value before this server sees it.
+
+        For an interlock that must only ever cut and never restore on its
+        own -- leem/safety/interlockP2lens, where recovering from a water
+        cut must not by itself push P2Lens back up to its running current,
+        only an operator's own P2lensON should do that -- OnCommand = none
+        (also -) grants the permissive internally (state ON, Permit true)
+        with no command sent. OffCommand still runs normally on a trip.
+        """
+        raw = self.prop["OnCommand"]
+        if raw.strip().lower() in ("none", "-"):
+            return ""
+        return raw
+
     def grants(self, value):
         """Is the input past ThresholdOn, on the safe side?"""
         if self.Reverse:
@@ -765,7 +800,8 @@ class AnalogInterlock(Device):
             self.set_status(reason)
 
     def grant(self):
-        if not self.send(self.prop["OnCommand"]):
+        cmd = self.on_command()
+        if cmd and not self.send(cmd):
             # send() has already set FAULT and said which command failed. The
             # caller must stop here: falling through to the tail of cycle()
             # would overwrite that with "must rise above", which is both wrong
@@ -991,7 +1027,8 @@ class AnalogInterlock(Device):
                 self.cyclessincereassert += 1
                 if self.cyclessincereassert >= self.ReassertCycles:
                     self.cyclessincereassert = 0
-                    if not self.send(self.prop["OnCommand"]):
+                    cmd = self.on_command()
+                    if cmd and not self.send(cmd):
                         return      # send() set FAULT and named the command
             # Refresh State/Status every cycle, not only on the transition into
             # the permissive. enter_gated() and serve_bypass() overwrite them
