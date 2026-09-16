@@ -2,6 +2,16 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.11 16/09/2026 leem_log() now stamps each line with the day's %03d experiment
+# counter, right before the command, so a log line can be matched to the folder
+# it produced (e.g. "2026-09-16 18:30:00  007  leemSaveSingleImage(...)" for
+# 20260916_007). The counter was already being read for the day-rollover check
+# and simply never written out. Also fixes the rollover case itself: on the
+# first log call of a new day, the on-disk counter was correctly reset to 0,
+# but the local exp variable this function had already read (from yesterday's
+# line) was not, so that first line would have logged yesterday's leftover
+# count instead of the 000 the folder is about to get.
+#
 # v3.10 10/09/2026 leem_gui_main() now keeps the QApplication it creates in a module global (_app), like _window. Under "ipython --gui=qt6 -c" the Qt inputhook, and the QApplication that comes with it, is only installed when the prompt first appears -- after the startup code -- so QApplication.instance() is None when gui() runs and leem_gui_main() builds its own. It was held only in a local, so it was garbage-collected the moment gui() returned; destroying a QApplication destroys its top-level widgets, so the window was torn down before the prompt drew it. Symptom: leemgui reaches the prompt normally but no panel appears. Reproduced on IPython 8.39 and 9.17 alike, so this is not a version regression; the leemgui launcher's -c path had simply never been run on the instrument (the Aug 2026 test predates the launcher and used %gui qt6 then gui() at the prompt, where a QApplication already exists). Standalone "python LEEMgui.py" still blocks in _app.exec() as before.
 #
 # v3.9 02/09/2026 Added leem_log(command): the GUI now appends every acquisition it launches, as the exact call it makes, to <dayfolder>/<YYYYMMDD>_commands.log next to the data, with a timestamp. Opens and closes per line so nothing is lost if a run hangs. Only the final call from a Run button is logged -- typed commands are not intercepted. leem_log never raises; if there is no counter file it silently does nothing.
@@ -51,7 +61,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.10"
+__version__ = "3.11"
 
 from datetime import date
 import tango
@@ -174,7 +184,10 @@ def leem_makenextfolder_and_inc():
 def leem_log(command):
     """ Append one timestamped line to <dayfolder>/<YYYYMMDD>_commands.log, so
     the day folder next to the data keeps a record of every acquisition the GUI
-    launched. Never raises: a logging failure must not abort an acquisition. """
+    launched. Each line is stamped with the same %03d experiment counter that
+    names the folder leem_makenextfolder_and_inc() is about to create for this
+    run, so a line can be matched to the folder it produced. Never raises: a
+    logging failure must not abort an acquisition. """
     try:
         (wprefix,prefix,dayfolder,exp)=leem_getfolder()
         today=date.today()
@@ -183,14 +196,18 @@ def leem_log(command):
         if not os.path.exists(dayname):
             # First run of the day may be logged before the acquisition makes
             # the folder; mirror leem_makenextfolder_and_inc so the day still
-            # starts at _000.
+            # starts at _000. exp itself came from *yesterday's* line of
+            # counter_filename above, so it must be reset here too, or the
+            # first log line of the day would carry yesterday's leftover
+            # count instead of the 000 the folder is about to get.
             os.mkdir(dayname)
             f=open(counter_filename,"w")
             f.write(wprefix+","+prefix+","+dayfolder+",0")
             f.close()
+            exp=0
         stamp=time.strftime("%Y-%m-%d %H:%M:%S")
         f=open(dayname+"/"+dayfolder+"_commands.log","a")
-        f.write(stamp+"  "+command+"\n")
+        f.write(stamp+"  %03d  "%exp+command+"\n")
         f.close()
     except Exception:
         pass
