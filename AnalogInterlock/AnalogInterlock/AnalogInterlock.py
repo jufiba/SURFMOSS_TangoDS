@@ -61,8 +61,17 @@ Failure modes and what this server does about each:
                                  ever cut, never restore, on its own
   gate outside GateStates     -> OFF, not evaluating; a latched trip is held,
                                  LastTrip* is left alone
+  gate shut, latched trip
+  still held                  -> ALARM, not OFF: a Reset is owed, and OFF is
+                                 what a deliberately switched-off plant shows.
+                                 Rules watching such an interlock want
+                                 ok=ON,OFF, or they never see it recover
   gate unreadable             -> evaluated anyway (fail towards acting); the
                                  status says the gate could not be read
+  FAULT not in GateStates     -> standing note in Status. NOT a behaviour:
+                                 which states open the gate stays per-device,
+                                 but leaving FAULT out fails silently, and a
+                                 supply can report FAULT with its output live
   bad gate configuration      -> refused at start-up, the status names the value
   gate reopens, or a bypass
   ends, with the permit still
@@ -393,6 +402,7 @@ class AnalogInterlock(Device):
         self.gatevalue = ""             # last gate state seen, for Status
         self.gatewarn = ""              # standing note: GateStates never gates
         self.gatefault = ""             # standing note: gate device unreadable
+        self.gatenofault = ""           # standing note: FAULT not in GateStates
         self.heartbeatoff = ""          # standing note: no heartbeat named
         self.everread = False           # has a reading been taken yet?
 
@@ -529,18 +539,35 @@ class AnalogInterlock(Device):
                 "GateStates = %r looks like it covers every state %r can "
                 "publish; the gate would never shut and evaluation would run "
                 "just as if no GateDevice were set" % (gateraw, gatedev))
+        if "FAULT" not in self.gatestates:
+            # Deliberately a note and not a behaviour: which states open the
+            # gate stays the property's business, per device. But leaving
+            # FAULT out fails silently -- no trip, no mail, nothing on the
+            # device -- and that is the one failure mode this server exists
+            # to avoid. leem/power/hv2 was found on 15-sep-2026 reporting
+            # FAULT while holding 619 V, with its water interlock reading
+            # "not evaluating": a supply that is energised and misbehaving,
+            # outside its own protection, and nothing anywhere said so.
+            # Add FAULT to GateStates for any gate that can be energised
+            # while faulted; leave it out, knowingly, for one that cannot.
+            self.gatenofault = (
+                "GateStates = %r does not include FAULT: if %r faults while "
+                "still energised, this interlock will not watch it"
+                % (gateraw, gatedev))
         return None
 
     def set_status(self, text):
         """Every status line carries the standing notes: staleness detection
         switched off, a str property that clean_properties had to strip or
-        de-quote, a GateStates that never actually gates, a gate device that
-        cannot be read. Without this a disabled heartbeat or an altered value
+        de-quote, a GateStates that never actually gates, a GateStates that
+        leaves FAULT out, a gate device that cannot be read. Without this a
+        disabled heartbeat or an altered value
         shows up only as changed behaviour with nothing on the device to
         explain it. getattr keeps this safe if Tango calls set_status before
         init_device sets the fields."""
         for note in (getattr(self, "gatefault", ""),
                      getattr(self, "gatewarn", ""),
+                     getattr(self, "gatenofault", ""),
                      getattr(self, "heartbeatoff", "")):
             if note:
                 text = note + "\n" + text
@@ -825,19 +852,40 @@ class AnalogInterlock(Device):
         the latch. Keepalive alone continues where a granted permissive is
         held up by an output deadman, so closing the gate on the plant does
         not by itself drop the permissive. A command-on-trip interlock sets
-        no KeepaliveCommand, so this does nothing there."""
+        no KeepaliveCommand, so this does nothing there.
+
+        State is OFF, except while a latched trip is held: that is ALARM, so
+        a Reset still owed is visible to a client and to AlarmNotifier rather
+        than hidden behind the same OFF a deliberately switched-off plant
+        shows."""
         self.gatewasopen = False
         if self.permit and self.prop["KeepaliveCommand"]:
             if not self.send(self.prop["KeepaliveCommand"]):
                 return              # send() set FAULT and named the command
-        self.set_state(tango.DevState.OFF)
         if self.manuallatch or (self.Latching and self.tripped):
+            # ALARM, not OFF, while a latched trip is held. A device waiting
+            # for a person is not "off", and the difference is not cosmetic:
+            # AlarmNotifier only mails on the states named in a rule's alarm=
+            # and only clears on those in ok=, holding every other state as
+            # transitional so an Init from Jive stays out of the inbox. OFF is
+            # in neither list, so a latch that survived the gate shutting used
+            # to be invisible -- on 15-sep-2026 interlockhv1 and interlockhv2
+            # both sat latched overnight with the notifier reporting
+            # "All clear". ALARM is already in alarm= on every rule that
+            # watches an interlock, so this needs no rule rewritten.
+            #
+            # Note for the rules: after the Reset the device lands back here
+            # in OFF, which is transitional, so a rule whose ok= is ON alone
+            # never recovers. Those rules want ok=ON,OFF.
+            self.set_state(tango.DevState.ALARM)
             self.set_status(
                 "Gate %r = %s: not evaluating. A latched trip from before the "
                 "gate shut is still held; Reset is still required before the "
                 "permissive can return"
                 % (self.prop["GateDevice"], self.gatevalue))
-        elif not self.everread:
+            return
+        self.set_state(tango.DevState.OFF)
+        if not self.everread:
             self.set_status("Gate %r = %s: not evaluating (no reading yet)"
                             % (self.prop["GateDevice"], self.gatevalue))
         else:
@@ -1170,11 +1218,10 @@ class AnalogInterlock(Device):
     # Commands
     # --------
 
-    @command(
-    )
-    @DebugIt()
-    def Reset(self):
-        # PROTECTED REGION ID(AnalogInterlock.Reset) ENABLED START #
+    def do_reset(self):
+        """Body of Reset, split out so the tests can drive it: @DebugIt()
+        wants a real Tango logger, which a stubbed Device has not got. Same
+        split as do_bypass and do_arm."""
         # Only meaningful with Latching = True. Clears the software latch; it
         # has no effect on any hardware latch, which still needs its button.
         self.tripped = False
@@ -1185,6 +1232,13 @@ class AnalogInterlock(Device):
         self.lastheartbeat = None
         self.set_state(tango.DevState.INIT)
         self.set_status("Latch cleared, waiting for next reading")
+
+    @command(
+    )
+    @DebugIt()
+    def Reset(self):
+        # PROTECTED REGION ID(AnalogInterlock.Reset) ENABLED START #
+        self.do_reset()
         # PROTECTED REGION END #    //  AnalogInterlock.Reset
 
     @command(

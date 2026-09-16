@@ -124,13 +124,63 @@ behaviour — the server warns in `Status` when `GateStates` looks like it cover
 everything the gate device can publish.
 
 While the gate is shut the device is `OFF`: it reads nothing, commands nothing,
-and leaves the `LastTrip*` fields alone. A trip that latched before the gate
-shut stays latched. An **unreadable** gate counts as open — for a
-command-on-trip interlock, failing towards acting is recoverable and failing
-towards silence is not — and `Status` says the gate could not be read.
+and leaves the `LastTrip*` fields alone. An **unreadable** gate counts as open
+— for a command-on-trip interlock, failing towards acting is recoverable and
+failing towards silence is not — and `Status` says the gate could not be read.
 Reopening the gate restarts evaluation from a clean slate, so a condition that
 was already bad while the gate was shut is caught on the next cycle rather than
 inherited as good.
+
+#### A latched trip is `ALARM`, not `OFF`
+
+A trip that latched before the gate shut stays latched, and while it is held
+the state is **`ALARM`**, not `OFF`. A device waiting for a person is not
+switched off, and the distinction is not cosmetic. `AlarmNotifier` mails only
+on the states in a rule's `alarm=`, clears only on those in `ok=`, and holds
+everything else as transitional so that an `Init` from Jive stays out of the
+inbox. `OFF` is in neither list, so before 16-sep-2026 a latch that survived
+the gate shutting was invisible: on the 15th `leem/safety/interlockhv1` and
+`interlockhv2` both sat latched overnight while `lab/alarm/notifier` reported
+`All clear`.
+
+`ALARM` is already in `alarm=` on every rule that watches an interlock, so no
+rule needs rewriting to gain the alarm. But **the recovery does need one
+change**: after the `Reset` the device lands back in `OFF`, which is
+transitional, so a rule whose `ok=` is `ON` alone never sees it recover and the
+alarm hangs until the plant is switched on again — possibly days. Such rules
+want `ok=ON,OFF`. With that, the cycle closes by itself:
+
+| | state | notifier |
+|---|---|---|
+| trips with the gate open | `ALARM` | mail |
+| plant switches off, gate shuts | `ALARM` | held — the `Reset` is still owed |
+| you `Reset` | `OFF` | recovery mail |
+
+With `ReminderHours` at its default of 24, an unreset latch also produces one
+reminder a day. `Acknowledge` silences that without disabling the rule.
+
+#### `FAULT` and `GateStates`
+
+Leaving `FAULT` out of `GateStates` is a decision the server does **not**
+override: which states open the gate is the property's business, per device.
+But it is a decision that fails silently — no trip, no mail, nothing — so the
+server writes a standing note in `Status` for every cycle it runs that way:
+
+```
+GateStates = 'ON' does not include FAULT: if 'leem/power/hv1' faults
+while still energised, this interlock will not watch it
+```
+
+That is not hypothetical. On 15-sep-2026 `leem/power/hv2` reported `FAULT`
+while holding 619 V on the LEEM's microchannel plate — a serial framing defect
+in `FUGMCP`, see that server's README — and `leem/safety/interlockhv2` read
+`Gate 'leem/power/hv2' = FAULT: not evaluating`. The supply was energised,
+misbehaving, and outside its own water interlock, at the one moment it most
+needed watching.
+
+Include `FAULT` for any gate that can be energised while faulted. Leave it out
+knowingly for one that cannot. `tools/check_config.py` lists the gated
+interlocks that leave it out, so the choice is made rather than defaulted.
 
 ### What it commands
 
@@ -259,9 +309,9 @@ whole operator-visible API:
 | State | Meaning |
 |---|---|
 | `ON` | gate open, condition good, permissive granted |
-| `ALARM` | tripped — or readable but inside the hysteresis band with no permit |
+| `ALARM` | tripped — or readable but inside the hysteresis band with no permit — or gate shut with a latched trip still held, a `Reset` owed |
 | `FAULT` | input unreadable, heartbeat unreadable, or a configuration refused at start-up |
-| `OFF` | gate shut — not evaluating |
+| `OFF` | gate shut, nothing latched — not evaluating |
 | `DISABLE` | bypassed, more than `BypassWarnMinutes` left |
 | `STANDBY` | bypassed, inside the final `BypassWarnMinutes` before expiry |
 

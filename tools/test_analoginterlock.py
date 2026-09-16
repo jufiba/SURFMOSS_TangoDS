@@ -118,6 +118,7 @@ def build_fake(cls):
             self.gatevalue = ""
             self.gatewarn = ""
             self.gatefault = ""
+            self.gatenofault = ""
             self.heartbeatoff = ""
             self.everread = False
             self.lock = threading.Lock()
@@ -141,6 +142,7 @@ def build_fake(cls):
             # With clean config every note is empty and status is unchanged.
             for note in (getattr(self, "gatefault", ""),
                          getattr(self, "gatewarn", ""),
+                         getattr(self, "gatenofault", ""),
                          getattr(self, "heartbeatoff", "")):
                 if note:
                     status = note + "\n" + status
@@ -414,8 +416,13 @@ def gate(cls):
     dev.cycle()
     check("gate reopens, still safe -> ON restored, not stuck at OFF",
           (dev.state, dev.permit), (tango.DevState.ON, True))
+    # The last line is the status proper; this Gated has GateStates = "ON",
+    # so set_status prepends the standing note about FAULT being left out.
     check("status says granted again",
-          dev.status, "Permit granted ('flow' = 10.00)")
+          dev.status.splitlines()[-1], "Permit granted ('flow' = 10.00)")
+    check("and the standing note rides in front of it",
+          dev.status.splitlines()[0].startswith("GateStates = 'ON' does not "
+                                                "include FAULT"), True)
 
     print("\nbypass ending while a permit is carried through: same fix")
     dev2 = Base()
@@ -430,6 +437,101 @@ def gate(cls):
     dev2.cycle()
     check("bypass ends, still safe -> ON restored, not stuck at DISABLE",
           (dev2.state, dev2.permit), (tango.DevState.ON, True))
+
+
+def latched_gate(cls):
+    """A latched trip that survives the gate shutting is ALARM, not OFF.
+
+    On 15-sep-2026 leem/safety/interlockhv1 and interlockhv2 both sat latched
+    overnight while lab/alarm/notifier reported "All clear". AlarmNotifier
+    only mails on the states in a rule's alarm= and only clears on those in
+    ok=, holding everything else as transitional so an Init from Jive stays
+    out of the inbox -- and OFF is in neither list. A Reset that is owed was
+    therefore indistinguishable, to every client, from a plant somebody
+    switched off on purpose.
+
+    Also checks the standing note when GateStates leaves FAULT out. That one
+    is deliberately a note and not a behaviour: which states open the gate is
+    the property's business, per device, but leaving FAULT out fails silently
+    and a supply can report FAULT with its output still live.
+    """
+    Base = build_fake(cls)
+
+    class Gated(Base):
+        GateDevice = "stub/gate/1"
+        GateStates = "ON"
+        Latching = True
+
+        def __init__(self, **kw):
+            super().__init__(**kw)
+            self.gate = _GateStub()
+            err = self.gate_config()
+            assert err is None, err
+
+        def gate_proxy(self):
+            return self.gate
+
+    print("\nlatched trip held across the gate shutting shows as ALARM")
+    dev = Gated()
+    dev.gate.st = tango.DevState.ON
+    dev.value = 1.0                       # below ThresholdOff (8.0): trips
+    dev.cycle()
+    check("trips while the gate is open", (dev.state, dev.tripped),
+          (tango.DevState.ALARM, True))
+    dev.gate.st = tango.DevState.OFF      # the plant switches itself off
+    dev.cycle()
+    check("gate shuts, latch held -> ALARM, not OFF",
+          dev.state, tango.DevState.ALARM)
+    check("status still says a Reset is required",
+          "Reset is still required" in dev.status, True)
+    check("latch really is still held", dev.tripped, True)
+
+    print("\nthe same gate shutting with no latch is still plain OFF")
+    dev = Gated(Latching=False)
+    dev.gate.st = tango.DevState.ON
+    dev.value = 10.0                      # safe side: grants, never trips
+    dev.cycle()
+    check("granted", dev.state, tango.DevState.ON)
+    dev.gate.st = tango.DevState.OFF
+    dev.cycle()
+    check("no latch -> OFF, no new noise", dev.state, tango.DevState.OFF)
+    check("status is the quiet one",
+          "Reset is still required" in dev.status, False)
+
+    print("\nReset while the gate is shut drops it back to OFF")
+    # This is the half that makes the notifier recover: the rules for such an
+    # interlock need ok=ON,OFF, because ON is not reachable until the plant
+    # is switched back on, which may be days.
+    dev = Gated()
+    dev.gate.st = tango.DevState.ON
+    dev.value = 1.0
+    dev.cycle()
+    dev.gate.st = tango.DevState.OFF
+    dev.cycle()
+    check("latched and gated", dev.state, tango.DevState.ALARM)
+    dev.do_reset()
+    dev.cycle()
+    check("after Reset -> OFF", dev.state, tango.DevState.OFF)
+    check("latch cleared", dev.tripped, False)
+
+    print("\nGateStates without FAULT carries a standing note")
+    dev = Gated()
+    check("note raised", "does not include FAULT" in dev.gatenofault, True)
+    dev.gate.st = tango.DevState.OFF
+    dev.cycle()
+    check("and it reaches Status every cycle",
+          "does not include FAULT" in dev.status, True)
+
+    print("\nGateStates with FAULT raises no note")
+    dev = Gated(GateStates="ON,FAULT")
+    err = dev.gate_config()               # re-parse with the new value
+    check("still a valid configuration", err, None)
+    check("no note", dev.gatenofault, "")
+    dev.gate.st = tango.DevState.FAULT
+    dev.value = 10.0
+    dev.cycle()
+    check("a faulted gate now evaluates and grants",
+          (dev.state, dev.permit), (tango.DevState.ON, True))
 
 
 PORT = 10123
@@ -518,6 +620,7 @@ def main(argv):
     sentinel(AnalogInterlock)
     no_restore(AnalogInterlock)
     gate(AnalogInterlock)
+    latched_gate(AnalogInterlock)
     refusals(repo)
 
     print("\n%s" % ("FAILURES: %d" % FAILS if FAILS else "all checks passed"))
