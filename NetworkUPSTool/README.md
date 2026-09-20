@@ -41,7 +41,7 @@ have something to say and neither is `FAULT`.
 
 ## Robustness
 
-Two failure modes it has been bitten by, both fixed:
+Three failure modes it has been bitten by, all fixed:
 
 - **`upsd` not up at start-up.** An exception escaping `init_device` makes
   PyTango exit the whole process, so the server used to die if it started
@@ -53,10 +53,25 @@ Two failure modes it has been bitten by, both fixed:
   state `ON`, four attributes failing, the last real reading hours old. A
   failed fetch now drops the session and reconnects on the spot (`upsd` is
   local, a refused connection costs microseconds).
+- **State only updated when a client happened to read an attribute.**
+  Found 20-Sep-2026, wiring `leem/safety/ups` into an `AlarmNotifier` rule for
+  "on battery": the state it saw could be arbitrarily old, because `_vars()`
+  (the only thing that calls `_set_state()`) only ran from inside a
+  `read_*` method. `AlarmNotifier` watches bare `State()` and never reads an
+  attribute — it was patched around for the moment with `polled_attr` on
+  `UpsStatus` (10 s) so *something* reads an attribute and the state rides
+  along, but that is a database property nobody associates with the alarm,
+  silently gone if anyone ever removes it. `always_executed_hook`, which
+  Tango calls before every command or attribute including `State()` itself,
+  now calls `_vars()` outside `FAULT` too, not only the reconnect-retry it
+  already did inside it. **The `polled_attr` on `UpsStatus` is no longer
+  needed for this** and can be removed from the database.
 
 One fetch of all variables is cached for `CACHE_SECONDS` (0.5 s) and serves a
 whole sweep of the four attributes, instead of four round trips for data that
-`upsd` refreshes every two seconds.
+`upsd` refreshes every two seconds — the same cache is what makes calling
+`_vars()` from `always_executed_hook` on every dispatch free rather than a
+fifth round trip.
 
 `PyNUT` takes a timeout argument and ignores it (its `__init__` hard-codes
 5 s), so every call is bounded but not by an amount you can set.

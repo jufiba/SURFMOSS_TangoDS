@@ -26,6 +26,7 @@ Exit:   0 all passed, 1 failures, 2 could not run.
 
 import os
 import sys
+import time
 import types
 
 DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -155,6 +156,25 @@ def main(argv):
     check("state", dev.state, tango.DevState.ON)
     check("UpsStatus", dev.read_UpsStatus(), "OnLine")
     check("Charge", dev.read_Charge(), 100.0)
+
+    print("\nState refreshes from always_executed_hook alone, no attribute read")
+    # AlarmNotifier watches bare State() and never reads an attribute -- this
+    # is the 20-Sep-2026 fix: always_executed_hook must keep State current on
+    # its own, not only when a client happens to ask for UpsStatus/Load/etc.
+    upsd.status = "OB LB"
+    dev.lastfetch = 0.0                  # force a fetch past the cache
+    dev.always_executed_hook()
+    check("state follows the hook alone", dev.state, tango.DevState.ALARM)
+    upsd.status = "OL"
+    dev.lastfetch = 0.0
+    dev.always_executed_hook()
+    check("and recovers the same way", dev.state, tango.DevState.ON)
+
+    print("\nthe hook respects CACHE_SECONDS -- no fetch on every dispatch")
+    dev.lastfetch = time.time()          # just fetched; inside the cache window
+    before = upsd.fetches
+    dev.always_executed_hook()
+    check("no fetch within CACHE_SECONDS", upsd.fetches - before, 0)
 
     print("\nupsd is restarted underneath a running server")
     before = upsd.connects
