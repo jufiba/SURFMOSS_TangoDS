@@ -90,6 +90,14 @@ _SETPOINT_LATCHES = "0.1E-10"
 # is about 1.4 s.
 _MIN_GAP = 0.2
 
+# How often always_executed_hook re-checks the HV state on its own, rather
+# than only when a client happens to read an attribute. AlarmNotifier watches
+# bare State() and never reads one. Independent of _MIN_GAP, which already
+# paces individual exchanges to the controller: this bounds how often a burst
+# of State() polls (Astor, AlarmNotifier, Jive) triggers one at all, so it
+# does not add load on top of whatever attributes are already polled.
+_STATE_POLL_INTERVAL = 2.0
+
 
 class GammaVacuumDigitel(Device):
     """
@@ -208,18 +216,27 @@ class GammaVacuumDigitel(Device):
         self._sock = None
         self._factor = None
         self._last = 0.0
+        self._last_state_poll = 0.0
         self._connect()
 
     def delete_device(self):
         self._disconnect()
 
     def always_executed_hook(self):
-        # Read-on-demand: every read_* talks to the hardware when called, no
-        # background loop and no cached value to freeze. UpdateCount would be
-        # decorative here -- a count of client reads, not a heartbeat -- so
-        # none is published; a dead instrument surfaces as an unreadable
-        # attribute, which AnalogInterlock already reports as FAULT.
-        pass
+        # Read-on-demand for the numeric attributes: every read_* talks to
+        # the hardware when called, no background loop and no cached value
+        # to freeze. That reasoning does not cover State on its own: a client
+        # that only ever calls State() -- AlarmNotifier does exactly that,
+        # never reading an attribute -- would see whatever _connect() or the
+        # last On()/Off() left behind, however old, and miss the pump
+        # tripping off by itself in between. _read_hv_state() re-derives
+        # State from a live query, rate-limited by _STATE_POLL_INTERVAL so a
+        # burst of State() polls costs one exchange, not one each.
+        now = time.time()
+        if now - self._last_state_poll < _STATE_POLL_INTERVAL:
+            return
+        self._last_state_poll = now
+        self._read_hv_state()
 
     # ------------------
     # Connection helpers

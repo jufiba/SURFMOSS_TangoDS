@@ -80,6 +80,8 @@ class RaspberrySwitch(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(RaspberrySwitch.init_device) ENABLED START #
+        self._ready = False
+        self._switch = False
         # An exception escaping init_device makes PyTango exit the whole
         # server, and taking a pin fails for reasons outside this device:
         # the kernel holding the line for an overlay gives lgpio.error:
@@ -98,11 +100,41 @@ class RaspberrySwitch(Device):
         # The input is readable, which is all this server needs. It set
         # no state at all before, so it sat in UNKNOWN even when working,
         # and FAULT would have been its only meaningful state.
+        self._ready = True
         self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  RaspberrySwitch.init_device
     def always_executed_hook(self):
         # PROTECTED REGION ID(RaspberrySwitch.always_executed_hook) ENABLED START #
-        pass
+        # Runs before every command or attribute, State included -- unlike a
+        # State() read over CORBA, which never reaches read_Switch() at all.
+        # AlarmNotifier watches bare State() and never reads an attribute, so
+        # without this the state it sees was whatever the last client's
+        # attribute read happened to leave behind, arbitrarily old, or just
+        # the ON init_device set at start-up if nothing had read Switch yet.
+        # GPIO.input() is a syscall, cheap enough to afford on every call.
+        if not self._ready:
+            return
+        try:
+            reading = GPIO.input(self.GPIOport)
+        except Exception as e:                                # noqa: BLE001
+            self.set_state(tango.DevState.FAULT)
+            self.set_status("Can't read GPIO %s: %s" % (self.GPIOport, e))
+            self.error_stream("Can't read GPIO %s: %s" % (self.GPIOport, e))
+            return
+        if (reading):
+            if (self.Sense):
+                self._switch = True
+                self.set_state(tango.DevState.ON)
+            else:
+                self._switch = False
+                self.set_state(tango.DevState.OFF)
+        else:
+            if (self.Sense):
+                self._switch = False
+                self.set_state(tango.DevState.OFF)
+            else:
+                self._switch = True
+                self.set_state(tango.DevState.ON)
         # PROTECTED REGION END #    //  RaspberrySwitch.always_executed_hook
 
     def delete_device(self):
@@ -116,21 +148,10 @@ class RaspberrySwitch(Device):
 
     def read_Switch(self):
         # PROTECTED REGION ID(RaspberrySwitch.Switch_read) ENABLED START #
-        reading=GPIO.input(self.GPIOport)
-        if (reading):
-            if (self.Sense):
-                self.set_state(tango.DevState.ON)
-                return True
-            else:
-                self.set_state(tango.DevState.OFF)
-                return False
-        else:
-            if (self.Sense):
-                self.set_state(tango.DevState.OFF)
-                return False
-            else:
-                self.set_state(tango.DevState.ON)
-                return True
+        # always_executed_hook has already read the pin and set State for
+        # this same call; returning the value it computed avoids reading
+        # GPIOport twice per attribute request.
+        return self._switch
         # PROTECTED REGION END #    //  RaspberrySwitch.Switch_read
 
 

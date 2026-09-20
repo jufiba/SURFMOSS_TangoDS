@@ -228,12 +228,21 @@ class NetworkUPSTool(Device):
 
     def always_executed_hook(self):
         # PROTECTED REGION ID(NetworkUPSTool.always_executed_hook) ENABLED START #
-        # Where a server that started before upsd picks itself up without an
-        # operator Init. Rate-limited: callers should not pay for a refused
-        # connection on every single request.
-        if (self.get_state() == tango.DevState.FAULT
-                and time.time() - self.lastconnect > RETRY_PERIOD):
-            self._connect()
+        if self.get_state() == tango.DevState.FAULT:
+            # Where a server that started before upsd picks itself up
+            # without an operator Init. Rate-limited: callers should not pay
+            # for a refused connection on every single request.
+            if time.time() - self.lastconnect > RETRY_PERIOD:
+                self._connect()
+            return
+        # Runs before every command or attribute, State included -- unlike a
+        # State() read over CORBA, which never reaches read_UpsStatus() or
+        # any other attribute method. AlarmNotifier watches bare State() and
+        # never reads an attribute, so without this the state it saw was
+        # whatever the last client's attribute read happened to leave
+        # behind. _vars() already caches for CACHE_SECONDS and updates State
+        # itself when it refreshes, so this costs nothing beyond that window.
+        self._vars()
         # PROTECTED REGION END #    //  NetworkUPSTool.always_executed_hook
 
     def delete_device(self):
