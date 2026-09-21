@@ -9,10 +9,17 @@ Replaces the `xps-interlock.py` cron script on pi-xps, which is retired to
 `deprecated/`. A second instance on pi-mossbauer watches the compressor cooling
 water without commanding anything.
 
-**This is a secondary protection layer.** It runs in userspace, over CORBA,
-between two processes on a Raspberry Pi. Anything that genuinely must not
+**Today this is the only protection layer there is.** It runs in userspace, over
+CORBA, between two processes on a Raspberry Pi. Anything that genuinely must not
 happen belongs in a hardware chain — a flow switch in series with the supply
-enable — not here.
+enable — and **that chain does not exist yet**, so do not write or read this
+document as if something were backing these interlocks up. The one exception is
+the XPS x-ray gun, where the hardware does latch and wants a physical reset
+button; even there, measuring the flow and deciding on it happen only in
+software.
+
+While it stays that way, a Pi that is off, hung or off the network leaves the
+equipment it protects with no flow protection at all.
 
 ## ✅ pi-xps netboots (resolved 26-Aug-2026)
 
@@ -22,10 +29,9 @@ its own microSD** and shared no software with it, so installing into
 kept out of the install set. That is no longer the case.
 
 Both prerequisites are in the repository: `SEAWaterflowmeter`'s `UpdateCount`
-and `channelnames`, and `RaspberryButton`'s `Keepalive` / `DeadmanTimeout`. What
-still has to be checked **on the machine** before bringing this up is what
-`channelnames[0]` is actually set to on `xps/safety/water` — see
-_Registration_ below, where this document and the code disagree.
+and `channelnames`, and `RaspberryButton`'s `Keepalive` / `DeadmanTimeout`.
+`channelnames[0]` on `xps/safety/water` was settled by reading the database on
+27-Aug-2026: it is `xray`. See _Registration_.
 
 ## Installation into the repository
 
@@ -329,8 +335,11 @@ _Bypassing the interlock for a day_).
 ## Registration
 
 Server `AnalogInterlock/1`, class `AnalogInterlock`, device
-`xps/safety/interlockxraygun`, host pi-xps, **startup level 3** (after
-`RaspberryButton/1` and `SEAWaterflowmeter/3`, both at level 2).
+`xps/safety/interlockxraygun`, host pi-xps, **startup level 2**, together with
+`RaspberryButton/1`; `SEAWaterflowmeter/3` is at level 1 (checked against the
+database, 20-Sep-2026). What matters is the order — the sensor has to be up
+before anything reads it — not the numbers, which differ per host: on
+pi-mossbauer the same pair sits at levels 2 and 3.
 
 Renamed on 30-Aug-2026, together with the device it commands. The two names
 used to describe each other's job: the GPIO output was called
@@ -358,14 +367,16 @@ Set the properties *before* starting it for the first time: without
 The named attribute comes from `channelnames` on `xps/safety/water`, which has
 `channels = '13'` — one channel, so one named attribute. **Settled on
 27-Aug-2026 by reading the database: `channelnames = ['xray']`**, so the
-attribute is `xray`. This document was right and the code's own example, which
-says `xraygun`, is wrong.
+attribute is `xray`. Note that the LEEM flowmeter calls its equivalent channel
+`xraygun`: the two are not interchangeable, and using the wrong one faults the
+server rather than silently watching another line, which is the point of naming
+the attribute at all.
 
 The refactored server is deployed on pi-xps and running: `xps/safety/water` is
 ON and exposes `xray` alongside `channel0..3` and `UpdateCount`. So is the
 patched `RaspberryButton`: `xps/safety/switchxraygun` has `Pin = 26` and
 publishes `PinLevel`, `Active` and `TimeSinceKeepalive`. Its `DeadmanTimeout` is
-still unset, which is correct until commissioning step 4.
+set to 10, so commissioning step 4 is done.
 
 Requires the refactored `SEAWaterflowmeter` (for the named attribute and for
 `UpdateCount`) and the patched `RaspberryButton` (for `Keepalive`).

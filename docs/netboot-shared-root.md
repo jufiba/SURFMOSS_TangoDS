@@ -293,7 +293,12 @@ sudo ln -sf /usr/lib/systemd/system/nut-server.service \
 If a package's service refuses to start at boot despite everything looking
 correct, try this before investigating further.
 
-#### ⚠️ That workaround did not hold (26-Aug-2026) — still open
+#### ✅ That workaround did not hold either (26-Aug-2026) — since resolved
+
+**Resolved.** It turned out to be the pi-trixie boot problem, fixed since; the
+account below is kept because the two blind alleys in it are worth not
+repeating, and because the symptom — a unit that is enabled, symlinked and
+never queued — looks like nothing else.
 
 `NetworkUPSTool/1` on pi-leem would not start. `PyNUTClient()` takes no
 arguments, so it connects to `127.0.0.1:3493`; `upsd` was down, the connection
@@ -321,10 +326,12 @@ Two blind alleys worth not repeating:
   no-op, and with `Requires=` it could leave the unit hanging.
 
 Starting it by hand works and stays up (`systemctl start nut-server`, then
-`upsd` listens on 127.0.0.1:3493 and the device server comes up ON). **That is
-the current state: it will fail again at the next reboot of pi-leem.**
+`upsd` listens on 127.0.0.1:3493 and the device server comes up ON). That was
+the state until the pi-trixie boot problem was fixed; `leem/safety/ups` has come
+up on its own since.
 
-Two candidate fixes, neither applied yet:
+The two candidate fixes below were never applied, and are kept only in case the
+symptom comes back:
 
 1. **Per-Pi, no shared-root change.** Append `systemd.wants=nut-server.service`
    to pi-leem's `/tftpboot/487100ad/cmdline.txt`. Nothing else sees it. ⚠️ That
@@ -728,8 +735,12 @@ to open immediately behind it with no dependency on that finishing.
 
 ## Open items
 
-- Convert the remaining three Tango microSD Pis to netboot (pi-xps, pi-mossbauer,
-  pi-hvleem): create their `/tftpboot/<serial>/` and record their MACs.
+- Convert **pi-hvleem**, the last Tango Pi on microSD, to netboot: create its
+  `/tftpboot/<serial>/` and record its MAC. (pi-xps and pi-mossbauer were
+  converted in Aug-2026.) ⚠️ It is not just a matter of repointing it: that
+  installation is 32-bit (`armv7l`, Raspbian 10 buster, Python 3.7, PyTango
+  9.2.5, device servers installed as eggs), and the shared root is arm64. It
+  needs a fresh install, not a reuse.
 - **`ender` stays out of this scheme**: it is the 3D printer controller (it runs no
   device servers) and needs a writable root for its configuration and gcode files.
   It keeps its microSD at `10.43.88.16`.

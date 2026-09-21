@@ -153,7 +153,7 @@ class AnalogInterlock(Device):
 
     InputAttribute = device_property(
         dtype='str', default_value="channel0",
-        doc="Attribute to read. Prefer a named attribute (e.g. 'xraygun') "
+        doc="Attribute to read. Prefer a named attribute (e.g. 'xray') "
             "over a positional one (e.g. 'channel0'): if the channel order is "
             "ever changed, a named attribute disappears and this server "
             "faults, whereas a positional one silently starts watching a "

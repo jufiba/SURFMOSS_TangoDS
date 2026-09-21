@@ -10,7 +10,7 @@ PC — this server is a client of it, not of the camera.
 Manuals on the wiki: `Software_Uview.pdf`, `Software_UVIEWScript.pdf`,
 `Software_UView_FileFormats_2017.pdf`.
 
-Runs on **pi-leem**, server `ElmitecUview/1`, device `leem/measurement/Uview`,
+Runs on **pi-laser**, server `ElmitecUview/1`, device `leem/measurement/Uview`,
 `IP = tvips.lab`, `Port = 5570`.
 
 ## The protocol
