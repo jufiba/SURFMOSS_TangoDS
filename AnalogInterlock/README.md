@@ -131,6 +131,39 @@ Reopening the gate restarts evaluation from a clean slate, so a condition that
 was already bad while the gate was shut is caught on the next cycle rather than
 inherited as good.
 
+#### Unreadable is not reopened
+
+Those last two sentences pull in opposite directions, and until 30-sep-2026 the
+code let them. A gate that could not be read counted as open **and** as a fresh
+reopen, so it re-armed — and the re-arm exists precisely to trip straight out
+of the un-granted state when the input is already unsafe. On plant that is
+switched off, with its cooling correctly shut, the input *is* below threshold.
+One missed state read therefore produced a latched trip, a mail, and a `Reset`
+by hand, on equipment with nothing wrong with it.
+
+On 29-sep-2026 that happened to three interlocks on two machines inside an
+hour — `interlockhv1` at 18:17, `interlockhv2` at 18:19,
+`interlockmagnetwater` at 19:08, each reporting `re-armed with ... already
+below ThresholdOff`. No reboot, network event or database event was found
+behind any of them, and `interlockmagnetwater` shares a machine with its own
+gate, so the network cannot explain it. A single dropped reply is enough.
+
+So an unreadable gate now evaluates, as before, but does not count as a reopen:
+
+- it still evaluates, so a **granted** permissive still trips on a bad input,
+  gate or no gate — that is the half that protects, and it is untouched;
+- it does not re-arm, so it cannot trip out of the un-granted state on a
+  reading that is legitimately low because the plant is off;
+- `gatewasopen` is left alone, so a genuine reopen afterwards is still seen as
+  one. The case the re-arm exists for — somebody switches the supply on by
+  hand with the cooling shut — reads the gate as `ON` and still trips.
+
+What remains, and is deliberate: while the gate cannot be read, an un-granted
+interlock shows `ALARM` with `must rise above …`. That is the documented
+"readable but inside the hysteresis band with no permit", it is a description
+of the input rather than a trip, nothing is commanded, and it clears by itself
+on the next readable cycle. The old behaviour needed a person.
+
 #### A latched trip is `ALARM`, not `OFF`
 
 A trip that latched before the gate shut stays latched, and while it is held
@@ -749,7 +782,7 @@ bypass is in place.
 | bool property mangled in the database | refused at start-up; the status quotes the string |
 | str property quoted or whitespace-padded in the database | stripped and de-quoted at start-up; a status line names the value actually used |
 | gate device outside `GateStates` | `OFF`, not evaluating; a latched trip is held |
-| gate device unreadable     | evaluated anyway (fail towards acting); the status says the gate could not be read |
+| gate device unreadable     | evaluated anyway (fail towards acting); the status says the gate could not be read. **Not** treated as a reopen, so one dropped reply cannot latch an interlock whose plant is switched off — see _Unreadable is not reopened_ |
 | `GateStates` invalid, or set without `GateDevice` | refused at start-up; the status names the value |
 | bypass expires unnoticed   | re-arms, evaluates from a clean slate, trips if the condition is still bad |
 | `BypassFor` after a trip   | bypass reinstated, but the output stays off and latched; needs `Reset` + a manual on |

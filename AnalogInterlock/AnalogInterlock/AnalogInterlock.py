@@ -67,7 +67,11 @@ Failure modes and what this server does about each:
                                  Rules watching such an interlock want
                                  ok=ON,OFF, or they never see it recover
   gate unreadable             -> evaluated anyway (fail towards acting); the
-                                 status says the gate could not be read
+                                 status says the gate could not be read. It
+                                 does NOT count as a reopen: a missed reply is
+                                 no evidence the plant was switched on, and
+                                 re-arming on it latched three interlocks on
+                                 two machines in one hour on 29-sep-2026
   FAULT not in GateStates     -> standing note in Status. NOT a behaviour:
                                  which states open the gate stays per-device,
                                  but leaving FAULT out fails silently, and a
@@ -400,6 +404,7 @@ class AnalogInterlock(Device):
         self.cleanslate = False         # one-shot: re-evaluate fresh
         #                                 (gate reopen, or a bypass ending)
         self.gatevalue = ""             # last gate state seen, for Status
+        self.gatereadable = True        # did the last gate_open() read it?
         self.gatewarn = ""              # standing note: GateStates never gates
         self.gatefault = ""             # standing note: gate device unreadable
         self.gatenofault = ""           # standing note: FAULT not in GateStates
@@ -746,16 +751,24 @@ class AnalogInterlock(Device):
         """True when evaluation should run this cycle. An unreadable gate
         counts as open and says so in Status: for a command-on-trip interlock
         failing towards acting is recoverable and failing towards silence is
-        not. Mirrors AlarmNotifier.gate_open."""
+        not. Mirrors AlarmNotifier.gate_open.
+
+        Also records in self.gatereadable whether that True came from reading
+        the gate or from failing to. The caller needs the difference: see
+        cycle(), where only a gate that was actually read as open counts as a
+        reopen.
+        """
         try:
             current = str(self.gate_proxy().state())
         except Exception as exc:
             self.gateproxy = None
+            self.gatereadable = False
             self.gatevalue = "unreadable"
             self.gatefault = ("gate %r unreadable, evaluating anyway: %s"
                               % (self.prop["GateDevice"], exc))
             return True
         self.gatefault = ""
+        self.gatereadable = True
         self.gatevalue = current
         return current.upper() in self.gatestates
 
@@ -893,12 +906,15 @@ class AnalogInterlock(Device):
                             % (self.prop["GateDevice"], self.gatevalue))
 
     def reopen_gate(self):
-        """Gate just opened. Re-arm the failure counters so evaluation starts
-        from a clean slate -- as AlarmNotifier.restart does -- and set a
+        """Gate just READ as open. Re-arm the failure counters so evaluation
+        starts from a clean slate -- as AlarmNotifier.restart does -- and set a
         one-shot so the next lines can trip straight out of the un-granted
         state if the input is already on the unsafe side. permit, tripped and
         the latch are left alone: a condition that is still good is correctly
-        carried over, and a real latch must survive until Reset."""
+        carried over, and a real latch must survive until Reset.
+
+        Called only when the gate was actually read, never when it merely
+        could not be reached; cycle() has the reasoning."""
         self.readfailures = 0
         self.beatfailures = 0
         self.stalecount = 0
@@ -961,7 +977,21 @@ class AnalogInterlock(Device):
             if not self.gate_open():
                 self.enter_gated()
                 return
-            if not self.gatewasopen:
+            # Only a gate that was actually READ as open counts as a reopen.
+            # An unreadable gate still evaluates -- failing towards acting is
+            # the point -- but it is no evidence that anything changed, and
+            # re-arming on it turns one missed reply into a latched trip.
+            #
+            # That is not hypothetical. On 29-sep-2026 three interlocks on two
+            # machines latched within an hour -- interlockhv1 18:17,
+            # interlockhv2 18:19, interlockmagnetwater 19:08 -- each reporting
+            # "re-armed with ... already below ThresholdOff", each on plant
+            # that was switched off with its cooling correctly closed, and
+            # each needing a Reset by hand. No reboot, no network event and no
+            # database event was found on any of the three; a single missed
+            # state read is enough. gatewasopen is deliberately left untouched
+            # here, so that a later genuine reopen is still seen as one.
+            if self.gatereadable and not self.gatewasopen:
                 self.gatewasopen = True
                 self.reopen_gate()
 
