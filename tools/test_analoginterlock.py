@@ -363,12 +363,21 @@ def no_restore(cls):
 
 
 class _GateStub:
-    """Just enough of a DeviceProxy for gate_open(): a .state() to read."""
+    """Just enough of a DeviceProxy for gate_open(): a .state() to read.
+
+    Set `dead` to have state() raise, which is how a gate that cannot be
+    reached behaves -- a Tango timeout, the server restarting, one dropped
+    reply.
+    """
+
+    dead = False
 
     def __init__(self):
         self.st = tango.DevState.OFF
 
     def state(self):
+        if self.dead:
+            raise RuntimeError("stub gate unreachable")
         return self.st
 
 
@@ -534,6 +543,118 @@ def latched_gate(cls):
           (dev.state, dev.permit), (tango.DevState.ON, True))
 
 
+def unreadable_gate(cls):
+    """A gate that could not be read is not a gate that just opened.
+
+    gate_open() returns True when the gate device cannot be reached, so that a
+    command-on-trip interlock keeps evaluating rather than falling silent.
+    Until 30-sep-2026 cycle() also treated that True as a fresh reopen, which
+    re-armed the interlock and let it trip straight out of the un-granted
+    state -- and the un-granted state, on plant that is switched off with its
+    cooling correctly closed, means the input is legitimately below threshold.
+
+    One missed state read therefore produced a latched trip, an alarm mail and
+    a Reset by hand, on equipment with nothing wrong with it. On 29-sep-2026
+    it happened to three interlocks on two machines inside an hour:
+    interlockhv1 at 18:17, interlockhv2 at 18:19, interlockmagnetwater at
+    19:08, all reporting "re-armed with ... already below ThresholdOff". No
+    reboot, network event or database event was found behind any of them.
+
+    What must NOT be lost is the case the re-arm exists for: somebody switches
+    the supply on by hand while the cooling is shut. There the gate really is
+    read as ON, and that still trips.
+    """
+    Base = build_fake(cls)
+
+    class Gated(Base):
+        GateDevice = "stub/gate/1"
+        GateStates = "ON,FAULT"
+        Latching = True
+
+        def __init__(self, **kw):
+            super().__init__(**kw)
+            self.gate = _GateStub()
+            err = self.gate_config()
+            assert err is None, err
+
+        def gate_proxy(self):
+            return self.gate
+
+    print("\nan unreadable gate evaluates but does not re-arm")
+    dev = Gated()
+    dev.gate.st = tango.DevState.OFF      # plant off, gate shut
+    dev.value = 0.0                       # cooling correctly shut with it
+    dev.cycle()
+    check("gated, nothing latched", (dev.state, dev.tripped),
+          (tango.DevState.OFF, False))
+    dev.gate.dead = True                  # one missed reply
+    dev.cycle()
+    check("no spurious latched trip", dev.tripped, False)
+    check("no command was sent to the plant", dev.sent, [])
+    check("no Reset is owed", "Reset" in dev.status, False)
+    check("status says the gate could not be read",
+          "unreadable" in dev.status, True)
+    # The cycle does still evaluate, and evaluating an un-granted interlock
+    # whose input is below ThresholdOn yields ALARM -- the documented
+    # "readable but inside the hysteresis band with no permit". That is a
+    # description of the input, not a trip: it clears by itself on the next
+    # readable cycle, where the old behaviour needed a person.
+    check("shows ALARM while it cannot see the gate",
+          dev.state, tango.DevState.ALARM)
+    check("and says what it is waiting for", "must rise" in dev.status, True)
+
+    print("\nand the gate coming back is not mistaken for a reopen either")
+    dev.gate.dead = False
+    dev.gate.st = tango.DevState.OFF      # still shut, nothing happened
+    dev.cycle()
+    check("still no trip", dev.tripped, False)
+    check("back to plain gated", dev.state, tango.DevState.OFF)
+
+    print("\nbut a gate genuinely read as open still re-arms and trips")
+    # The case the re-arm exists for: the supply is switched on by hand with
+    # the cooling shut. This must keep working, unreadable gate or not.
+    dev = Gated()
+    dev.gate.st = tango.DevState.OFF
+    dev.value = 0.0
+    dev.cycle()
+    dev.gate.st = tango.DevState.ON       # somebody switched it on
+    dev.cycle()
+    check("trips", dev.tripped, True)
+    check("ALARM", dev.state, tango.DevState.ALARM)
+    check("reason names the re-arm", "re-armed" in dev.lasttripreason, True)
+    check("and it commanded the plant off", dev.sent, ["Off"])
+
+    print("\nunreadable while shut, then genuinely open: still catches it")
+    # gatewasopen is left untouched by the unreadable cycle, so the reopen is
+    # still seen as one when the gate can be read again.
+    dev = Gated()
+    dev.gate.st = tango.DevState.OFF
+    dev.value = 0.0
+    dev.cycle()
+    dev.gate.dead = True
+    dev.cycle()
+    check("no trip while unreadable", dev.tripped, False)
+    dev.gate.dead = False
+    dev.gate.st = tango.DevState.ON
+    dev.cycle()
+    check("trips as soon as the gate can be read", dev.tripped, True)
+    check("and commanded it off", dev.sent, ["Off"])
+
+    print("\na granted permit still trips on a bad reading, gate or no gate")
+    # Untouched by this change, and the half that actually protects: once
+    # granted, a withdrawing input trips regardless of the gate.
+    dev = Gated()
+    dev.gate.st = tango.DevState.ON
+    dev.value = 10.0
+    dev.cycle()
+    check("granted", (dev.state, dev.permit), (tango.DevState.ON, True))
+    dev.gate.dead = True                  # gate unreadable AND cooling lost
+    dev.value = 0.0
+    dev.cycle()
+    check("still trips", dev.tripped, True)
+    check("ALARM", dev.state, tango.DevState.ALARM)
+
+
 PORT = 10123
 NAME = "mossbauer/test/interlock"
 
@@ -621,6 +742,7 @@ def main(argv):
     no_restore(AnalogInterlock)
     gate(AnalogInterlock)
     latched_gate(AnalogInterlock)
+    unreadable_gate(AnalogInterlock)
     refusals(repo)
 
     print("\n%s" % ("FAILURES: %d" % FAILS if FAILS else "all checks passed"))

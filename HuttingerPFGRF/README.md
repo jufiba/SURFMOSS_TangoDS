@@ -49,7 +49,17 @@ read-write EXPERT for the nominal / mode settings. Commands: `On`, `Off`,
 
 - `init_device` is hardened (a switched-off generator faults instead of taking
   the server down). No reconnect thread.
+- `parse_response` checks the length and the XOR checksum before unpacking.
+  It used to call `struct.unpack` on whatever came back, so an empty reply —
+  what a silent instrument returns — raised _unpack requires a buffer of 5
+  bytes_, naming neither the port nor the command nor the fact that nothing
+  had arrived. This generator never showed it, because its cable has always
+  worked; the DC one did, on 30-oct-2026, when it was first connected without
+  a null-modem adapter. Same code, same defect, and the only difference was
+  luck.
 - `HuttingerPFGDC` is the DC sibling (PFG-DC1500) — same house protocol,
-  different codes; it has no wiki manual yet, only this RF one.
+  different codes. Its README now documents the protocol in more detail than
+  this one, including the *wait bit* that tells a query from a write, and the
+  control-mode table. Worth reading before touching either driver.
 
 Install: in `pyproject.toml`; needs `pyserial`.

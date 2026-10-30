@@ -9,10 +9,17 @@ Replaces the `xps-interlock.py` cron script on pi-xps, which is retired to
 `deprecated/`. A second instance on pi-mossbauer watches the compressor cooling
 water without commanding anything.
 
-**This is a secondary protection layer.** It runs in userspace, over CORBA,
-between two processes on a Raspberry Pi. Anything that genuinely must not
+**Today this is the only protection layer there is.** It runs in userspace, over
+CORBA, between two processes on a Raspberry Pi. Anything that genuinely must not
 happen belongs in a hardware chain — a flow switch in series with the supply
-enable — not here.
+enable — and **that chain does not exist yet**, so do not write or read this
+document as if something were backing these interlocks up. The one exception is
+the XPS x-ray gun, where the hardware does latch and wants a physical reset
+button; even there, measuring the flow and deciding on it happen only in
+software.
+
+While it stays that way, a Pi that is off, hung or off the network leaves the
+equipment it protects with no flow protection at all.
 
 ## ✅ pi-xps netboots (resolved 26-Aug-2026)
 
@@ -22,10 +29,9 @@ its own microSD** and shared no software with it, so installing into
 kept out of the install set. That is no longer the case.
 
 Both prerequisites are in the repository: `SEAWaterflowmeter`'s `UpdateCount`
-and `channelnames`, and `RaspberryButton`'s `Keepalive` / `DeadmanTimeout`. What
-still has to be checked **on the machine** before bringing this up is what
-`channelnames[0]` is actually set to on `xps/safety/water` — see
-_Registration_ below, where this document and the code disagree.
+and `channelnames`, and `RaspberryButton`'s `Keepalive` / `DeadmanTimeout`.
+`channelnames[0]` on `xps/safety/water` was settled by reading the database on
+27-Aug-2026: it is `xray`. See _Registration_.
 
 ## Installation into the repository
 
@@ -130,6 +136,39 @@ failing towards silence is not — and `Status` says the gate could not be read.
 Reopening the gate restarts evaluation from a clean slate, so a condition that
 was already bad while the gate was shut is caught on the next cycle rather than
 inherited as good.
+
+#### Unreadable is not reopened
+
+Those last two sentences pull in opposite directions, and until 30-sep-2026 the
+code let them. A gate that could not be read counted as open **and** as a fresh
+reopen, so it re-armed — and the re-arm exists precisely to trip straight out
+of the un-granted state when the input is already unsafe. On plant that is
+switched off, with its cooling correctly shut, the input *is* below threshold.
+One missed state read therefore produced a latched trip, a mail, and a `Reset`
+by hand, on equipment with nothing wrong with it.
+
+On 29-sep-2026 that happened to three interlocks on two machines inside an
+hour — `interlockhv1` at 18:17, `interlockhv2` at 18:19,
+`interlockmagnetwater` at 19:08, each reporting `re-armed with ... already
+below ThresholdOff`. No reboot, network event or database event was found
+behind any of them, and `interlockmagnetwater` shares a machine with its own
+gate, so the network cannot explain it. A single dropped reply is enough.
+
+So an unreadable gate now evaluates, as before, but does not count as a reopen:
+
+- it still evaluates, so a **granted** permissive still trips on a bad input,
+  gate or no gate — that is the half that protects, and it is untouched;
+- it does not re-arm, so it cannot trip out of the un-granted state on a
+  reading that is legitimately low because the plant is off;
+- `gatewasopen` is left alone, so a genuine reopen afterwards is still seen as
+  one. The case the re-arm exists for — somebody switches the supply on by
+  hand with the cooling shut — reads the gate as `ON` and still trips.
+
+What remains, and is deliberate: while the gate cannot be read, an un-granted
+interlock shows `ALARM` with `must rise above …`. That is the documented
+"readable but inside the hysteresis band with no permit", it is a description
+of the input rather than a trip, nothing is commanded, and it clears by itself
+on the next readable cycle. The old behaviour needed a person.
 
 #### A latched trip is `ALARM`, not `OFF`
 
@@ -329,8 +368,11 @@ _Bypassing the interlock for a day_).
 ## Registration
 
 Server `AnalogInterlock/1`, class `AnalogInterlock`, device
-`xps/safety/interlockxraygun`, host pi-xps, **startup level 3** (after
-`RaspberryButton/1` and `SEAWaterflowmeter/3`, both at level 2).
+`xps/safety/interlockxraygun`, host pi-xps, **startup level 2**, together with
+`RaspberryButton/1`; `SEAWaterflowmeter/3` is at level 1 (checked against the
+database, 20-Sep-2026). What matters is the order — the sensor has to be up
+before anything reads it — not the numbers, which differ per host: on
+pi-mossbauer the same pair sits at levels 2 and 3.
 
 Renamed on 30-Aug-2026, together with the device it commands. The two names
 used to describe each other's job: the GPIO output was called
@@ -358,14 +400,16 @@ Set the properties *before* starting it for the first time: without
 The named attribute comes from `channelnames` on `xps/safety/water`, which has
 `channels = '13'` — one channel, so one named attribute. **Settled on
 27-Aug-2026 by reading the database: `channelnames = ['xray']`**, so the
-attribute is `xray`. This document was right and the code's own example, which
-says `xraygun`, is wrong.
+attribute is `xray`. Note that the LEEM flowmeter calls its equivalent channel
+`xraygun`: the two are not interchangeable, and using the wrong one faults the
+server rather than silently watching another line, which is the point of naming
+the attribute at all.
 
 The refactored server is deployed on pi-xps and running: `xps/safety/water` is
 ON and exposes `xray` alongside `channel0..3` and `UpdateCount`. So is the
 patched `RaspberryButton`: `xps/safety/switchxraygun` has `Pin = 26` and
 publishes `PinLevel`, `Active` and `TimeSinceKeepalive`. Its `DeadmanTimeout` is
-still unset, which is correct until commissioning step 4.
+set to 10, so commissioning step 4 is done.
 
 Requires the refactored `SEAWaterflowmeter` (for the named attribute and for
 `UpdateCount`) and the patched `RaspberryButton` (for `Keepalive`).
@@ -749,7 +793,7 @@ bypass is in place.
 | bool property mangled in the database | refused at start-up; the status quotes the string |
 | str property quoted or whitespace-padded in the database | stripped and de-quoted at start-up; a status line names the value actually used |
 | gate device outside `GateStates` | `OFF`, not evaluating; a latched trip is held |
-| gate device unreadable     | evaluated anyway (fail towards acting); the status says the gate could not be read |
+| gate device unreadable     | evaluated anyway (fail towards acting); the status says the gate could not be read. **Not** treated as a reopen, so one dropped reply cannot latch an interlock whose plant is switched off — see _Unreadable is not reopened_ |
 | `GateStates` invalid, or set without `GateDevice` | refused at start-up; the status names the value |
 | bypass expires unnoticed   | re-arms, evaluates from a clean slate, trips if the condition is still bad |
 | `BypassFor` after a trip   | bypass reinstated, but the output stays off and latched; needs `Reset` + a manual on |

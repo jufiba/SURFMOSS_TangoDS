@@ -27,6 +27,15 @@ import os
 import sys
 import serial
 import struct
+
+
+class HuttingerError(Exception):
+    """The generator did not answer, or answered something that is not a
+    frame. One exception for every way the exchange can fail, because to
+    every caller they mean the same thing: there is no reading to be had.
+    Same class, same name, as in HuttingerPFGDC."""
+
+
 # PROTECTED REGION END #    //  HuttingerPFGRF.additionnal_import
 
 __all__ = ["HuttingerPFGRF", "main"]
@@ -50,6 +59,29 @@ class HuttingerPFGRF(Device):
         return(self.ser.read(5))
 
     def parse_response(self,resp):
+        # The length check has to come before the unpack. A short or empty
+        # reply used to reach struct.unpack and raise "unpack requires a
+        # buffer of 5 bytes", which says nothing about which port, which
+        # command, or whether anything came back at all -- and a silent
+        # generator returns b"", so that is the likely case, not the exotic
+        # one.
+        #
+        # This generator has never shown it, because its cable has always
+        # worked. The DC one next to it did, on 30-oct-2026, when it was
+        # first connected with no null-modem adapter: nothing arrived and the
+        # status blamed a buffer. Same code, same defect; the difference was
+        # luck, which is a poor reason to leave it here.
+        if (len(resp)!=5):
+            raise HuttingerError("expected a 5-byte block, got %d: %r"
+                                 %(len(resp),resp))
+        # The checksum is the XOR of the first four bytes (manual, table 8.12,
+        # "5 byte communication block").
+        crc=0
+        for b in resp[:4]:
+            crc^=b
+        if (crc!=resp[4]):
+            raise HuttingerError("checksum mismatch on %r: computed %02x, "
+                                 "received %02x"%(resp,crc,resp[4]))
         (address,cmd,data,crc)=struct.unpack(">BBHB",resp)
         cmd=resp[1]
         if (cmd==21):
