@@ -31,6 +31,7 @@ import struct
 
 # Control modes, from the manual's table 8.12, row N. Only RS232 lets this
 # server command anything; the rest answer queries and refuse writes.
+MODE_LOCAL = 1
 MODE_RS232 = 3
 MODE_NAMES = {1: "LOCAL", 2: "REALTIME", 3: "RS232", 4: "REMOTE1",
               5: "REMOTE2", 6: "RS485", 7: "PROFIBUS", 8: "REMOTE3",
@@ -610,6 +611,39 @@ class HuttingerPFGDC(Device):
         return self.do_set_remote_control()
         # PROTECTED REGION END #    //  HuttingerPFGDC.SetRemoteControl
 
+    @command(
+    dtype_out='str',
+    display_level=DispLevel.EXPERT,
+    doc_out="the control mode in force afterwards",
+    )
+    @DebugIt()
+    def SetLocalControl(self):
+        # PROTECTED REGION ID(HuttingerPFGDC.SetLocalControl) ENABLED START #
+        return self.do_set_local_control()
+        # PROTECTED REGION END #    //  HuttingerPFGDC.SetLocalControl
+
+    def set_control_mode(self,wanted):
+        """Write a control mode, read it back, and report what is in force.
+
+        Shared by do_set_remote_control and do_set_local_control, so that the
+        read-back is not something one of them can be written without. The
+        read-back is the point: a refused write answers NAK and the mode
+        simply stays as it was, and reporting success there would be the
+        worst outcome -- the caller would believe it had control and every
+        later command would quietly fail.
+        """
+        self.parse_response(self.sendcommand(0,"4E",wanted))
+        (address,command,mode)=self.parse_response(self.sendcommand(0,"CE",0))
+        self.controlmode=mode
+        name=MODE_NAMES.get(mode,"unknown")
+        if (mode!=wanted):
+            asked=MODE_NAMES.get(wanted,"unknown")
+            self.set_status("The generator refused %s control and stayed in "
+                            "%s (%d)"%(asked,name,mode))
+            return "refused: still %s (%d)"%(name,mode)
+        self.set_status("Connected to the PFG-DC, control mode %s"%name)
+        return name
+
     def do_set_remote_control(self):
         """Put the generator into RS232 control, and say what it ended up in.
 
@@ -622,18 +656,23 @@ class HuttingerPFGDC(Device):
         wants a real Tango logger, which a stubbed Device has not got. Same
         split as AnalogInterlock.do_reset and LeyboldIG3.do_start.
         """
-        self.parse_response(self.sendcommand(0,"4E",MODE_RS232))
-        # Read it back rather than assume the write took: on this generator a
-        # refused write answers NAK and the mode simply stays as it was.
-        (address,command,mode)=self.parse_response(self.sendcommand(0,"CE",0))
-        self.controlmode=mode
-        name=MODE_NAMES.get(mode,"unknown")
-        if (mode!=MODE_RS232):
-            self.set_status("The generator refused RS232 control and stayed "
-                            "in %s (%d)"%(name,mode))
-            return "refused: still %s (%d)"%(name,mode)
-        self.set_status("Connected to the PFG-DC, control mode RS232")
-        return "RS232"
+        return self.set_control_mode(MODE_RS232)
+
+    def do_set_local_control(self):
+        """Hand control back to the front panel.
+
+        The counterpart of do_set_remote_control, and it exists because a
+        server that can take the panel's control away must be able to give
+        it back: otherwise the only way to recover manual control is to
+        switch the generator off.
+
+        LOCAL and not the mode it was in before, deliberately. REALTIME is
+        reachable from the front panel once it has control, so restoring
+        whatever happened to be set at start-up would add state to remember
+        for something the operator can do in one keypress -- and after a
+        server restart there would be nothing to remember anyway.
+        """
+        return self.set_control_mode(MODE_LOCAL)
 
 # ----------
 # Run server

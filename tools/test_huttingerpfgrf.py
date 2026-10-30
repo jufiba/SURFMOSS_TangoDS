@@ -177,6 +177,29 @@ def main(argv):
     check("state", dev.state, tango.DevState.OFF)
     check("one exchange", len(dev.ser.escrito), 1)
     check("and it was a query", dev.ser.escrito[0][1] >= 0x80, True)
+    check("status reports the mode", "RS232" in dev.statustext, True)
+    check("mode recorded", dev.controlmode, 3)
+
+    print("\nand a mode that is not RS232 is reported as such")
+    # The answer to CE was read and thrown away before 30-oct-2026, so a
+    # generator in LOCAL looked identical to one ready to be driven.
+    dev = build(module, [trama(0x4E, 1)])
+    dev.init_device()
+    check("state", dev.state, tango.DevState.OFF)
+    check("status names LOCAL", "LOCAL" in dev.statustext, True)
+    check("and warns commands will be refused",
+          "refuse" in dev.statustext, True)
+
+    print("\nSetRemoteControl / SetLocalControl, with the read-back")
+    dev = build(module, [ACK, CE_MODO])
+    check("to RS232", dev.do_set_remote_control(), "RS232")
+    check("wrote data 3", dev.ser.escrito[0][3], 3)
+    dev = build(module, [ACK, trama(0x4E, 1)])
+    check("to LOCAL", dev.do_set_local_control(), "LOCAL")
+    check("wrote data 1", dev.ser.escrito[0][3], 1)
+    dev = build(module, [NAK, CE_MODO])
+    check("a refused write is reported",
+          dev.do_set_local_control().startswith("refused"), True)
 
     print("\n%s" % ("FAILURES: %d" % FAILS if FAILS else "all checks passed"))
     return 1 if FAILS else 0

@@ -54,6 +54,17 @@ mode 3, reads it back, and reports the mode actually in force — a refused
 write answers `NAK` and leaves the mode alone, and reporting success there
 would be the worst outcome, because every later command would quietly fail.
 
+**`SetLocalControl`** is its counterpart and hands the panel back. It exists
+because a server that can take control away must be able to give it back:
+otherwise the only way to recover manual control is to switch the generator
+off. It always goes to **LOCAL**, never to whatever mode happened to be set
+before — `REALTIME` is one keypress away on the front panel once it has
+control, so remembering the previous mode would be state kept for nothing,
+and after a server restart there would be nothing to remember anyway.
+
+Both are `EXPERT` level, so **ATKPanel only shows them with the expert view
+on** (`View` → `Expert`), like `On_with_ramp` and `SendCmd`.
+
 `delete_device` **does** switch the output off, which is the opposite decision
 on purpose: a generator left running with nothing watching it is the dangerous
 state, and this supply has no deadman of its own. An `Init` calls
@@ -96,7 +107,7 @@ why that one worked and this one did not.
 - Attributes mirror the RF driver: nominal/actual power, voltage, current,
   arc counters, regulation and operation mode.
 - Commands: `On_with_ramp`, `reset_arc_counter`, `SetRemoteControl`,
-  `SendCmd(cmd, data)` (EXPERT, raw protocol access).
+  `SetLocalControl`, `SendCmd(cmd, data)` (EXPERT, raw protocol access).
 
 `tools/test_huttingerpfgdc.py` covers the handshake and the frame handling
 against a stub port, using the frames the real generator returned.
