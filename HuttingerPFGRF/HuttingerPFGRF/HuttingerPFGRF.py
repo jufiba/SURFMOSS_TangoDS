@@ -29,6 +29,15 @@ import serial
 import struct
 
 
+# Control modes, from the manual's table 8.12, row N. Only RS232 lets this
+# server command anything; the rest answer queries and refuse writes.
+MODE_LOCAL = 1
+MODE_RS232 = 3
+MODE_NAMES = {1: "LOCAL", 2: "REALTIME", 3: "RS232", 4: "REMOTE1",
+              5: "REMOTE2", 6: "RS485", 7: "PROFIBUS", 8: "REMOTE3",
+              9: "REMOTE4"}
+
+
 class HuttingerError(Exception):
     """The generator did not answer, or answered something that is not a
     frame. One exception for every way the exchange can fail, because to
@@ -91,6 +100,44 @@ class HuttingerPFGRF(Device):
         else:
             command="%x"%resp[1]
         return(address,command,data)
+
+    def set_control_mode(self,wanted):
+        """Write a control mode, read it back, and report what is in force.
+
+        Shared by do_set_remote_control and do_set_local_control so the
+        read-back cannot be left out of one of them. The read-back is the
+        point: a refused write answers NAK and the mode stays as it was, and
+        reporting success there would be the worst outcome -- the caller
+        would believe it had control and every later command would quietly
+        fail. Same code as in HuttingerPFGDC.
+        """
+        self.parse_response(self.sendcommand(0,"4E",wanted))
+        (address,command,mode)=self.parse_response(self.sendcommand(0,"CE",0))
+        self.controlmode=mode
+        name=MODE_NAMES.get(mode,"unknown")
+        if (mode!=wanted):
+            asked=MODE_NAMES.get(wanted,"unknown")
+            self.set_status("The generator refused %s control and stayed in "
+                            "%s (%d)"%(asked,name,mode))
+            return "refused: still %s (%d)"%(name,mode)
+        self.set_status("Connected to the PFG-RF, control mode %s"%name)
+        return name
+
+    def do_set_remote_control(self):
+        """Put the generator into RS232 control. A command and not part of
+        init_device, because it takes control away from whoever has the front
+        panel, and that is a decision for a person."""
+        return self.set_control_mode(MODE_RS232)
+
+    def do_set_local_control(self):
+        """Hand control back to the front panel.
+
+        LOCAL and not the mode it was in before, deliberately: REALTIME is
+        reachable from the front panel once it has control, so restoring
+        whatever was set at start-up would add state to remember for
+        something the operator does in one keypress.
+        """
+        return self.set_control_mode(MODE_LOCAL)
 
     def byte_hex(self,a):
          return("%02x"%a)
@@ -255,13 +302,26 @@ class HuttingerPFGRF(Device):
             self.error_stream("Can't open %s: %s"%(self.SerialPort,e))
             return
         try:
-            (address,command,data)=self.parse_response(self.sendcommand(0,"CE",0))
+            (address,command,mode)=self.parse_response(self.sendcommand(0,"CE",0))
         except Exception as e:
             self.set_state(tango.DevState.FAULT)
             self.set_status("No usable answer on %s: %s"%(self.SerialPort,e))
             self.error_stream("No usable answer on %s: %s"%(self.SerialPort,e))
             return
+        # The answer to CE used to be read and thrown away. It is the control
+        # mode, and it decides whether this server can command anything at
+        # all: outside RS232 the generator answers queries and refuses
+        # writes. Saying so at start-up saves working that out from a
+        # sequence of refused commands.
+        self.controlmode=mode
         self.set_state(tango.DevState.OFF)
+        if (mode==MODE_RS232):
+            self.set_status("Connected to the PFG-RF, control mode RS232")
+        else:
+            self.set_status("Connected to the PFG-RF, but control mode is %s "
+                            "(%d), not RS232: it will answer queries and "
+                            "refuse commands. SetRemoteControl changes it."
+                            %(MODE_NAMES.get(mode,"unknown"),mode))
         # PROTECTED REGION END #    //  HuttingerPFGRF.init_device
     def always_executed_hook(self):
         # PROTECTED REGION ID(HuttingerPFGRF.always_executed_hook) ENABLED START #
@@ -450,6 +510,28 @@ class HuttingerPFGRF(Device):
         (address,command,data)=self.parse_response(self.sendcommand(int(argin[0]),argin[1],int(argin[2])))
         return([command+" %d"%data])
         # PROTECTED REGION END #    //  HuttingerPFGRF.SendCmd
+
+    @command(
+    dtype_out='str',
+    display_level=DispLevel.EXPERT,
+    doc_out="the control mode in force afterwards",
+    )
+    @DebugIt()
+    def SetRemoteControl(self):
+        # PROTECTED REGION ID(HuttingerPFGRF.SetRemoteControl) ENABLED START #
+        return self.do_set_remote_control()
+        # PROTECTED REGION END #    //  HuttingerPFGRF.SetRemoteControl
+
+    @command(
+    dtype_out='str',
+    display_level=DispLevel.EXPERT,
+    doc_out="the control mode in force afterwards",
+    )
+    @DebugIt()
+    def SetLocalControl(self):
+        # PROTECTED REGION ID(HuttingerPFGRF.SetLocalControl) ENABLED START #
+        return self.do_set_local_control()
+        # PROTECTED REGION END #    //  HuttingerPFGRF.SetLocalControl
 
 # ----------
 # Run server

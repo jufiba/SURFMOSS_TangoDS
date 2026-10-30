@@ -236,6 +236,28 @@ def main(argv):
     check("names the mode it stayed in", "REALTIME" in salida, True)
     check("status agrees", "refused" in dev.statustext, True)
 
+    print("\nSetLocalControl hands the panel back, always to LOCAL")
+    # LOCAL and not whatever it was before: REALTIME is one keypress away on
+    # the front panel once it has control, so there is no state to remember.
+    dev = build(module, [ACK, trama(0x4E, 1)])
+    salida = dev.do_set_local_control()
+    check("returns the mode in force", salida, "LOCAL")
+    check("wrote 4E", dev.ser.escrito[0][1], 0x4E)
+    check("with data 1 (LOCAL)", dev.ser.escrito[0][3], 1)
+    check("read it back", dev.ser.escrito[1][1], 0xCE)
+    check("mode recorded", dev.controlmode, 1)
+
+    print("\nand it too believes the read-back")
+    dev = build(module, [NAK, CE_MODO_RS232])
+    salida = dev.do_set_local_control()
+    check("says refused", salida.startswith("refused"), True)
+    check("names where it stayed", "RS232" in salida, True)
+
+    print("\nthe two commands are symmetric: remote then local")
+    dev = build(module, [ACK, CE_MODO_RS232, ACK, trama(0x4E, 1)])
+    check("to RS232", dev.do_set_remote_control(), "RS232")
+    check("and back to LOCAL", dev.do_set_local_control(), "LOCAL")
+
     print("\ndelete_device still switches the output off, deliberately")
     # The opposite decision from init_device, and on purpose: a generator
     # left running with nothing watching it is the dangerous state.

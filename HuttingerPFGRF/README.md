@@ -43,7 +43,26 @@ Attributes mirror the codes above (`NominalPower`, `IncidentPower`,
 `ReflectedPower`, `DCBias`, `RFPeakVoltage`, `RegulationMode`, `Limit`,
 `Control`, `CT`, `CL`, `MathboxMode`, …), read-only for measured values and
 read-write EXPERT for the nominal / mode settings. Commands: `On`, `Off`,
-`SendCmd([addr, cmdhex, data])` (EXPERT).
+`SetRemoteControl`, `SetLocalControl`, `SendCmd([addr, cmdhex, data])`
+(EXPERT).
+
+The last three are `EXPERT` level, so **ATKPanel shows them only with the
+expert view on** (`View` → `Expert`).
+
+## Control mode
+
+Only mode **3 = RS232** lets this server command anything; in any other mode
+the generator answers queries and refuses writes (manual, table 8.12, row N:
+1=LOCAL, 2=REALTIME, 3=RS232, 4=REMOTE1 …). `init_device` already asked for
+it with a `CE` query, but **threw the answer away**, so a generator in LOCAL
+looked exactly like one ready to be driven and the only symptom was a run of
+refused commands. It now reports the mode in `Status` at start-up.
+
+`SetRemoteControl` writes mode 3, `SetLocalControl` writes mode 1 and hands
+the panel back. Both read the mode back afterwards rather than assume the
+write took, and report what is actually in force. Taking control away from
+the front panel is deliberately not something that happens just because a
+device server started.
 
 ## Notes
 
