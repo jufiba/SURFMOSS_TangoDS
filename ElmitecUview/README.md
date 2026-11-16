@@ -58,6 +58,13 @@ tokens:
   `ElmitecUviewError` with the documented reason (intensity window not open
   / ROI invalid / ROI not active) rather than handing a client a number that
   reads as a valid, very wrong, intensity.
+- **Setting and action replies are checked** (16-Nov-2026). `Exposure`,
+  `Average`, `ContinousAcquisition` writes and `AcquireSingleImage` used to
+  read UView's reply and drop it; an `ErrorCode $n` reply now raises
+  `ElmitecUviewError` ("UView refused 'ext 400.0': ErrorCode -1"). Any other
+  reply is accepted as before. `SaveImageAsDAT`/`SaveImageAsPNG` still
+  return the reply unchanged; `LEEMmacros.leem_savedat()` warns when it is
+  not `"0"`.
 - **Reconnect thread.** UView is restarted often; a `_Reconnect` thread
   rebuilds the socket every `ReconnectPeriod` while it is down, so a UView
   restart no longer needs this server restarted.

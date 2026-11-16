@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.12 16/11/2026 ARRES fixes, and the macros cope with ElmitecLEEM2k/ElmitecUview now raising on error replies (same change). leemARRESrun: a two-row b (one direction) crashed on "if (len(b>2))", always true, before reaching its own one-direction exit; CTRL-C or an error now puts the deflectors back at normal incidence and the camera back as it was (it had no handler), and the partial data and plots are still written. The two directions share one helper, and scipy's interp1d is gone (plain linear interpolation, same values). leemARRESset printed b[1] as endpoint 2, and its "b>200 -> 0" loop is removed: it only covered b[0] and three deflectors, and zeroed real values above 200 mA. New leem_read() retries a value while LEEM2000 answers ErrorCode -102 (ramping), and leemReadDeflection takes ErrorCode -101 on the image equalizers as 0 with a warning. leem_savesettings writes "unreadable (...)" for a module it cannot read instead of failing the acquisition. New leem_savedat() prints a warning when UView does not save an image, which every macro skipped silently. New leem_energies() for leemIV, leemIV_ROI and leemIVandObj: numpy.arange and frange() stepped in floating point and often took one point too many or too few (leemIV(0,0.2,0.1) took four images, the last at 0.3).
+#
 # v3.11 16/09/2026 leem_log() now stamps each line with the day's %03d experiment
 # counter, right before the command, so a log line can be matched to the folder
 # it produced (e.g. "2026-09-16 18:30:00  007  leemSaveSingleImage(...)" for
@@ -61,7 +63,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.11"
+__version__ = "3.12"
 
 from datetime import date
 import tango
@@ -71,7 +73,6 @@ import time
 import threading
 import atexit
 from matplotlib.figure import Figure
-from scipy.interpolate import interp1d
 
 # omniORB's client threads race Python finalisation and segfault on exit --
 # seen leaving an ipython leemgui session after any DeviceProxy use ("ipython
@@ -118,6 +119,18 @@ def frange(start, stop=None, step=None):
         yield ("%g" % start) # return float number
         start = start + step
 #end of function frange()
+
+def leem_energies(E0,Ef,dE):
+    """ E0, E0+dE, ... up to and including Ef, rounded to whole steps.
+
+    numpy.arange(E0,Ef+dE,dE) and frange() step in floating point, so the
+    last point came out one too many or too few: leemIV(0,0.2,0.1) took four
+    images, ending at 0.3. Over E0 0-10, dE 0.02-0.5 and 1-119 steps, arange
+    was wrong in 14% of cases and frange in 38%. The number of steps is
+    rounded instead, and each energy is E0 plus a whole number of steps.
+    """
+    n=int(round((Ef-E0)/dE))+1
+    return E0+dE*numpy.arange(max(n,0))
 
 
 counter_filename="/Superficies/LEEM_Madrid/macros.dat"
@@ -212,18 +225,31 @@ def leem_log(command):
     except Exception:
         pass
 
+def _leem_setting(attr,fmt):
+    """ One LEEM2000 value for leem_savesettings, or the error instead. Since
+    ElmitecLEEM2k raises on LEEM2000 error replies, a module in local mode
+    must not stop the acquisition; it used to be written as e.g. -100.00. """
+    try:
+        return fmt%leem_read(attr)
+    except tango.DevFailed as e:
+        try:
+            why=e.args[0].desc.strip().splitlines()[-1]
+        except Exception:
+            why="Tango error"
+        return "unreadable (%s)"%why
+
 def leem_savesettings(name):
     f=open(name,"w")
     f.write("LEEM2k----------------------------\n")
-    f.write("StartVoltage: %5.2f Volt\n"%leem2k.StartVoltage)
+    f.write("StartVoltage: %s Volt\n"%_leem_setting("StartVoltage","%5.2f"))
     f.write("Preset      : %s \n"%leem2k.Preset)
-    f.write("Objective   : %7.1f mA\n"%leem2k.Objective)
-    f.write("FieldLens   : %7.1f mA\n"%leem2k.FieldLens)
-    f.write("TransferLens: %7.1f mA\n"%leem2k.TransferLens)
-    f.write("IntermLens  : %7.1f mA\n"%leem2k.IntermLens)
-    f.write("P1Lens      : %7.1f mA\n"%leem2k.P1Lens)
-    f.write("MCHP        : %5.2f kV\n"%leem2k.ChannelPlateVoltage)
-    f.write("Temperature : %5.1f C\n"%leem2k.SampleTemperature)
+    f.write("Objective   : %s mA\n"%_leem_setting("Objective","%7.1f"))
+    f.write("FieldLens   : %s mA\n"%_leem_setting("FieldLens","%7.1f"))
+    f.write("TransferLens: %s mA\n"%_leem_setting("TransferLens","%7.1f"))
+    f.write("IntermLens  : %s mA\n"%_leem_setting("IntermLens","%7.1f"))
+    f.write("P1Lens      : %s mA\n"%_leem_setting("P1Lens","%7.1f"))
+    f.write("MCHP        : %s kV\n"%_leem_setting("ChannelPlateVoltage","%5.2f"))
+    f.write("Temperature : %s C\n"%_leem_setting("SampleTemperature","%5.1f"))
     f.write("Uview-----------------------------\n")
     f.write("Exposure    : %5.3f ms\n"%uview.Exposure)
     f.write("Average     : %5d \n"%uview.Average)
@@ -278,8 +304,7 @@ def leemSaveSingleImage(exp=None,avg=None):
             uview.ContinousAcquisition=True
             time.sleep(0.5)
     leem_savesettings(full+"/"+expname+".txt")
-    res=uview.SaveImageAsDAT(wfull+"/"+expname)
-    if (res=="0"):
+    if leem_savedat(wfull,expname):
         print("Succesfull saving %s"%expname)
     if restarted:
         uview.Exposure=oldExposure
@@ -328,7 +353,7 @@ def leemSequenceImages(exp=None,avg=None,n=-1,delay=1.0):
             while (1):
                 leem_checkstop()
                 savename=expname+"_%05d"%a
-                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                if leem_savedat(wfull,savename):
                     print("Saved %s"%savename)
                 a+=1
                 leem_abort.wait(delay)
@@ -336,7 +361,7 @@ def leemSequenceImages(exp=None,avg=None,n=-1,delay=1.0):
             for a in range(n):
                 leem_checkstop()
                 savename=expname+"_%05d"%a
-                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                if leem_savedat(wfull,savename):
                     print("Saved %s"%savename)
                 leem_abort.wait(delay)
     except KeyboardInterrupt:
@@ -379,8 +404,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     a=0
     try:
         while (True):
-            #e=frange(E0,Ef,dE)
-            e=numpy.arange(E0,Ef+dE,dE)
+            e=leem_energies(E0,Ef,dE)
             for i in e:
                 leem_checkstop()
                 leem2k.StartVoltage=float(i)
@@ -392,7 +416,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
                 while (uview.ContinousAcquisition):
                     pass
                 savename=expname+"_%05d"%a
-                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                if leem_savedat(wfull,savename):
                     print("Saved %s"%savename)
                 a+=1
             if (repeat==False):
@@ -441,8 +465,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
         ax2=fig.add_subplot(212)
     try:
         while (True):
-            #e=frange(E0,Ef,dE)
-            e=numpy.arange(E0,Ef+dE,dE,dtype="float")
+            e=leem_energies(E0,Ef,dE)
             rois=numpy.zeros(len(e))
             if (roi!=1):
                 rois2=numpy.zeros(len(e))
@@ -460,7 +483,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
                 timenow=time.strftime("%c", t)
                 if (saveImage==True):
                     savename=expname+"_%05d"%a
-                    if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                    if leem_savedat(wfull,savename):
                         print("Saved %s"%savename)
                 if (roi==1):
                     print("Image %d Energy %f ROI1 %f time %s"%(a,i,rois[k],timenow))
@@ -513,7 +536,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
         pass
     f=open(full+"/LOG.txt","w")
     f.write("# Image number  Energy (eV) Objective (mA)\n")
-    e=frange(E0,Ef,dE)
+    e=leem_energies(E0,Ef,dE)
     a=0
     try:
         for i in e:
@@ -527,7 +550,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
                 pass
             #uview.SaveImageAsPNG(expname)
             savename=expname+"_%05d"%a
-            if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+            if leem_savedat(wfull,savename):
                 print("Saved %s"%savename)
             a+=1
     except KeyboardInterrupt:
@@ -602,7 +625,7 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
             timenow=time.strftime("%c", t)
             if (saveImage==True):
                 savename=expname+"_%05d"%c
-                if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
+                if leem_savedat(wfull,savename):
                    print("Saved %s"%savename)
             print("Image %d Temp %f SetTemp %f ROI1 %f time %s"%(c,temp,a,roi,timenow))
             f.write("%d %f %f %f %s\n"%(c,temp,a,roi,timenow))
@@ -647,6 +670,36 @@ def doser2RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
     #pid=tango.DeviceProxy("leem/power/doser1_pid")
     pidRampTo(doser2_pid,power,power_step,time_step,pressure_limit)
 
+def leem_read(attr, fault_as_zero=False):
+    """ Read a leem2k attribute, waiting out a ramp.
+
+    Since ElmitecLEEM2k raises on LEEM2000 error replies instead of reading
+    them as numbers, a module that is still ramping answers "ErrorCode -102":
+    retry for up to 10 s. With fault_as_zero, "ErrorCode -101" is read as 0
+    with a warning: the SPLEEM's LEEM2000 answers -101 for the image
+    equalizers when their value is exactly 0.
+    """
+    t0=time.time()
+    while True:
+        try:
+            return float(getattr(leem2k,attr))
+        except tango.DevFailed as e:
+            text=str(e)
+            if "ErrorCode -101" in text and fault_as_zero:
+                print("WARNING: %s answers ErrorCode -101 (fault), taken as 0"%attr)
+                return 0.0
+            if "ErrorCode -102" not in text or time.time()-t0>10.0:
+                raise
+        time.sleep(0.1)
+
+def leem_savedat(wfull,savename):
+    """ Save the current UView image as DAT. True if UView said "0"; otherwise
+    print a warning, which used to be skipped silently. """
+    res=uview.SaveImageAsDAT(wfull+"/"+savename)
+    if res!="0":
+        print("WARNING: UView did not save %s: %s"%(savename,res))
+    return res=="0"
+
 def leemARRESset():
     """ leemARRESset()
     Reads normal incidence IDX,IDY,IEX,IEY and ask to change the incidence for two endpoints.
@@ -655,25 +708,68 @@ def leemARRESset():
     b = numpy.zeros((3,4)) # Array to keep the settings for the ARRES scans. b[0] is the 0 position, b[1] is the 1st endpoint, b[2] is the 2nd endpoint. Second coordinate is (IllDefX,IllDefY,ImEqX,ImEqY)
     b[0]=leemReadDeflection()
     print("Normal Incidence condition IDX,IDY,IEX,IEY = ",b[0])
-    input("Move to endpoint 1 in reciprocal space and press enter") # Change to input() in Python3
+    input("Move to endpoint 1 in reciprocal space and press enter")
     b[1]=leemReadDeflection()
     print("Endpoint 1 condition IDX,IDY,IEX,IEY = ",b[1])
     leemSetDeflection(b[0])
-    input("Move to endpoint 2 in reciprocal space and press enter") # Change to raw_input() in Python2
+    input("Move to endpoint 2 in reciprocal space and press enter")
     b[2]=leemReadDeflection()
     leemSetDeflection(b[0])
-    print("Endpoint 2 condition IDX,IDY,IEX,IEY = ",b[1])
-    for i in range(0,1):
-        for j in range(0,3):
-            if (b[i,j]>200):
-                b[i,j]=0    
+    print("Endpoint 2 condition IDX,IDY,IEX,IEY = ",b[2])
     return(b)
-    
+
+def _leem_arres_direction(wfull,full,expname,d,b0,b1,e,k,result,flip):
+    """ One ARRES direction, from b0 (k=0) to b1 (k=1): LOG<d>.txt, images
+    <expname>_<d>_NNNNN, arres<d>.npy/.pdf/.png. The array is appended to
+    result before the scan starts, so a stopped scan still hands back what it
+    measured; the files are written in any case. """
+    f=open(full+"/LOG%d.txt"%d,"w")
+    f.write("# Imagenumber k Energy(eV) roi time\n")
+    arres=numpy.zeros((len(k),len(e)))
+    result.append(arres)
+    a=0
+    try:
+        for a_k,j in enumerate(k):
+            beam=b0+j*(b1-b0)
+            leemSetDeflection(beam)
+            print("%5.1f"%beam[0],"%5.1f"%beam[1],"%5.1f"%beam[2],"%5.1f"%beam[3])
+            for a_e,i in enumerate(e):
+                leem_checkstop()
+                leem2k.StartVoltage=float(i)
+                t=time.localtime()
+                timenow=time.strftime("%c", t)
+                uview.AcquireSingleImage()
+                while (uview.ContinousAcquisition):
+                    pass
+                savename=expname+"_%d_%05d"%(d,a)
+                if leem_savedat(wfull,savename):
+                    print("%s %f %f "%(savename,j,i))
+                roi=float(uview.IntensityROI1)
+                arres[a_k,a_e]=roi
+                f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
+                a+=1
+            print()
+    finally:
+        f.close()
+        numpy.save(full+"/arres%d.npy"%d,arres)
+        image=arres.swapaxes(0,1)
+        if flip:
+            image=numpy.flip(image,1)
+        fig=Figure()
+        ax=fig.add_subplot(111)
+        ax.imshow(image,aspect="auto",origin="lower")
+        fig.savefig(full+"/arres%d.pdf"%d)
+        fig.savefig(full+"/arres%d.png"%d)
+
 def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     """ leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0)
     Runs a Angle-Resolved Reflection Electron Spectroscopy scan. Needs energy limits (E0,Ef, nE), and number of k points (nk).
-    The incidence settings are read by leemARRESset().
+    The incidence settings are read by leemARRESset(). With b of two rows
+    (normal incidence and one endpoint) only one direction is measured.
+    Press CTRL-C to stop: the deflectors go back to normal incidence and the
+    camera to its previous settings.
     """
+    b=numpy.asarray(b,dtype=float)
     (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="ARRES"+name
     oldExposure=uview.Exposure
@@ -682,137 +778,52 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
         exp=oldExposure
     if avg is None:
         avg=oldAverage
-    uview.ContinousAcquisition=False
-    time.sleep(0.5)
-    uview.Exposure=exp
-    uview.Average=avg
-    leem_savesettings(full+"/"+expname+".txt")
-    uview.AcquireSingleImage() # Throw one away
-    while (uview.ContinousAcquisition):
-        pass
-    
-    f=open(full+"/"+expname+"_deflection.txt","w")
-    f.write("Normal Incidence condition IDX %f IDY %f IEX %f IEY %f \n"%(b[0,0],b[0,1],b[0,2],b[0,3]))
-    f.write("Endpoint 1 condition IDX %f IDY %f IEX %f IEY %f \n"%(b[1,0],b[1,1],b[1,2],b[1,3]))
-    if (len(b>2)):
-        f.write("Endpoint 2 condition IDX %f IDY %f IEX %f IEY %f \n"%(b[2,0],b[2,1],b[2,2],b[2,3]))    
-    f.close()
-    
-    
-    f=open(full+"/LOG0.txt","w")
-    f.write("# Imagenumber k Energy(eV) roi time\n")
-    a=0
-    a_k=0
-    a_e=0
-    e=numpy.linspace(E0,Ef,nE)
-    k=numpy.linspace(0.0,1.0,nk)
-    arres0=numpy.zeros((nk,nE))
-    interpIllDefX = interp1d([0,1],[b[0,0],b[1,0]])
-    interpIllDefY = interp1d([0,1],[b[0,1],b[1,1]])
-    interpImEqX = interp1d([0,1],[b[0,2],b[1,2]])
-    interpImEqY = interp1d([0,1],[b[0,3],b[1,3]])
-    
-    for j in k:
-        a_e=0
-        leem2k.IllDefX=interpIllDefX(j)
-        leem2k.IllDefY=interpIllDefY(j)
-        leem2k.ImEqX=interpImEqX(j)
-        leem2k.ImEqY=interpImEqY(j)
-        print("%5.1f"%interpIllDefX(j),"%5.1f"%interpIllDefY(j),"%5.1f"%interpImEqX(j),"%5.1f"%interpImEqY(j))
-        for i in e:
-            leem2k.StartVoltage=float(i)
-            t=time.localtime()
-            timenow=time.strftime("%c", t)
-            uview.AcquireSingleImage()
-            while (uview.ContinousAcquisition):
-                pass
-            savename=expname+"_0_%05d"%a
-            if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
-                print("%s %f %f "%(savename,j,i))
-            roi=float(uview.IntensityROI1)
-            arres0[a_k,a_e]=roi
-            f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
-            a+=1
-            a_e+=1
-        print()
-        a_k+=1
-        
-    fig0=Figure()
-    ax0=fig0.add_subplot(111)
-    ax0.imshow(numpy.flip(arres0.swapaxes(0,1),1),aspect="auto",origin="lower")
-    f.close()
-    leemSetDeflection(b[0])
-    numpy.save(full+"/arres0.npy",arres0)
-    fig0.savefig(full+"/arres0.pdf")
-    fig0.savefig(full+"/arres0.png")
-    
-    # Check if we have 2 directions to measure. If only one, finish up.
-    if (len(b)==2):
+    result=[]
+    try:
+        uview.ContinousAcquisition=False
+        time.sleep(0.5)
+        uview.Exposure=exp
+        uview.Average=avg
+        leem_savesettings(full+"/"+expname+".txt")
+        uview.AcquireSingleImage() # Throw one away
+        while (uview.ContinousAcquisition):
+            pass
+
+        f=open(full+"/"+expname+"_deflection.txt","w")
+        f.write("Normal Incidence condition IDX %f IDY %f IEX %f IEY %f \n"%(b[0,0],b[0,1],b[0,2],b[0,3]))
+        f.write("Endpoint 1 condition IDX %f IDY %f IEX %f IEY %f \n"%(b[1,0],b[1,1],b[1,2],b[1,3]))
+        if len(b)>2:
+            f.write("Endpoint 2 condition IDX %f IDY %f IEX %f IEY %f \n"%(b[2,0],b[2,1],b[2,2],b[2,3]))
+        f.close()
+
+        e=numpy.linspace(E0,Ef,nE)
+        k=numpy.linspace(0.0,1.0,nk)
+        # Direction 0 is plotted with k reversed, as before, so that the two
+        # plots side by side run from endpoint 1 through normal incidence to
+        # endpoint 2.
+        _leem_arres_direction(wfull,full,expname,0,b[0],b[1],e,k,result,True)
+        if len(b)>2:
+            _leem_arres_direction(wfull,full,expname,1,b[0],b[2],e,k,result,False)
+    except KeyboardInterrupt:
+        print("Ok, stopping the ARRES scan. Let me clean up.")
+    finally:
+        leemSetDeflection(b[0])
         uview.Exposure=oldExposure
         uview.Average=oldAverage
         uview.ContinousAcquisition=True
-        return(arres0)
-    
-    f=open(full+"/LOG1.txt","w")
-    f.write("# Imagenumber k Energy(eV) roi time\n")
-    a=0
-    a_k=0
-    a_e=0
-    e=numpy.linspace(E0,Ef,nE)
-    k=numpy.linspace(0.0,1.0,nk)
-    arres1=numpy.zeros((nk,nE))
-    interpIllDefX = interp1d([0,1],[b[0,0],b[2,0]])
-    interpIllDefY = interp1d([0,1],[b[0,1],b[2,1]])
-    interpImEqX = interp1d([0,1],[b[0,2],b[2,2]])
-    interpImEqY = interp1d([0,1],[b[0,3],b[2,3]])
-    
-    for j in k:
-        a_e=0
-        leem2k.IllDefX=interpIllDefX(j)
-        leem2k.IllDefY=interpIllDefY(j)
-        leem2k.ImEqX=interpImEqX(j)
-        leem2k.ImEqY=interpImEqY(j)
-        print("%5.1f"%interpIllDefX(j),"%5.1f"%interpIllDefY(j),"%5.1f"%interpImEqX(j),"%5.1f"%interpImEqY(j))
-        for i in e:
-            leem2k.StartVoltage=float(i)
-            t=time.localtime()
-            timenow=time.strftime("%c", t)
-            uview.AcquireSingleImage()
-            while (uview.ContinousAcquisition):
-                pass
-            savename=expname+"_1_%05d"%a
-            if (uview.SaveImageAsDAT(wfull+"/"+savename)=="0"):
-                print("%s %f %f "%(savename,j,i))
-            roi=float(uview.IntensityROI1)
-            arres1[a_k,a_e]=roi
-            f.write("%d %f %f %f %s\n"%(a,j,i,roi,timenow))
-            a+=1
-            a_e+=1
-        print()
-        a_k+=1 
-        
-    fig1=Figure()
-    ax1=fig1.add_subplot(111)
-    ax1.imshow(arres1.swapaxes(0,1),aspect="auto",origin="lower")
-    f.close()
-    leemSetDeflection(b[0])
-    numpy.save(full+"/arres1.npy",arres1)
-    fig1.savefig(full+"/arres1.pdf")
-    fig1.savefig(full+"/arres1.png")
-    uview.Exposure=oldExposure
-    uview.Average=oldAverage
-    uview.ContinousAcquisition=True
-    return(arres0,arres1)
-    
+    if len(b)==2:
+        return(result[0] if result else None)
+    return(tuple(result))
+
 def leemSetDeflection(beam):
     leem2k.IllDefX = beam[0]
     leem2k.IllDefY = beam[1]
     leem2k.ImEqX = beam[2]
     leem2k.ImEqY = beam[3]
-        
+
 def leemReadDeflection():
-    idx=leem2k.IllDefX
-    idy=leem2k.IllDefY
-    iex=leem2k.ImEqX
-    iey=leem2k.ImEqY
+    idx=leem_read("IllDefX")
+    idy=leem_read("IllDefY")
+    iex=leem_read("ImEqX",fault_as_zero=True)
+    iey=leem_read("ImEqY",fault_as_zero=True)
     return(numpy.array([idx,idy,iex,iey]))

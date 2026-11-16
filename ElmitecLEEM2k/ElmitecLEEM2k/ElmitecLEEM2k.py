@@ -34,6 +34,41 @@ class ElmitecLEEM2kError(Exception):
     """LEEM2000 is not there, or stopped answering part way through an exchange."""
 
 
+# Replies LEEM2000 sends instead of a value or "0" (Software_LEEM2000Script.pdf,
+# SetValueToModule/GetValueFromModule TCP). With "val" the manual says the
+# reply is just the integer; with "get" LEEM2000 38 was seen to answer
+# "ErrorCode -101". Both forms are recognised.
+LEEM_ERRORS = {
+    -1: "module name or index wrong, or problem accessing the module",
+    -2: "value exceeds the limits",
+    -100: "module in local mode",
+    -101: "module has an internal fault (the SPLEEM's LEEM2000 also "
+          "answers this for some modules whose value is exactly 0)",
+    -102: "module ramping to new value",
+}
+
+
+def leem_error_code(reply):
+    """The error code in a LEEM2000 reply, or None if it is not an error.
+
+    A bare integer is only taken as an error if it is one of LEEM_ERRORS:
+    values come back formatted as floats (e.g. "6.240001e+00"), so a real
+    value of exactly -100 V would still be misread, but nothing here sits at
+    exactly one of those numbers in practice.
+    """
+    reply = reply.strip()
+    if reply.startswith("ErrorCode"):
+        try:
+            return int(reply.split()[-1])
+        except ValueError:
+            return -1
+    try:
+        code = int(reply)
+    except ValueError:
+        return None
+    return code if code in LEEM_ERRORS else None
+
+
 class _Reconnect(threading.Thread):
     """Rebuild the link while it is down, so a restart of LEEM2000 does
     not need this server restarted too.
@@ -212,6 +247,42 @@ class ElmitecLEEM2k(Device):
                 self.debug_stream("Untidy disconnect: %s" % e)
             self.ElmitecLEEM2kConnected = False
             self.debug_stream("Disconnected!")
+
+    def _refused(self, command, code):
+        return ElmitecLEEM2kError("LEEM2000 '%s' -> ErrorCode %d: %s"
+                                  % (command, code, LEEM_ERRORS.get(code, "unknown")))
+
+    def _read_value(self, index):
+        """Value of module `index`; an error reply raises instead of being
+        read as a number.
+
+        float() used to turn the bare-integer error replies of "val" into
+        values: a module ramping read as -102, one with a fault as -101.
+        "ErrorCode -102" (ramping) is raised like the others rather than
+        waited out here: a read that blocks for a ramp would hold the device
+        past the client's Tango timeout. The caller retries.
+        """
+        command = "val %d" % index
+        self._send(command.encode("ascii"))
+        data = self.TCPBlockingReceive()
+        code = leem_error_code(data)
+        if code is not None:
+            raise self._refused(command, code)
+        return float(data)
+
+    def _write_value(self, index, value):
+        """Set module `index`; an error reply raises.
+
+        The reply used to be read and dropped, so a value out of the limits
+        or a module in local mode failed without anyone knowing. Only a
+        recognised error raises: any other reply is accepted as before.
+        """
+        command = "val %d %s" % (index, value)
+        self._send(command.encode("ascii"))
+        data = self.TCPBlockingReceive()
+        code = leem_error_code(data)
+        if code is not None:
+            raise self._refused(command, code)
     # PROTECTED REGION END #    //  ElmitecLEEM2k.class_variable
 
     # -----------------
@@ -440,15 +511,12 @@ class ElmitecLEEM2k(Device):
         # PROTECTED REGION END #    //  ElmitecLEEM2k.delete_device
     def read_Objective(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.Objective_read) ENABLED START #
-        self._send(b"val 11")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(11)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.Objective_read
 
     def write_Objective(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.Objective_write) ENABLED START #
-        self._send(("val 11 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(11, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.Objective_write
 
     def read_Preset(self):
@@ -468,50 +536,37 @@ class ElmitecLEEM2k(Device):
 
     def read_StartVoltage(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.StartVoltage_read) ENABLED START #
-        self._send(b"val 38")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(38)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.StartVoltage_read
 
     def write_StartVoltage(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.StartVoltage_write) ENABLED START #
-        self._send(("val 38 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(38, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.StartVoltage_write
 
     def read_TransferLens(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.TransferLens_read) ENABLED START #
-        self._send(b"val 14")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(14)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.TransferLens_read
 
     def read_FieldLens(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.FieldLens_read) ENABLED START #
-        self._send(b"val 19")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(19)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.FieldLens_read
 
     def read_IntermLens(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.IntermLens_read) ENABLED START #
-        self._send(b"val 21")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(21)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IntermLens_read
 
     def read_P1Lens(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.P1Lens_read) ENABLED START #
-        self._send(b"val 24")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(24)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.P1Lens_read
 
     def read_P2Lens(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.P2Lens_read) ENABLED START #
-        self._send(b"val 27")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(27)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.P2Lens_read
 
     def write_P2Lens(self, value):
@@ -556,113 +611,87 @@ class ElmitecLEEM2k(Device):
 
     def read_SampleTemperature(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.SampleTemperature_read) ENABLED START #
-        self._send(b"val 39")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(39)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.SampleTemperature_read
 
     def read_ChannelPlateVoltage(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.ChannelPlateVoltage_read) ENABLED START #
-        self._send(b"val 105")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(105)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.ChannelPlateVoltage_read
 
     def write_ChannelPlateVoltage(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.ChannelPlateVoltage_write) ENABLED START #
-        self._send(("val 105 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(105, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.ChannelPlateVoltage_write
 
     def read_BombVoltage(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.BombVoltage_read) ENABLED START #
-        self._send(b"val 41")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(41)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.BombVoltage_read
 
     def write_BombVoltage(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.BombVoltage_write) ENABLED START #
-        self._send(("val 41 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(41, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.BombVoltage_write
 
     def read_IllDefX(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllDefX_read) ENABLED START #
-        self._send(b"val 2")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(2)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefX_read
 
     def write_IllDefX(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllDefX_write) ENABLED START #
-        self._send(("val 2 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(2, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefX_write
 
     def read_IllDefY(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllDefY_read) ENABLED START #
-        self._send(b"val 3")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(3)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefY_read
 
     def write_IllDefY(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllDefY_write) ENABLED START #
-        self._send(("val 3 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(3, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllDefY_write
 
     def read_IllEqX(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllEqX_read) ENABLED START #
-        self._send(b"val 30")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(30)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqX_read
 
     def write_IllEqX(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllEqX_write) ENABLED START #
-        self._send(("val 30 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(30, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqX_write
 
     def read_IllEqY(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllEqY_read) ENABLED START #
-        self._send(b"val 31")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(31)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqY_read
 
     def write_IllEqY(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.IllEqY_write) ENABLED START #
-        self._send(("val 31 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(31, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.IllEqY_write
 
     def read_ImEqX(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.ImEqX_read) ENABLED START #
-        self._send(b"val 33")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(33)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqX_read
 
     def write_ImEqX(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.ImEqX_write) ENABLED START #
-        self._send(("val 33 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(33, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqX_write
 
     def read_ImEqY(self):
         # PROTECTED REGION ID(ElmitecLEEM2k.ImEqY_read) ENABLED START #
-        self._send(b"val 34")
-        data = self.TCPBlockingReceive()
-        return float(data)
+        return self._read_value(34)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqY_read
 
     def write_ImEqY(self, value):
         # PROTECTED REGION ID(ElmitecLEEM2k.ImEqY_write) ENABLED START #
-        self._send(("val 34 "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._write_value(34, value)
         # PROTECTED REGION END #    //  ElmitecLEEM2k.ImEqY_write
 
 

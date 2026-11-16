@@ -132,6 +132,19 @@ class ElmitecUview(Device):
             raise ElmitecUviewError("UView: %s" % reason)
         return value
 
+    def _command(self, command):
+        """Send a setting or action; an "ErrorCode" reply raises.
+
+        The replies of ext, avr, aip and asi used to be read and dropped, so
+        a refused exposure or a single image UView did not start went
+        unnoticed until the images came out wrong.
+        """
+        self._send(command.encode("ascii"))
+        data = self.TCPBlockingReceive().strip()
+        if data.startswith("ErrorCode"):
+            raise ElmitecUviewError("UView refused '%s': %s" % (command, data))
+        return data
+
     def _drop(self, why):
         """Forget the connection; the reconnect thread will rebuild it."""
         self.ElmitecUviewConnected = False
@@ -305,8 +318,7 @@ class ElmitecUview(Device):
 
     def write_Exposure(self, value):
         # PROTECTED REGION ID(ElmitecUview.Exposure_write) ENABLED START #
-        self._send(("ext "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._command("ext "+str(value))
         # PROTECTED REGION END #    //  ElmitecUview.Exposure_write
 
     def read_Average(self):
@@ -318,8 +330,7 @@ class ElmitecUview(Device):
 
     def write_Average(self, value):
         # PROTECTED REGION ID(ElmitecUview.Average_write) ENABLED START #
-        self._send(("avr "+str(value)).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._command("avr "+str(value))
         # PROTECTED REGION END #    //  ElmitecUview.Average_write
 
     def read_AcquisitionInProgress(self):
@@ -361,8 +372,7 @@ class ElmitecUview(Device):
 
     def write_ContinousAcquisition(self, value):
         # PROTECTED REGION ID(ElmitecUview.ContinousAcquisition_write) ENABLED START #
-        self._send(("aip "+str(int(value))).encode("ascii"))
-        data = self.TCPBlockingReceive()
+        self._command("aip "+str(int(value)))
         # PROTECTED REGION END #    //  ElmitecUview.ContinousAcquisition_write
 
     def read_IntensityROI2(self):
@@ -400,8 +410,7 @@ class ElmitecUview(Device):
     @DebugIt()
     def AcquireSingleImage(self):
         # PROTECTED REGION ID(ElmitecUview.AcquireSingleImage) ENABLED START #
-        self._send(b"asi -1")
-        data = self.TCPBlockingReceive()
+        self._command("asi -1")
         # PROTECTED REGION END #    //  ElmitecUview.AcquireSingleImage
 
     @command(
