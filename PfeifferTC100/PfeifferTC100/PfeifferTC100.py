@@ -167,10 +167,21 @@ class PfeifferTC100(Device):
             return
         # A reply can carry an empty data field, and rdata[0] on it was an
         # IndexError.
+        #
+        # The good path sets the status too. Without it the device keeps
+        # whatever text a previous failed init left behind: on
+        # xps/vacuum/turboPCH (16-nov-2026) it read ON while still saying "No
+        # usable answer on ...usb-0:1.2", a port it no longer even uses. The
+        # state was right and the explanation six months stale.
+        #
+        # Parameter 010 is the pump station switch, so "1" is running and
+        # anything else stopped.
         if (rdata.startswith("1")):
             self.set_state(tango.DevState.ON)
+            self.set_status("Pump station on, answering on %s"%(self.SerialPort,))
         else:
             self.set_state(tango.DevState.OFF)
+            self.set_status("Pump station off, answering on %s"%(self.SerialPort,))
         # PROTECTED REGION END #    //  PfeifferTC100.init_device
 
     def always_executed_hook(self):
