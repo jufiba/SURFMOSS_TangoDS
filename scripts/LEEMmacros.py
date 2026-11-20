@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.14 20/11/2026 New leem_acquire_and_wait(), replacing the bare "uview.AcquireSingleImage(); while (uview.ContinousAcquisition): pass" at twelve places. That loop asked as fast as CORBA and TCP allowed, on UView's single socket, which may well have been helping to wedge UView rather than merely failing to survive it (ElmitecUview's aip and AcquisitionInProgress interfered on that socket once before, see v2.8). It now asks every LEEM_POLL_IMAGE (50 ms): about eight questions per 400 ms exposure instead of one per round trip, for at most 50 ms of added latency per image. It also says so every LEEM_WARN_IMAGE (60 s) while an image does not arrive, where before a wedged UView stopped a run silently and for ever -- it does NOT give up, because pressing acquire in UView unblocks it and the run carries on, so losing the acquisition would be worse than the stall; tools/leem_acquisition_watchdog.py is what tells you from elsewhere. And it polls leem_checkstop() through leem_abort.wait(), so the GUI Stop button can now interrupt a wait: CTRL-C always could, but a GUI stop had nothing to poll. New tools/test_leemmacros.py covers the wait and the v3.13 counter file against a stub tango, no instrument needed.
+#
 # v3.13 20/11/2026 leemSetDailyFolder() wrote macros.dat with three fields (prefix,dayfolder,exp) where leem_getfolder() unpacks four, so calling it left a counter file the next call could not read: every macro then died on "not enough values to unpack". The same three-field write inside leem_makenextfolder_and_inc() was harmless only because a correct four-field write overwrote it before that function returned. There were four copies of this write in two spellings, which is how the two wrong ones survived, so the layout now lives in one place: new leem_setfolder(wprefix,prefix,dayfolder,exp), used by all four.
 #
 # v3.12 16/11/2026 ARRES fixes, and the macros cope with ElmitecLEEM2k/ElmitecUview now raising on error replies (same change). leemARRESrun: a two-row b (one direction) crashed on "if (len(b>2))", always true, before reaching its own one-direction exit; CTRL-C or an error now puts the deflectors back at normal incidence and the camera back as it was (it had no handler), and the partial data and plots are still written. The two directions share one helper, and scipy's interp1d is gone (plain linear interpolation, same values). leemARRESset printed b[1] as endpoint 2, and its "b>200 -> 0" loop is removed: it only covered b[0] and three deflectors, and zeroed real values above 200 mA. New leem_read() retries a value while LEEM2000 answers ErrorCode -102 (ramping), and leemReadDeflection takes ErrorCode -101 on the image equalizers as 0 with a warning. leem_savesettings writes "unreadable (...)" for a module it cannot read instead of failing the acquisition. New leem_savedat() prints a warning when UView does not save an image, which every macro skipped silently. New leem_energies() for leemIV, leemIV_ROI and leemIVandObj: numpy.arange and frange() stepped in floating point and often took one point too many or too few (leemIV(0,0.2,0.1) took four images, the last at 0.3).
@@ -65,7 +67,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.13"
+__version__ = "3.14"
 
 from datetime import date
 import tango
@@ -97,6 +99,65 @@ def leem_checkstop():
     """ Raise KeyboardInterrupt if a stop has been requested from the GUI. """
     if leem_abort.is_set():
         raise KeyboardInterrupt
+
+# Seconds between asking UView whether the image is ready. Until v3.14 this
+# was effectively zero: a bare "while (uview.ContinousAcquisition): pass",
+# where every turn is a CORBA round trip plus a TCP exchange on UView's
+# single socket, as fast as both allow. At 50 ms a 400 ms exposure costs
+# about eight questions instead of several hundred, for at most 50 ms of
+# added latency per image.
+LEEM_POLL_IMAGE=0.05
+
+# Seconds without the image arriving before saying so, and again every
+# LEEM_WARN_IMAGE after that.
+LEEM_WARN_IMAGE=60.0
+
+def leem_acquire_and_wait(what=""):
+    """ Trigger one image and wait for UView to finish it.
+
+    Replaces the bare
+
+        uview.AcquireSingleImage()
+        while (uview.ContinousAcquisition):
+            pass
+
+    which stood at twelve places. Three things that loop did not do:
+
+    - it asked as fast as CORBA and TCP allowed, on UView's single socket;
+    - it had no timeout, so a wedged UView -- its "WaitForSingleObject failed
+      100000x in a row" window -- stopped a run silently and for ever, as
+      happened to an ARRES run on 20-Nov-2026;
+    - it never polled leem_checkstop(), so the GUI Stop button could not
+      interrupt it. CTRL-C could, having nothing to poll, but a GUI stop had
+      no way in.
+
+    The wait is deliberately unbounded. It warns and keeps waiting rather
+    than raising, because pressing *acquire* in UView by hand unblocks it
+    and the run then carries on from where it was: turning a recoverable
+    stall into a lost acquisition would be worse than the stall.
+    tools/leem_acquisition_watchdog.py is what tells you from elsewhere. A
+    stop you ask for does raise, through leem_checkstop(), as everywhere
+    else.
+
+    BEWARE the v2.9 invariant: on a *running* camera this never returns,
+    because the read is UView's "aip" and a running camera is always
+    acquiring. That used to hang in silence; it now says so once a minute.
+    """
+    uview.AcquireSingleImage()
+    started=time.monotonic()
+    warned=0
+    while (uview.ContinousAcquisition):
+        # wait() rather than sleep() so a GUI stop does not have to sit out
+        # the interval, as in leemSequenceImages and the PID ramps.
+        leem_abort.wait(LEEM_POLL_IMAGE)
+        leem_checkstop()
+        waited=time.monotonic()-started
+        if (waited>=LEEM_WARN_IMAGE*(warned+1)):
+            warned+=1
+            print("WARNING: %.0f s waiting for UView to finish the image%s. "
+                  "Still waiting, nothing is lost. If UView shows "
+                  "'WaitForSingleObject failed', press acquire there to "
+                  "unblock it."%(waited," ("+what+")" if what else ""))
 
 def gui():
     """ Open the acquisition GUI. Imported lazily so that a plain command line
@@ -294,12 +355,8 @@ def leemSaveSingleImage(exp=None,avg=None):
         time.sleep(0.5)
         uview.Exposure=exp
         uview.Average=avg
-        uview.AcquireSingleImage() # Throw one away
-        while (uview.ContinousAcquisition):
-            pass
-        uview.AcquireSingleImage()
-        while (uview.ContinousAcquisition):
-            pass
+        leem_acquire_and_wait("throw-away")
+        leem_acquire_and_wait()
     else:
         # Exposure already correct, so keep the camera running and grab the
         # frame it has. BEWARE: with the camera running, ContinousAcquisition
@@ -405,9 +462,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     f=open(full+"/LOG.txt","w")
     f.write("# Image number  Energy (eV) time\n")
 
-    uview.AcquireSingleImage() # Throw one away
-    while (uview.ContinousAcquisition):
-        pass
+    leem_acquire_and_wait("throw-away")
     a=0
     try:
         while (True):
@@ -419,9 +474,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
                 timenow=time.strftime("%c", t)
                 print("Image %d Energy %f Time %s"%(a,float(i),timenow))
                 f.write("%d %f %s\n"%(a,float(i),timenow))
-                uview.AcquireSingleImage()
-                while (uview.ContinousAcquisition):
-                    pass
+                leem_acquire_and_wait()
                 savename=expname+"_%05d"%a
                 if leem_savedat(wfull,savename):
                     print("Saved %s"%savename)
@@ -459,9 +512,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
     uview.Average=avg
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
-    uview.AcquireSingleImage() # Throw one away
-    while (uview.ContinousAcquisition):
-        pass
+    leem_acquire_and_wait("throw-away")
     f.write("# Image number  Energy (eV) ROI1 (arb.u.) time\n")
     a=0
     fig=Figure()
@@ -480,9 +531,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
             for i in e:
                 leem_checkstop()
                 leem2k.StartVoltage=i
-                uview.AcquireSingleImage()
-                while (uview.ContinousAcquisition):
-                    pass
+                leem_acquire_and_wait()
                 rois[k]=float(uview.IntensityROI1)
                 if (roi==2):
                     rois2[k]=float(uview.IntensityROI2)
@@ -538,9 +587,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     uview.Exposure=exp
     uview.Average=avg
     leem_savesettings(full+"/"+expname+".txt")
-    uview.AcquireSingleImage() # Throw one away
-    while (uview.ContinousAcquisition):
-        pass
+    leem_acquire_and_wait("throw-away")
     f=open(full+"/LOG.txt","w")
     f.write("# Image number  Energy (eV) Objective (mA)\n")
     e=leem_energies(E0,Ef,dE)
@@ -552,9 +599,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
             leem2k.Objective=float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)
             print("Image %d Energy %f Objective %f"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
             f.write("%d %f %f\n"%(a,float(i),float((endObj-startObj)*(float(i)-E0)/(Ef-E0)+startObj)))
-            uview.AcquireSingleImage()
-            while (uview.ContinousAcquisition):
-                pass
+            leem_acquire_and_wait()
             #uview.SaveImageAsPNG(expname)
             savename=expname+"_%05d"%a
             if leem_savedat(wfull,savename):
@@ -608,9 +653,7 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
     uview.Average=avg
     leem_savesettings(full+"/"+expname+".txt")
     f=open(full+"/LOG.txt","w")
-    uview.AcquireSingleImage() # Throw one away
-    while (uview.ContinousAcquisition):
-        pass
+    leem_acquire_and_wait("throw-away")
     f.write("# Image number Temp SetTemp ROI time\n")
     if (start>temp):
         r=numpy.arange(start,temp,-step)
@@ -624,9 +667,7 @@ def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveIm
             print("Going to %f"%a)
             leem_abort.wait(time_step)
             temp=leem2k.SampleTemperature
-            uview.AcquireSingleImage()
-            while (uview.ContinousAcquisition):
-                pass
+            leem_acquire_and_wait()
             roi=float(uview.IntensityROI1)
             t=time.localtime()
             timenow=time.strftime("%c", t)
@@ -745,9 +786,7 @@ def _leem_arres_direction(wfull,full,expname,d,b0,b1,e,k,result,flip):
                 leem2k.StartVoltage=float(i)
                 t=time.localtime()
                 timenow=time.strftime("%c", t)
-                uview.AcquireSingleImage()
-                while (uview.ContinousAcquisition):
-                    pass
+                leem_acquire_and_wait()
                 savename=expname+"_%d_%05d"%(d,a)
                 if leem_savedat(wfull,savename):
                     print("%s %f %f "%(savename,j,i))
@@ -792,9 +831,7 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
         uview.Exposure=exp
         uview.Average=avg
         leem_savesettings(full+"/"+expname+".txt")
-        uview.AcquireSingleImage() # Throw one away
-        while (uview.ContinousAcquisition):
-            pass
+        leem_acquire_and_wait("throw-away")
 
         f=open(full+"/"+expname+"_deflection.txt","w")
         f.write("Normal Incidence condition IDX %f IDY %f IEX %f IEY %f \n"%(b[0,0],b[0,1],b[0,2],b[0,3]))

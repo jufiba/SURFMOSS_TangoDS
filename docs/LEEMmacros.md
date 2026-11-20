@@ -241,12 +241,53 @@ round-trip through `leemSetDailyFolder()` → `leem_getfolder()` now works and
 keeps the Windows prefix, a day rollover still restarts at `_000`, and the
 same check raises the `ValueError` above against the previous code.
 
+### v3.14 — one helper waits for an image, gently and out loud
+
+The `uview.AcquireSingleImage()` + `while (uview.ContinousAcquisition): pass`
+pair stood at **twelve** places, and the v3.12 note above had already listed
+it as untested. It was tested the hard way on 20-Nov-2026, when it wedged a
+live ARRES run. All twelve are now `leem_acquire_and_wait()`, which fixes
+three separate things that loop did:
+
+- **It asked as fast as CORBA and TCP allowed.** The read sends UView's
+  `aip` over its single socket, so the loop was a round trip per turn with
+  no pause at all. It now asks every `LEEM_POLL_IMAGE` (50 ms): about eight
+  questions per 400 ms exposure instead of one per round trip, for at most
+  50 ms of added latency per image. Whether that *also* stops UView wedging
+  is the open question — see "Known rough edges".
+- **It had no timeout**, so a wedged UView stopped a run silently and for
+  ever. It now prints a warning every `LEEM_WARN_IMAGE` (60 s) naming what
+  it is waiting for and what to do about it.
+- **It never polled `leem_checkstop()`**, so the GUI Stop button could not
+  interrupt a wait. CTRL-C could, having nothing to poll, but a GUI stop had
+  no way in. The sleep is `leem_abort.wait()`, as in `leemSequenceImages`
+  and the PID ramps, so a stop does not have to sit out the interval either.
+
+**The timeout deliberately does not give up.** Pressing *acquire* in UView
+unblocks the wait and the run carries on from exactly where it was, so
+turning a recoverable stall into a lost acquisition would be the worse
+outcome. The asymmetry is intended: the timeout never raises, a stop *you*
+ask for always does.
+
+`tools/test_leemmacros.py` is new and covers this against a stub tango
+module — the questions stay in single figures over an exposure, an image
+already finished costs one question and no sleep, the warning repeats
+without raising, and a stop interrupts the wait. It covers the v3.13
+counter file too, and needs no instrument, so unlike the device-server tests
+here it also runs on a laptop.
+
 ## Invariants to preserve
 
-- **Never use `AcquireSingleImage()` plus a `while (uview.ContinousAcquisition)`
-  wait on a running camera.** The read means "acquisition in progress" and stays
-  `True` forever while continuous mode is on. That loop only terminates on a
-  stopped camera.
+- **Wait for an image with `leem_acquire_and_wait()`, never by hand.** Since
+  v3.14 it is the only place that triggers an image and waits for it, and it
+  carries the poll interval, the warning and the `leem_checkstop()` call. A
+  hand-written `while (uview.ContinousAcquisition): pass` loses all three,
+  which is exactly how the stall of 20-Nov-2026 was possible.
+- **Never wait for an image on a running camera**, through that helper or
+  otherwise. The read means "acquisition in progress" and stays `True`
+  forever while continuous mode is on, so the wait only terminates on a
+  stopped camera. Since v3.14 that mistake at least says so once a minute
+  instead of hanging in silence.
 - **Any function reachable from a GUI Run button must have an
   `except KeyboardInterrupt` handler** that leaves the camera in a sane state.
   Adding `leem_checkstop()` to a function whose cleanup is not in a handler makes
@@ -263,25 +304,20 @@ same check raises the `ValueError` above against the previous code.
 
 ## Known rough edges
 
-- **The wait for each image has no deadline, and it has now bitten.** The
-  `while (uview.ContinousAcquisition): pass` idiom the v3.12 note above lists
-  as untested — twelve of them across the file — wedged a live ARRES run on
-  20-Nov-2026. UView had its `WaitForSingleObject failed 100000x in a row`
-  window up; the macro sat in that loop and the run stopped advancing
-  silently, and pressing *acquire* in UView by hand was what unblocked it.
-  ARRES meets it most often only because it chains the most images (nk × nE).
+- **UView can still wedge; v3.14 only makes it survivable.** The stall of
+  20-Nov-2026 is not cured, it is made visible and harmless: the macro now
+  says so once a minute and keeps waiting, and pressing *acquire* in UView
+  is still what unblocks it. Why UView gets into that state —
+  `WaitForSingleObject failed 100000x in a row` — is not understood. The
+  suspicion recorded in v3.14 is that the old busy-wait was helping to cause
+  it; if the wedge keeps happening at the same rate now that the polling is
+  ~50× gentler, that suspicion is wrong and the cause is elsewhere. **Worth
+  noting which way it goes.**
 
-  Worth suspecting, though not proven: `read_ContinousAcquisition` sends
-  `aip`, so with no sleep that loop is a CORBA round trip plus a TCP exchange
-  as fast as both allow, on the **single** UView socket — and the v2.8 note
-  above records `aip` and `AcquisitionInProgress` interfering on that very
-  socket once before. The loop may be contributing to the wedge, not merely
-  failing to survive it. A `sleep` inside it would cost nothing in
-  acquisition time and remove almost all of that traffic.
-
-  Until it is fixed, `tools/leem_acquisition_watchdog.py` mails when a run
-  stops writing data. It watches file mtimes, never UView, so it adds no
-  traffic to the instrument. Start it by hand alongside a long run:
+  `tools/leem_acquisition_watchdog.py` is what tells you from elsewhere: it
+  mails when a run stops writing data, watching file mtimes rather than
+  UView, so it adds no traffic to the instrument. Start it by hand alongside
+  a long run:
 
   ```bash
   python3 tools/leem_acquisition_watchdog.py --test-mail   # prove the mail path first
