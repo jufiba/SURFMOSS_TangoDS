@@ -235,29 +235,21 @@ the throw-away image.
 
 ## Known rough edges
 
-- **The wait for each image has no deadline.** Every acquisition takes its
-  images as
+- **The wait for each image has no deadline, and it has now bitten.** The
+  `while (uview.ContinousAcquisition): pass` idiom the v3.12 note above lists
+  as untested — twelve of them across the file — wedged a live ARRES run on
+  20-Nov-2026. UView had its `WaitForSingleObject failed 100000x in a row`
+  window up; the macro sat in that loop and the run stopped advancing
+  silently, and pressing *acquire* in UView by hand was what unblocked it.
+  ARRES meets it most often only because it chains the most images (nk × nE).
 
-  ```python
-  uview.AcquireSingleImage()
-  while (uview.ContinousAcquisition):
-      pass
-  ```
-
-  — thirteen times across the file. `read_ContinousAcquisition` sends `aip`
-  over UView's socket, so that loop is a CORBA round trip plus a TCP exchange
-  **with no sleep and no timeout**. If UView wedges (its
-  `WaitForSingleObject failed 100000x in a row` window) the macro spins there
-  for ever and the run stops advancing silently; pressing *acquire* in UView
-  by hand is what unblocks it. ARRES meets this most often only because it
-  chains the most images (nk × nE).
-
-  Worth suspecting, though not proven: that busy-wait hammers the **single**
-  UView socket, and `ElmitecUview.py:327` already records `aip` and
-  `AcquisitionInProgress` "stepping on each other" on that same socket once
-  before. The loop may be contributing to the wedge, not just failing to
-  survive it. A `sleep` inside it would cost nothing in acquisition time and
-  remove almost all of that traffic.
+  Worth suspecting, though not proven: `read_ContinousAcquisition` sends
+  `aip`, so with no sleep that loop is a CORBA round trip plus a TCP exchange
+  as fast as both allow, on the **single** UView socket — and the v2.8 note
+  above records `aip` and `AcquisitionInProgress` interfering on that very
+  socket once before. The loop may be contributing to the wedge, not merely
+  failing to survive it. A `sleep` inside it would cost nothing in
+  acquisition time and remove almost all of that traffic.
 
   Until it is fixed, `tools/leem_acquisition_watchdog.py` mails when a run
   stops writing data. It watches file mtimes, never UView, so it adds no
