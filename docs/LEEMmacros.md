@@ -163,6 +163,56 @@ and fall back to the camera's present values, as `leemSaveSingleImage` and
 Their signature defaults are unchanged, so command-line calls behave exactly as
 before. Only passing `None` explicitly is new.
 
+### v3.12 — ARRES fixes, and error replies from the device servers
+
+Prompted by writing the acquisition scripts for Gong Chen's SPLEEM (Oct 2026),
+which talk to LEEM2000 and UView directly over TCP and so met their error
+replies head on. Changed together with `ElmitecLEEM2k` and `ElmitecUview`,
+which now raise on error replies instead of reading `-102` as a value or
+dropping a refused setting (see their READMEs).
+
+- **`leemARRESrun` with one direction crashed.** `if (len(b>2))` is the length
+  of a boolean array, i.e. the number of rows, so it was always true and
+  `b[2,0]` raised `IndexError` for a two-row `b`, before the `len(b)==2` exit
+  for one direction could ever run. Only reachable when `b` is built by hand:
+  `leemARRESset()` always returns three rows.
+- **`leemARRESrun` had no cleanup.** CTRL-C or an error left the deflectors off
+  normal incidence and the camera stopped at the ARRES exposure. It now has a
+  `try/finally` that restores both, and the partial `LOG<d>.txt`, `.npy` and
+  plots are still written. The two directions are one helper,
+  `_leem_arres_direction`; `interp1d` on `[0,1]` is replaced by the same
+  linear interpolation written out, so scipy is no longer needed.
+- **Direction 0 is still plotted with k reversed.** That looked like an
+  inconsistency but is kept: it makes the two plots side by side read from
+  endpoint 1 through normal incidence to endpoint 2.
+- **`leemARRESset` printed `b[1]` as endpoint 2**, and its `b>200 -> 0` loop was
+  removed. The loop covered only `b[0]` and three of the four deflectors, and
+  would zero a real setting above 200 mA (the SPLEEM ran at 235 mA). The
+  likeliest thing it once caught is LEEM2000's COM "special values"
+  (99997.9–99999.9 for ramping/fault/local); error replies now raise instead.
+- **`leem_read(attr)`** retries for up to 10 s while LEEM2000 answers
+  `ErrorCode -102` (ramping). `leemReadDeflection` uses it, and takes
+  `ErrorCode -101` on ImEqX/ImEqY as 0 with a warning, which is what -101 meant
+  on the SPLEEM.
+- **`leem_savesettings`** writes `unreadable (...)` for a module it cannot read,
+  e.g. the MCP in local mode, instead of the error code as a number. Without
+  this, the servers raising would have failed every acquisition at its start.
+- **`leem_savedat()`** prints a warning when UView does not answer `"0"` to a
+  save. Every macro used to print only on success, so a failed save was silent.
+- **`leem_energies(E0,Ef,dE)`** builds the energies for `leemIV`, `leemIV_ROI`
+  and `leemIVandObj`. `numpy.arange(E0,Ef+dE,dE)` and `frange()` step in
+  floating point, so the end point came out one too many or one too few:
+  `leemIV(0,0.2,0.1)` took four images, the last at 0.3 V. Over E0 0–10,
+  dE 0.02–0.5 and 1–119 steps, arange was wrong in 14% of cases and frange in
+  38%. The step count is now rounded and every energy is `E0 + n*dE`.
+  `frange` is kept for anyone calling it by hand.
+
+Not changed, and still worth testing on this instrument (they went wrong on the
+SPLEEM): no wait for LEEM2000 to finish ramping after a set (`wai` is never
+sent); `while (uview.ContinousAcquisition): pass` has no timeout and polls as
+fast as Tango allows; stopping a running camera waits a fixed 0.5 s before
+the throw-away image.
+
 ## Invariants to preserve
 
 - **Never use `AcquireSingleImage()` plus a `while (uview.ContinousAcquisition)`
@@ -178,6 +228,10 @@ before. Only passing `None` explicitly is new.
   acquisition function.
 - Exposure is read back from UView as a float, so compare it with a tolerance —
   `leem_exposure_differs()` exists for this.
+- **ElmitecLEEM2k raises on LEEM2000 error replies** (since v3.12). A read
+  that can meet a ramp goes through `leem_read()`, and nothing that only
+  documents the run, like `leem_savesettings`, may let one unreadable module
+  stop an acquisition.
 
 ## Known rough edges
 

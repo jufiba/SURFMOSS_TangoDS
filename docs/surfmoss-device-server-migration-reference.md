@@ -98,7 +98,7 @@ All three are running against real pumps:
 |---|---|---|---|---|---|
 | `xps/vacuum/turboPCH` | PfeifferTC100/1 | pi-xps | `…usb-0:1.2:1.0-port0` | 001 `TC100` | 990 Hz, 0.17 A |
 | `leem/vacuum/turboPCH` | PfeifferTU400/1 | pi-uleem | `…usb-0:1.1.2:1.0-port0` | 001 `TC 400` | 1000 Hz, 0.53 A |
-| `leem/vacuum/scrollPump` | PfeifferHiscroll/1 | pi-uleem | `…usb-0:1.2.3:1.0-port0` | 002 `HiScrl` | 1557 rpm, 0.41 A |
+| `leem/vacuum/scrollPump` | PfeifferHiscroll/1 | pi-uleem | `…usb-0:1.2:1.0-port0` | 002 `HiScrl` | 1557 rpm, 0.41 A |
 
 Four separate faults were behind "the server dies seconds after the Starter
 launches it". Only the first was a Python 3 problem, and even that one was not
@@ -182,9 +182,12 @@ wrong port are both silence, and only a name coming back tells them apart.
 - ⚠️ **pi-leem's FTDI on `1.2.3` (`AB0JP499`) logs real USB faults** —
   `failed to set flow control: -71`, `urb stopped: -32`. That adapter or its
   cabling looks independently bad.
-- The `0403:daf1` Delphin converter on pi-leem's `1.1.2` belongs to something
-  else on that Pi; no Pfeiffer answers on it. The udev rule is still needed
-  there, just not for the TU400. **Unidentified.**
+- ✅ **The `0403:daf1` Delphin converter on pi-leem's `1.1.2` is the first
+  doser's FUG supply** — `FUGMCP/1`, `leem/power/hv1`, which runs at the default
+  625000 baud. No Pfeiffer answers on it because none is attached; the udev rule
+  is still needed there, just not for the TU400. The old wiki page for pi-leem
+  had recorded the `echo 0403 daf1 > …/new_id` workaround against the FUG for
+  years, which is where the identification came from.
 - 2.x camelCase spellings (`inWaiting`, `flushInput`) remain in AMLPGC1,
   Hygrometer and Tti604. They work in pyserial 3.5 and are deprecated, nothing
   more.
@@ -643,18 +646,17 @@ Already migrated to netboot from `/nfs/pi-trixie`. VSMControlDevice is still in
 `inactive/` and is **not** registered here; confirm whether it is needed before
 reviving it.
 
-⚠️ **`pi-vsm.lab` has no record in the lab DNS** (18-Aug-2026), and it is the only
-one missing: `pi-leem`, `pi-xps`, `pi-uleem`, `pi-mossbauer`, `sputtering` and
-`tangodb` do resolve. It has to be reached by IP (`10.43.88.12`), and that is the
-cause of that Pi's `sudo: unable to resolve host`.
+✅ **`pi-vsm.lab` resolves** (checked 20-Sep-2026, `10.43.88.12`). It had no
+record in the lab DNS on 18-Aug-2026, and that was the cause of that Pi's
+`sudo: unable to resolve host`.
 
 ### Other Pis (pi-xps, pi-mossbauer, pi-hvleem, ender, …) — partially known
 
 From the DB, GPIO servers (18-Aug-2026): pi-xps runs `RaspberryButton/1` and
 `SEAWaterflowmeter/3`; pi-uleem, `RaspberrySwitch/1` and `SEAWaterflowmeter/1`;
-pi-mossbauer, `SEAWaterflowmeter/2`; sputtering, `ArduinoMotor/1`. **The first
-three were still booting from microSD** rather than netboot — see _Netboot versus
-microSD_. (Out of date: see the update below.)
+pi-mossbauer, `SEAWaterflowmeter/2`; sputtering, `ArduinoMotor/1`. Those three
+were still booting from microSD at the time; they all netboot now, and
+**`pi-hvleem` is the only Pi left on microSD** — see _Netboot versus microSD_.
 
 _Fill in per host from Astor as they are migrated._
 
@@ -685,7 +687,7 @@ Pi left on microSD.** See `docs/netboot-shared-root.md`.
 #### Update (27-Aug-2026): pi-laser
 
 ```
-pi-laser      GammaVacuumDigitel/1  (leem/vacuum/IonPumpColumns)
+pi-laser      GammaVacuumDigitel/1  (leem/vacuum/ColumnsIonPump)
 ```
 
 The first **Pi 4** in production, netbooting from the shared root. It was
@@ -1207,8 +1209,9 @@ Two things set it apart from the rest:
   and generated again.
 - **It had never been tested against the real controller.** That was the note in
   `inactive/README.md`, and it stopped being true on 27-Aug-2026, when it was
-  pointed at the LEEM column ion pump on pi-laser. It did not work: see the
-  status section at the top.
+  pointed at the LEEM column ion pump on pi-laser. It did not work at first;
+  it does now — `leem/vacuum/ColumnsIonPump` reads 1.6e-09 mbar with
+  `SupplyStatus` `RUNNING` (checked 20-Sep-2026).
 
 The `IP` property **has no default value** on purpose: there is no known address
 to put there. It has to be set in the database when registering the device, or

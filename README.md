@@ -32,104 +32,110 @@ cd <DeviceServerDirectory>
 pip install .
 ```
 
+**That is not how the laboratory runs it.** The Raspberry Pis netboot from a
+read-only shared root on wolframite, where this repository is checked out once
+at `/nfs/pi-trixie/opt/tango/SURFMOSS_TangoDS` and installed **editable**, so a
+`git pull` is enough for a code change and no server is installed per machine.
+Everything is done from wolframite — a `git pull` or a `pip` from a Pi fails
+with `Read-only file system`. See
+[`docs/netboot-shared-root.md`](docs/netboot-shared-root.md).
+
 ## Device Servers
 
-### Vacuum & Gauges
+**35 servers install** from this repository (`[project.scripts]`), of which
+**33 have devices registered** in the Tango database, for **53 devices** in
+total. `LeyboldIG3` and `WaterSwitch` install but have no registered instance.
+
+Each server has its own `README.md` with the instrument's protocol and the
+traps found along the way; that is the reference, not this table.
+
+Retired and paused servers are **not** listed here — see
+[`deprecated/README.md`](deprecated/README.md) (dead hardware) and
+[`inactive/README.md`](inactive/README.md) (paused but revivable).
+
+### Vacuum & gauges
 
 | Directory | Description |
 |---|---|
-| `GammaIonPump` | Gamma Vacuum ion pump controllers |
-| `LeyboldCenterOne` | Leybold CenterOne single-channel vacuum gauge |
-| `LeyboldIG3` | Leybold IG3 gauge electronics |
+| `AMLPGC1` | AML PGC1 ion gauge controller (LEEM preparation chamber) |
+| `CenterOneGauge` | Leybold CenterOne single-channel vacuum gauge |
+| `GammaVacuumDigitel` | Gamma Vacuum DIGITEL ion-pump supplies (SPCe, QPC) over Telnet |
+| `GranvillePhillips350` | Granville Phillips 350 gauge controller |
+| `LeyboldIG3` | Leybold IG3 gauge electronics — *installed, no registered device* |
 | `MKSGauge` | MKS PDR9000 unit with 972B transducer |
-| `PfeifferDCU002` | Pfeiffer DCU002 display unit |
+
+### Pumps & flow
+
+| Directory | Description |
+|---|---|
+| `PfeifferHiscroll` | Pfeiffer HiScroll scroll pump |
 | `PfeifferTC100` | Pfeiffer TC100 turbopump controller |
 | `PfeifferTU400` | Pfeiffer TU400 turbopump controller |
-| `VarianMultiGauge` | Varian Multigauge controller (hot cathode gauge) |
-
-### Pumps & Flow
-
-| Directory | Description |
-|---|---|
-| `PfeifferHiScroll` | Pfeiffer HiScroll scroll pump |
 | `VarianTV301nav` | Varian/Agilent TV301 Navigator turbopump with integrated controller |
-| `BronkhorstMFC` | Bronkhorst mass flow controllers |
-| `SEAWaterflowmeter` | SEA YF-S201 water flow sensor via Raspberry Pi GPIO |
-| `WaterSwitch` | Cooling water flow detection sensor |
+| `MFC` | Bronkhorst mass flow controllers |
+| `SEAWaterflowmeter` | YF-S201 water flow sensors via Raspberry Pi GPIO, with `UpdateCount` |
+| `WaterSwitch` | Fixed-pin, fixed-polarity variant of `RaspberrySwitch` — *no registered device; use `RaspberrySwitch`* |
 
-### Power Supplies & High Voltage
-
-| Directory | Description |
-|---|---|
-| `AGPolaritySwitch` | Arduino-based polarity switcher for high-current (up to 30 A) power supply |
-| `AMLPGC1` | AML PGC1 pressure/gauge controller |
-| `FUGMCP` | FUG MCP 140-1250 HV power supply (1250 V, 100 mA) via Probus |
-| `HuttingerPFG-DC` | Huttinger PFG-DC1500 DC power supply for magnetron sputtering |
-| `HuttingerPFG-RF` | Huttinger PFG-RF300 RF power supply for magnetron sputtering |
-| `Itech6000C` | ITech 6000C power supply via Ethernet |
-| `tti604` | RS TTI 604 digital multimeter |
-
-### Motion & Positioning
+### Power supplies & high voltage
 
 | Directory | Description |
 |---|---|
-| `ArduinoMotor` | Arduino-based motor driver |
-| `MitutoyoPostable` | Mitutoyo positionable stage |
-| `Motor` | Generic motor device server |
+| `AGPolaritySwitch` | Arduino relay box that reverses the VSM magnet supply (up to 30 A) |
+| `FUGMCP` | FUG MCP 140-1250 HV supply (1250 V, 100 mA) over Probus V, with deadman |
+| `HuttingerPFGDC` | Huttinger PFG-DC 1500 DC supply for magnetron sputtering |
+| `HuttingerPFGRF` | Huttinger PFG-RF 300 RF supply for magnetron sputtering |
+| `Itech6000C` | ITECH IT-6000C regenerative supply (VSM magnet coil), with deadman |
 
-### Sensors & Instruments
+### Motion
 
 | Directory | Description |
 |---|---|
-| `ArduinoPt` | Arduino connected to a Pt100/Pt1000 temperature module |
-| `CryoCon32` | Cryocon32 temperature controller (Mossbauer transmission setup) |
-| `Hygrometer` | Arduino with YL-69/YL-38 humidity/moisture sensors |
-| `Keithley2100` | Keithley 2100 6½-digit digital multimeter (USB-TMC) |
-| `SRIlockin830` | SRI 830 lock-in amplifier |
-| `TempSensorDS18B20` | DS18B20 1-wire temperature sensor via Raspberry Pi |
+| `ArduinoMotor` | Stepper motor via Arduino and DRV8825 (sputtering target position) |
 
-### Data Acquisition
+### Sensors & instruments
+
+| Directory | Description |
+|---|---|
+| `ArduinoPt` | Arduino with a Pt100/Pt1000 temperature module |
+| `CryoCon32` | Cryocon 32 temperature controller (Mossbauer transmission cryostat) |
+| `Hygrometer` | Arduino with YL-69/YL-38 humidity sensors |
+| `SRIlockin830` | Stanford Research SR830 DSP lock-in amplifier |
+| `TempSensorDS18B20` | DS18B20 1-wire temperature sensor (kernel `w1-gpio` overlay) |
+| `Tti604` | Thurlby Thandar TTi 604 bench multimeter |
+
+### Acquisition & control
 
 | Directory | Description |
 |---|---|
 | `ArduinoDAC` | Arduino-based DAC interface |
-| `MCC1208LS` | Measurement Computing MCC 1208LS USB DAQ box |
-| `PIDController` | Generic PID controller device server |
-| `VSMControlDevice` | VSM data acquisition and hysteresis cycle imaging |
+| `PIDController` | Generic PID loop between two Tango devices |
+| `WisselMCA` | WissEl CMCA-550 multichannel analyser for Mossbauer spectroscopy |
 
-### Cameras & Imaging
-
-| Directory | Description |
-|---|---|
-| `ElmitecUview` | PEEM end-station data reader (requires UView running) |
-| `V4L2Camera` | V4L2 camera frame grabber |
-| `WebCam` | Webcam via V4L2/pygame |
-| `WisselMCA` | Wissel Multichannel Analyzer for Mossbauer spectroscopy |
-
-### LEEM / SPECS Equipment
+### LEEM
 
 | Directory | Description |
 |---|---|
-| `ElmitecLEEM2k` | Settings interface for Elmitec LEEM2000 |
-| `SpecsXRC1000` | SPECS XRC1000 X-ray gun electronics status |
+| `ElmitecLEEM2k` | Control of Elmitec's LEEM2000 program (a client of it, not of the hardware) |
+| `ElmitecUview` | Control of Elmitec's UView acquisition program |
 
-### Network & Infrastructure
+### Safety & infrastructure
 
 | Directory | Description |
 |---|---|
-| `NetworkUPSTools` | Wrapper for NUT (Network UPS Tools) |
+| `AnalogInterlock` | Generic threshold interlock between two devices: hysteresis, gate, heartbeat, bypass |
+| `AlarmNotifier` | Watches other servers' `State` and sends mail. Replaces PANIC/PyAlarm |
+| `NetworkUPSTool` | UPS monitoring through NUT (Network UPS Tools) |
+| `RaspberryButton` | GPIO output pin holding a permissive, with a deadman |
+| `RaspberrySwitch` | GPIO input pin, for reading a switch or a valve position |
+
+How these combine into the cooling-water safety chain is in
+[`AnalogInterlock/README.md`](AnalogInterlock/README.md) and
+[`AlarmNotifier/README.md`](AlarmNotifier/README.md).
 
 Alarms used to live here too, in a vendored copy of ALBA's PANIC. That tree has
 been removed — see [`deprecated/README.md`](deprecated/README.md) for why, and
 [`docs/alarms-panic-legacy.md`](docs/alarms-panic-legacy.md) for what it
 watched.
-
-### Raspberry Pi
-
-| Directory | Description |
-|---|---|
-| `RaspberryButton` | GPIO output pin control (e.g. relay) |
-| `RaspberrySwitch` | GPIO input pin for reading a switch |
 
 ## Scripts
 

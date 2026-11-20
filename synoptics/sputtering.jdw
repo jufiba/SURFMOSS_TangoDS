@@ -153,22 +153,6 @@ JDFile v11 {
     className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
     font:"Dialog",0,16
   }
-  JDSwingObject {
-    summit:64,416,156,435
-    origin:98,424
-    fillStyle:1
-    lineWidth:0
-    name:"sputtering/vacuum/turbo/frecuency"
-    extensions:{
-      unitVisible:"true"
-      userFormat:""
-      alarmEnabled:"true"
-      validBackground:"0,255,0"
-      invalidText:"-----"
-    }
-    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
-    font:"Dialog",0,16
-  }
   JDPolyline {
     summit:735,218,742,201,752,216,759,199,769,216,775,198,783,215,783,215,783,215,784,219
     origin:760,209
@@ -245,7 +229,7 @@ JDFile v11 {
     name:"Line"
   }
   JDLine {
-    summit:818,205,886,205
+    summit:818,205,1020,205
     origin:852,205
     lineWidth:6
     name:"Line"
@@ -271,8 +255,8 @@ JDFile v11 {
     name:"Ellipse"
   }
   JDSwingObject {
-    summit:59,448,158,492
-    origin:109,470
+    summit:59,479,158,523
+    origin:109,501
     background:200,200,200
     fillStyle:1
     lineWidth:0
@@ -305,7 +289,7 @@ JDFile v11 {
     font:"Dialog",0,16
   }
   JDRectangle {
-    summit:42,319,172,506
+    summit:42,319,172,534
     origin:106,425
     name:"Rectangle"
   }
@@ -436,8 +420,8 @@ JDFile v11 {
     border:3
   }
   JDSwingObject {
-    summit:49,392,102,410
-    origin:106,401
+    summit:49,430,102,448
+    origin:106,439
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -456,8 +440,8 @@ JDFile v11 {
     name:"Rectangle"
   }
   JDSwingObject {
-    summit:110,392,165,410
-    origin:108,401
+    summit:110,430,165,448
+    origin:108,439
     foreground:51,51,51
     background:238,238,238
     fillStyle:1
@@ -471,8 +455,8 @@ JDFile v11 {
     border:3
   }
   JDSwingObject {
-    summit:60,362,152,381
-    origin:94,370
+    summit:60,361,152,380
+    origin:94,369
     fillStyle:1
     lineWidth:0
     name:"sputtering/vacuum/turbo/temperature"
@@ -491,7 +475,7 @@ JDFile v11 {
     origin:331,82
     fillStyle:1
     lineWidth:0
-    name:"sputtering/power/magRFmag/IncidentPower"
+    name:"sputtering/power/magRFmag/ReflectedPower"
     extensions:{
       unitVisible:"true"
       userFormat:""
@@ -645,5 +629,37 @@ JDFile v11 {
     lineWidth:0
     name:"Label"
     text:"CT"
+  }
+  JDSwingObject {
+    summit:63,452,155,471
+    origin:97,460
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/turbo/frequency"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
+  }
+  JDSwingObject {
+    summit:61,392,153,411
+    origin:95,400
+    fillStyle:1
+    lineWidth:0
+    name:"sputtering/vacuum/turbo/power"
+    extensions:{
+      unitVisible:"true"
+      userFormat:""
+      alarmEnabled:"true"
+      validBackground:"0,255,0"
+      invalidText:"-----"
+    }
+    className:"fr.esrf.tangoatk.widget.attribute.SimpleScalarViewer"
+    font:"Dialog",0,16
   }
 }

@@ -123,6 +123,7 @@ class LeyboldIG3(Device):
         # raises on a write that times out. Nothing here writes with a timeout;
         # a read that times out returns short and used to become an IndexError
         # inside response(). It is IG3Error that matters now.
+        self.ser=None
         try:
             self.ser=serial.Serial(self.SerialPort,baudrate=self.Speed,timeout=1.0)
         except serial.SerialException as e:
@@ -170,7 +171,12 @@ class LeyboldIG3(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(LeyboldIG3.delete_device) ENABLED START #
-        self.ser.close()
+        # Guarded because init_device returns early when the port will not
+        # open, leaving no self.ser: closing it then raised AttributeError
+        # out of delete_device, on the one server that had already failed to
+        # start. Same guard as Hygrometer.close_port.
+        if (getattr(self,"ser",None) is not None):
+            self.ser.close()
         # PROTECTED REGION END #    //  LeyboldIG3.delete_device
 
     # ------------------
@@ -198,7 +204,24 @@ class LeyboldIG3(Device):
             self.error_stream("Can't read the pressure: %s"%e)
             return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
         if (kind=="ACK"):
-            return float(payload)
+            # The good path has to speak too, and here it matters more than in
+            # most servers: only the failing paths below set anything, so a
+            # FAULT from one bad exchange survived every later reading. The
+            # gauge came back, the readings came back, and the device went on
+            # publishing FAULT -- which is the value AnalogInterlock and
+            # AlarmNotifier act on -- until somebody restarted the server.
+            # CenterOneGauge had the same shape and it cost a day of believing
+            # a working gauge was broken; there it was only the status text,
+            # here it is the state.
+            #
+            # OFF returned above, so this can only be reached from ON or from
+            # FAULT: setting ON is either a no-op or exactly the recovery that
+            # was missing. It never contradicts a filament that is off.
+            value=float(payload)
+            self.set_state(tango.DevState.ON)
+            self.set_status("Pressure %g mbar, read at %s"
+                            %(value,time.strftime("%Y-%m-%d %H:%M:%S")))
+            return value
         # Only NAK reaches here; a bad frame or no frame raised above. The old
         # code did r[0]+r[1], concatenating str with bytes, so the error path
         # raised TypeError while reporting the error.
@@ -220,6 +243,13 @@ class LeyboldIG3(Device):
     @DebugIt()
     def Start(self):
         # PROTECTED REGION ID(LeyboldIG3.Start) ENABLED START #
+        self.do_start()
+        # PROTECTED REGION END #    //  LeyboldIG3.Start
+
+    def do_start(self):
+        """Body of Start, split out so the tests can drive it: @DebugIt()
+        wants a real Tango logger, which a stubbed Device has not got. Same
+        split as AnalogInterlock.do_reset and Itech6000C.do_output_on."""
         state=self.get_state()
         if (state==tango.DevState.ON):
             return
@@ -234,11 +264,14 @@ class LeyboldIG3(Device):
                 return
             if (kind=="ACK"):
                 self.set_state(tango.DevState.ON)
+                # Without this the status keeps whatever the last failure
+                # said, so a gauge that has just been started successfully
+                # goes on describing the refusal it recovered from.
+                self.set_status("Emission on")
             else:
                 self.set_status("IG3 refused: %s"%str(payload,"ascii"))
                 self.debug_stream("IG3 refused: %s"%str(payload,"ascii"))
                 self.set_state(tango.DevState.FAULT)
-        # PROTECTED REGION END #    //  LeyboldIG3.Start
 
     @command(
     display_level=DispLevel.EXPERT,
@@ -246,6 +279,11 @@ class LeyboldIG3(Device):
     @DebugIt()
     def Stop(self):
         # PROTECTED REGION ID(LeyboldIG3.Stop) ENABLED START #
+        self.do_stop()
+        # PROTECTED REGION END #    //  LeyboldIG3.Stop
+
+    def do_stop(self):
+        """Body of Stop; split out for the same reason as do_start."""
         state=self.get_state()
         if (state==tango.DevState.OFF):
             return
@@ -260,14 +298,19 @@ class LeyboldIG3(Device):
                 return
             if (kind=="ACK"):
                 self.set_state(tango.DevState.OFF)
+                # Says why Pressure will read INVALID from now on: with the
+                # filament off there is no measurement to be had, and that is
+                # a deliberate state, not a fault. Without it the status kept
+                # the last error and OFF looked like a symptom of it.
+                self.set_status("Emission off; no pressure reading while the "
+                                "filament is off")
             else:
                 self.set_status("IG3 refused: %s"%str(payload,"ascii"))
                 self.debug_stream("IG3 refused: %s"%str(payload,"ascii"))
                 self.set_state(tango.DevState.FAULT)
-        # PROTECTED REGION END #    //  LeyboldIG3.Stop
 
     @command(
-    dtype_in='str', 
+    dtype_in='str',
     dtype_out='str', 
     display_level=DispLevel.EXPERT,
     )

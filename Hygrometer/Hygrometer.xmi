@@ -10,6 +10,11 @@
       <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
       <DefaultPropValue>/dev/ttyUSB0</DefaultPropValue>
     </deviceProperties>
+    <deviceProperties name="Identity" description="The line the board must answer to 'id' before this server will talk to it, compared with surrounding whitespace and line endings stripped from both sides. The default is the XPS board's own banner, which is what this check was written against; any other board -- the one over the LEEM, say -- announces itself differently and has to say so here, or it is rejected as an impostor however well it works. The check itself is not optional: telling the wrong instrument from the right one is the whole point of asking, and two devices on one serial port is a mistake this lab has made twice.">
+      <type xsi:type="pogoDsl:StringType"/>
+      <status abstract="false" inherited="false" concrete="true" concreteHere="true"/>
+      <DefaultPropValue>Flood sensor above XPS</DefaultPropValue>
+    </deviceProperties>
     <commands name="State" description="This command gets the device state (stored in its device_state data member) and returns it to the caller." execMethod="dev_state" displayLevel="OPERATOR" polledPeriod="0">
       <argin description="none">
         <type xsi:type="pogoDsl:VoidType"/>

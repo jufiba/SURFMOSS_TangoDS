@@ -123,6 +123,17 @@ class CenterOneGauge(Device):
         ATTR_VALID, state OFF, and came back ON the moment it was restarted.
         Every path here sets the state, in both directions.
 
+        The same was true of the status, and it outlived the fix above by a
+        few days. Only the failing paths wrote one, so the text kept whatever
+        the last failure had said, for ever. On 20-sep-2026 gaugeEvap read
+        4.3 mbar at ATTR_VALID, state ON, while its status still said "The
+        gauge did not acknowledge PR1" from a collision with the hygrometer
+        that had been resolved the evening before -- a device working
+        perfectly and describing itself as broken, which is the same lie as
+        the reverse and costs the same time to chase. The good path now says
+        what it read and when, so a status that stops moving is visibly a
+        status that stopped moving.
+
         0.0 on a pressure gauge reads as perfect vacuum, which is the most
         dangerous value this attribute can hand to an interlock or an alarm:
         it says the chamber is fine at exactly the moment nothing is known.
@@ -157,6 +168,8 @@ class CenterOneGauge(Device):
             self.debug_stream("The gauge reports measurement status %s"%status)
             return (0.0,time.time(),tango.AttrQuality.ATTR_INVALID)
         self.set_state(tango.DevState.ON)
+        self.set_status("Pressure %g mbar, read at %s"
+                        %(data,time.strftime("%Y-%m-%d %H:%M:%S")))
         return data
         # PROTECTED REGION END #    //  CenterOneGauge.Pressure_read
 

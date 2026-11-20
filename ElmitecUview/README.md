@@ -10,7 +10,7 @@ PC — this server is a client of it, not of the camera.
 Manuals on the wiki: `Software_Uview.pdf`, `Software_UVIEWScript.pdf`,
 `Software_UView_FileFormats_2017.pdf`.
 
-Runs on **pi-leem**, server `ElmitecUview/1`, device `leem/measurement/Uview`,
+Runs on **pi-laser**, server `ElmitecUview/1`, device `leem/measurement/Uview`,
 `IP = tvips.lab`, `Port = 5570`.
 
 ## The protocol
@@ -58,6 +58,13 @@ tokens:
   `ElmitecUviewError` with the documented reason (intensity window not open
   / ROI invalid / ROI not active) rather than handing a client a number that
   reads as a valid, very wrong, intensity.
+- **Setting and action replies are checked** (16-Nov-2026). `Exposure`,
+  `Average`, `ContinousAcquisition` writes and `AcquireSingleImage` used to
+  read UView's reply and drop it; an `ErrorCode $n` reply now raises
+  `ElmitecUviewError` ("UView refused 'ext 400.0': ErrorCode -1"). Any other
+  reply is accepted as before. `SaveImageAsDAT`/`SaveImageAsPNG` still
+  return the reply unchanged; `LEEMmacros.leem_savedat()` warns when it is
+  not `"0"`.
 - **Reconnect thread.** UView is restarted often; a `_Reconnect` thread
   rebuilds the socket every `ReconnectPeriod` while it is down, so a UView
   restart no longer needs this server restarted.
