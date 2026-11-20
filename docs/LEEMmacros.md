@@ -213,6 +213,34 @@ sent); `while (uview.ContinousAcquisition): pass` has no timeout and polls as
 fast as Tango allows; stopping a running camera waits a fixed 0.5 s before
 the throw-away image.
 
+### v3.13 — one place writes `macros.dat`
+
+`leemSetDailyFolder()` wrote the counter file with **three** fields
+(`prefix,dayfolder,exp`) where `leem_getfolder()` unpacks **four**
+(`wprefix,prefix,dayfolder,exp`). Calling it therefore left a file the next
+call could not read at all — every macro then died at
+
+```
+ValueError: not enough values to unpack (expected 4, got 3)
+```
+
+and the Windows prefix, which is what `SaveImageAsDAT` needs to tell UView
+where to write, was the field being dropped.
+
+It survived because nothing calls `leemSetDailyFolder()` automatically any
+more: `leem_makenextfolder_and_inc()` handles the day rollover itself, so the
+broken function is only reachable by hand. Its own copy of the same
+three-field write was harmless for a different reason — a correct four-field
+write overwrites it before that function returns.
+
+The real cause is that **four copies of this write existed in two different
+spellings**, which is how the two wrong ones went unnoticed. The layout now
+lives in exactly one function, `leem_setfolder(wprefix,prefix,dayfolder,exp)`,
+used by all four sites. Verified against a temporary counter file: the
+round-trip through `leemSetDailyFolder()` → `leem_getfolder()` now works and
+keeps the Windows prefix, a day rollover still restarts at `_000`, and the
+same check raises the `ValueError` above against the previous code.
+
 ## Invariants to preserve
 
 - **Never use `AcquireSingleImage()` plus a `while (uview.ContinousAcquisition)`
@@ -265,12 +293,6 @@ the throw-away image.
   acquiring an image and while the live view runs, which is what
   `leemARRESrun` leaves on when it ends.
 
-- **`leemSetDailyFolder()` writes `macros.dat` with the wrong number of
-  fields.** It writes three (`prefix,dayfolder,0`) where `leem_getfolder()`
-  unpacks four (`wprefix,prefix,dayfolder,exp`), so calling it by hand leaves
-  the counter file unreadable by the next call. The same three-field write
-  inside `leem_makenextfolder_and_inc()` is harmless, because a correct
-  four-field write overwrites it before that function returns.
 - The shebang is `#!/usr/bin/python` on a Python 3 file. Harmless while the file
   is imported or `%run`, but `./LEEMmacros.py` breaks where `/usr/bin/python` is
   Python 2 or absent.

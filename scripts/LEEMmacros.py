@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.13 20/11/2026 leemSetDailyFolder() wrote macros.dat with three fields (prefix,dayfolder,exp) where leem_getfolder() unpacks four, so calling it left a counter file the next call could not read: every macro then died on "not enough values to unpack". The same three-field write inside leem_makenextfolder_and_inc() was harmless only because a correct four-field write overwrote it before that function returned. There were four copies of this write in two spellings, which is how the two wrong ones survived, so the layout now lives in one place: new leem_setfolder(wprefix,prefix,dayfolder,exp), used by all four.
+#
 # v3.12 16/11/2026 ARRES fixes, and the macros cope with ElmitecLEEM2k/ElmitecUview now raising on error replies (same change). leemARRESrun: a two-row b (one direction) crashed on "if (len(b>2))", always true, before reaching its own one-direction exit; CTRL-C or an error now puts the deflectors back at normal incidence and the camera back as it was (it had no handler), and the partial data and plots are still written. The two directions share one helper, and scipy's interp1d is gone (plain linear interpolation, same values). leemARRESset printed b[1] as endpoint 2, and its "b>200 -> 0" loop is removed: it only covered b[0] and three deflectors, and zeroed real values above 200 mA. New leem_read() retries a value while LEEM2000 answers ErrorCode -102 (ramping), and leemReadDeflection takes ErrorCode -101 on the image equalizers as 0 with a warning. leem_savesettings writes "unreadable (...)" for a module it cannot read instead of failing the acquisition. New leem_savedat() prints a warning when UView does not save an image, which every macro skipped silently. New leem_energies() for leemIV, leemIV_ROI and leemIVandObj: numpy.arange and frange() stepped in floating point and often took one point too many or too few (leemIV(0,0.2,0.1) took four images, the last at 0.3).
 #
 # v3.11 16/09/2026 leem_log() now stamps each line with the day's %03d experiment
@@ -63,7 +65,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.12"
+__version__ = "3.13"
 
 from datetime import date
 import tango
@@ -151,12 +153,23 @@ def leemSetDailyFolder():
     if not os.path.exists(dayname):
         os.mkdir(dayname)
         print("Directory "+dayname+" Created ")
-        f=open(counter_filename,"w")
-        f.write(prefix+","+dayfolder+",0")
-        f.close()
+        leem_setfolder(wprefix,prefix,dayfolder,0)
     else:
         print("Dayfolder "+dayname+" exists. Doing nothing.")
     
+def leem_setfolder(wprefix,prefix,dayfolder,exp):
+    """ Write the counter file. The only place that knows its layout.
+
+    It has to stay in step with leem_getfolder(), which unpacks four fields,
+    and that is exactly what went wrong while there were four copies of this
+    write in two different spellings: leemSetDailyFolder() wrote three
+    (prefix,dayfolder,exp), leaving a counter file the next leem_getfolder()
+    could not unpack at all.
+    """
+    f=open(counter_filename,"w")
+    f.write("%s,%s,%s,%d"%(wprefix,prefix,dayfolder,int(exp)))
+    f.close()
+
 def leem_getfolder():
     if not os.path.exists(counter_filename):
         raise RuntimeError("no counter file at %s (run leemSetDailyFolder() "
@@ -176,9 +189,7 @@ def leem_makenextfolder_and_inc():
     if not os.path.exists(dayname):
         os.mkdir(dayname)
         print("Directory "+dayname+" Created ")
-        f=open(counter_filename,"w")
-        f.write(prefix+","+dayfolder+",0")
-        f.close()
+        leem_setfolder(wprefix,prefix,dayfolder,0)
         exp=0
     full=prefix+"/"+dayfolder+"/"+dayfolder+"_%03d"%exp
     wfull=wprefix+"/"+dayfolder+"/"+dayfolder+"_%03d"%exp
@@ -189,9 +200,7 @@ def leem_makenextfolder_and_inc():
     else:
         print("Directory "+full+" already exists")
     exp+=1
-    f=open(counter_filename,"w")
-    f.write(wprefix+","+prefix+","+dayfolder+","+str(exp))
-    f.close()
+    leem_setfolder(wprefix,prefix,dayfolder,exp)
     return(wfull,full,name)
 
 def leem_log(command):
@@ -214,9 +223,7 @@ def leem_log(command):
             # first log line of the day would carry yesterday's leftover
             # count instead of the 000 the folder is about to get.
             os.mkdir(dayname)
-            f=open(counter_filename,"w")
-            f.write(wprefix+","+prefix+","+dayfolder+",0")
-            f.close()
+            leem_setfolder(wprefix,prefix,dayfolder,0)
             exp=0
         stamp=time.strftime("%Y-%m-%d %H:%M:%S")
         f=open(dayname+"/"+dayfolder+"_commands.log","a")
