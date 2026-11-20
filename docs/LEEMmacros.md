@@ -288,6 +288,12 @@ same check raises the `ValueError` above against the previous code.
   python3 tools/leem_acquisition_watchdog.py --timeout 10
   ```
 
+  It registers the same `atexit` → `tango.ApiUtil.cleanup()` hook as v3.7:
+  on tvips, `--test-mail` sent its mail and then exited with a segmentation
+  fault, omniORB's client threads racing Python finalisation again. It does
+  not reproduce on wolframite, so it depends on the pytango build there, as
+  v3.7 already found.
+
   It is not automatic on purpose: a run that *finishes* also stops writing,
   and `ContinousAcquisition` cannot tell the two apart — it reads 1 both while
   acquiring an image and while the live view runs, which is what

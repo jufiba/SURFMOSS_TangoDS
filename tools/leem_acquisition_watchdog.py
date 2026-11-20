@@ -43,6 +43,7 @@ Exit: 0 on Ctrl-C, 2 if it could not start at all.
 """
 
 import argparse
+import atexit
 import os
 import signal
 import sys
@@ -56,6 +57,37 @@ DEFAULT_NOTIFIER = "lab/alarm/notifier"
 def raise_keyboard_interrupt(signum, frame):
     """SIGTERM -> the same clean exit Ctrl-C takes."""
     raise KeyboardInterrupt()
+
+
+_cleanup_registered = False
+
+
+def register_tango_cleanup():
+    """Shut the ORB down at the start of shutdown, before the race.
+
+    Seen on tvips on 20-Nov-2026: `--test-mail` sent its mail and then exited
+    with a segmentation fault. Same thing LEEMmacros v3.7 hit and fixed the
+    same way -- omniORB's client threads racing Python finalisation, which
+    shows up or not depending on the pytango build (it does not reproduce on
+    wolframite). Guarded for the same reason v3.7 guards it: cleanup() is a
+    no-op or raises depending on that build.
+
+    Registered on the first real tango import rather than at module level, so
+    --dry-run still runs where pytango is not installed at all.
+    """
+    global _cleanup_registered
+    if _cleanup_registered:
+        return
+    _cleanup_registered = True
+
+    def _tango_cleanup():
+        try:
+            import tango
+            tango.ApiUtil.cleanup()
+        except Exception:                                     # noqa: BLE001
+            pass
+
+    atexit.register(_tango_cleanup)
 
 
 def stamp(when=None):
@@ -140,6 +172,7 @@ class Mailer:
             return True
         try:
             import tango
+            register_tango_cleanup()
             if self.proxy is None:
                 self.proxy = tango.DeviceProxy(self.device)
             self.proxy.SendMessage([subject, body])
