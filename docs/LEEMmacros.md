@@ -181,6 +181,50 @@ before. Only passing `None` explicitly is new.
 
 ## Known rough edges
 
+- **The wait for each image has no deadline.** Every acquisition takes its
+  images as
+
+  ```python
+  uview.AcquireSingleImage()
+  while (uview.ContinousAcquisition):
+      pass
+  ```
+
+  — thirteen times across the file. `read_ContinousAcquisition` sends `aip`
+  over UView's socket, so that loop is a CORBA round trip plus a TCP exchange
+  **with no sleep and no timeout**. If UView wedges (its
+  `WaitForSingleObject failed 100000x in a row` window) the macro spins there
+  for ever and the run stops advancing silently; pressing *acquire* in UView
+  by hand is what unblocks it. ARRES meets this most often only because it
+  chains the most images (nk × nE).
+
+  Worth suspecting, though not proven: that busy-wait hammers the **single**
+  UView socket, and `ElmitecUview.py:327` already records `aip` and
+  `AcquisitionInProgress` "stepping on each other" on that same socket once
+  before. The loop may be contributing to the wedge, not just failing to
+  survive it. A `sleep` inside it would cost nothing in acquisition time and
+  remove almost all of that traffic.
+
+  Until it is fixed, `tools/leem_acquisition_watchdog.py` mails when a run
+  stops writing data. It watches file mtimes, never UView, so it adds no
+  traffic to the instrument. Start it by hand alongside a long run:
+
+  ```bash
+  python3 tools/leem_acquisition_watchdog.py --test-mail   # prove the mail path first
+  python3 tools/leem_acquisition_watchdog.py --timeout 10
+  ```
+
+  It is not automatic on purpose: a run that *finishes* also stops writing,
+  and `ContinousAcquisition` cannot tell the two apart — it reads 1 both while
+  acquiring an image and while the live view runs, which is what
+  `leemARRESrun` leaves on when it ends.
+
+- **`leemSetDailyFolder()` writes `macros.dat` with the wrong number of
+  fields.** It writes three (`prefix,dayfolder,0`) where `leem_getfolder()`
+  unpacks four (`wprefix,prefix,dayfolder,exp`), so calling it by hand leaves
+  the counter file unreadable by the next call. The same three-field write
+  inside `leem_makenextfolder_and_inc()` is harmless, because a correct
+  four-field write overwrites it before that function returns.
 - The shebang is `#!/usr/bin/python` on a Python 3 file. Harmless while the file
   is imported or `%run`, but `./LEEMmacros.py` breaks where `/usr/bin/python` is
   Python 2 or absent.
