@@ -315,25 +315,42 @@ call in `LEEMgui` is gone so a GUI run is not logged twice. Two details:
   moved on, so it would now be one too high. A ramp, which takes no folder,
   writes `---` in that column.
 
-### The instrument has been running a copy older than v3.11
+### What is actually deployed, checked 23-Nov-2026
 
-Found in the same look, and more serious than the missing log. No line in
-any log from 10 September to 5 November carries the experiment number, and
-**that number is what v3.11 added on 16 September**:
+The logs invited a wrong conclusion and it is worth recording, because the
+next person reading them will reach for it too. No line from 10 September to
+5 November carries the experiment number v3.11 added on 16 September:
 
 ```
 2026-09-10 18:28:36  leemSaveSingleImage(...)
 2026-11-05 11:56:45  leemIVandObj(...)
 ```
 
-So the deployed copy predates v3.11, and with it v3.12 (the ARRES fixes and
-the error replies), v3.13 and v3.14 (the UView wait). Strictly this proves
-what was running on 5 November, not today — but there is no later log to
-say otherwise, and a run on 20 November wedged in exactly the way v3.14
-addresses.
+That looks like proof the instrument is older than v3.11. It is not. Every
+log that exists predates the v3.12 update, because logging had already
+stopped when the GUI stopped being used — so there is no recent line to
+carry the number either way. Checking the machines themselves:
+
+| Where | What runs there | State on 23-Nov-2026 |
+|---|---|---|
+| `tvips` (WSL), `~/SURFMOSS_TangoDS` | the macros and the GUI | **v3.12**, plus one local commit |
+| `pi-laser`, via the shared root | `ElmitecLEEM2k`, `ElmitecUview` | **v3.12** (files 18-Nov), both servers restarted 23-Nov |
+
+So the macros and the device servers **are in step at v3.12** — which
+matters, because v3.12 was one change spanning both, and half of it would
+mean the servers raising at macros that do not expect it. Missing on the
+instrument are v3.13, v3.14 (the UView wait, the point of all this) and
+v3.15.
+
+⚠️ **`tvips` carries a commit that is not in this repository**: `8aad07c`,
+"go back to initial Start Voltage after measurement", made on the instrument
+on 23-Nov. It touches the same three functions this repository has been
+rewriting, so a plain `git pull` there would conflict. It is folded into
+v3.16 below; the deployment note is in `docs/deploy-leem.md`.
 
 See "The instrument runs its own copy" above: committing a change does
-nothing to the running instrument.
+nothing to the running instrument, and the instrument can commit things
+that never reach here.
 
 ## Invariants to preserve
 

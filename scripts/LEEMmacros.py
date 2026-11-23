@@ -2,7 +2,9 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
-# v3.15 23/11/2026 The macros log themselves. leem_log() had exactly one caller, LEEMgui's Run button, so nothing typed at the prompt was ever recorded -- and ARRES, being command line only (leemARRESset uses input()), was never recorded at all: 101 experiments between 18 and 23 November left no log line, while 5 November logged 6 of its 8. New leem_log_call() now goes in each of the ten macros the GUI could run (the seven that take an experiment folder, plus the three PID ramps), and the call in LEEMgui is gone so a GUI run is not logged twice. It builds the line from the caller's own arguments instead of a format string per macro, so it cannot drift from the signature. leem_log() is told the folder number rather than guessing it from the counter file: that guess only worked because the GUI logged before the acquisition took its folder, and would now be one too high. Something with no folder of its own, a ramp, logs --- in that column. Found because the log for the recent ARRES days was missing; the same look showed the deployed copy predates v3.11, since no line since 10 September carries the experiment number v3.11 added.
+# v3.16 23/11/2026 leemIV, leemIV_ROI and leemIVandObj put StartVoltage back where they found it when they finish, alongside the exposure, average and continuous acquisition they already restored. Written on the instrument as its own commit (8aad07c, 23/11/2026) and re-applied here, because it touches the same three functions v3.14 and v3.15 rewrote and would otherwise have been lost to a conflict -- or silently dropped -- at the next deployment. Note it reads and writes leem2k.StartVoltage directly rather than through leem_read(), so a LEEM2000 still ramping (ErrorCode -102) raises instead of being waited out; left as written, but see leem_read().
+#
+# v3.15 23/11/2026 The macros log themselves. leem_log() had exactly one caller, LEEMgui's Run button, so nothing typed at the prompt was ever recorded -- and ARRES, being command line only (leemARRESset uses input()), was never recorded at all: 101 experiments between 18 and 23 November left no log line, while 5 November logged 6 of its 8. New leem_log_call() now goes in each of the ten macros the GUI could run (the seven that take an experiment folder, plus the three PID ramps), and the call in LEEMgui is gone so a GUI run is not logged twice. It builds the line from the caller's own arguments instead of a format string per macro, so it cannot drift from the signature. leem_log() is told the folder number rather than guessing it from the counter file: that guess only worked because the GUI logged before the acquisition took its folder, and would now be one too high. Something with no folder of its own, a ramp, logs --- in that column. Found because the log for the recent ARRES days was missing. (A first reading of those logs suggested the instrument was running something older than v3.11, since no line carries the experiment number v3.11 added; checking the instrument itself showed otherwise -- the logs simply all predate the v3.12 update, because logging had stopped when the GUI stopped being used.)
 #
 # v3.14 20/11/2026 New leem_acquire_and_wait(), replacing the bare "uview.AcquireSingleImage(); while (uview.ContinousAcquisition): pass" at twelve places. That loop asked as fast as CORBA and TCP allowed, on UView's single socket, which may well have been helping to wedge UView rather than merely failing to survive it (ElmitecUview's aip and AcquisitionInProgress interfered on that socket once before, see v2.8). It now asks every LEEM_POLL_IMAGE (50 ms): about eight questions per 400 ms exposure instead of one per round trip, for at most 50 ms of added latency per image. It also says so every LEEM_WARN_IMAGE (60 s) while an image does not arrive, where before a wedged UView stopped a run silently and for ever -- it does NOT give up, because pressing acquire in UView unblocks it and the run carries on, so losing the acquisition would be worse than the stall; tools/leem_acquisition_watchdog.py is what tells you from elsewhere. And it polls leem_checkstop() through leem_abort.wait(), so the GUI Stop button can now interrupt a wait: CTRL-C always could, but a GUI stop had nothing to poll. New tools/test_leemmacros.py covers the wait and the v3.13 counter file against a stub tango, no instrument needed.
 #
@@ -69,7 +71,7 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.15"
+__version__ = "3.16"
 
 from datetime import date
 import tango
@@ -498,6 +500,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
     leem_log_call(name)
+    initialSV=leem2k.StartVoltage
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -538,6 +541,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
+    leem2k.StartVoltage=initialSV
 
 
 def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
@@ -551,6 +555,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
     leem_log_call(name)
+    initialSV=leem2k.StartVoltage
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -617,6 +622,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
+    leem2k.StartVoltage=initialSV
 
 
 def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
@@ -628,6 +634,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
     leem_log_call(name)
+    initialSV=leem2k.StartVoltage
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -664,6 +671,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
+    leem2k.StartVoltage=initialSV
 
 def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
     """ pidRampTo (desired_setpoint, step, time_step, pressure_limit)

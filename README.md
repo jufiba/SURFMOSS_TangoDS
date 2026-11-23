@@ -211,6 +211,7 @@ The `docs/` directory holds the longer-form documentation:
 | `DS-architecture.md` | Two failure modes shared by the device servers: an exception in `init_device` taking the whole server down, and attributes read live from the instrument on every client request. Audits, measurements and what to do |
 | `LEEMmacros.md` | LEEM acquisition macros: versioning, change history with reasoning, invariants to preserve |
 | `LEEMgui.md` | Acquisition GUI: architecture, layout decisions, how to add an acquisition, testing |
+| `deploy-leem.md` | Getting the macros and the Elmitec device servers onto the instrument: what runs where, the order, and checking the instrument for commits of its own first |
 | `leemgui-install.md` | Installing and running the LEEM GUI on Debian/Ubuntu, including WSL: apt dependencies, `TANGO_HOST`, display setup, troubleshooting |
 | `netboot-shared-root.md` | How the Pis netboot from one shared read-only NFS root on wolframite: exports, per-Pi `/var`, machine-id, per-host service activation, recovery |
 | `surfmoss-device-server-migration-reference.md` | Device server restructuring and Trixie migration reference |
