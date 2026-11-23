@@ -383,6 +383,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    initialSV=leem2k.StartVoltage
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -427,6 +428,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
+    leem2k.StartVoltage=initialSV
 
 
 def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
@@ -439,6 +441,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    initialSV=leem2k.StartVoltage
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -509,6 +512,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
+    leem2k.StartVoltage=initialSV
 
 
 def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
@@ -520,6 +524,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
     expname="LEEMIV"+name
+    initialSV=leem2k.StartVoltage
     oldExposure=uview.Exposure
     oldAverage=uview.Average
     if exp is None:
@@ -559,6 +564,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     uview.Exposure=oldExposure
     uview.Average=oldAverage
     uview.ContinousAcquisition=True
+    leem2k.StartVoltage=initialSV
 
 def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
     """ pidRampTo (desired_setpoint, step, time_step, pressure_limit)
