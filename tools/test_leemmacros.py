@@ -206,6 +206,96 @@ def counter_tests(M):
         shutil.rmtree(tmp)
 
 
+def log_tests(M):
+    """The command log, which until v3.15 only ever saw GUI Run presses."""
+    print("\nthe log records a run launched from the prompt, not just the GUI")
+    tmp = tempfile.mkdtemp(prefix="leemmacros-log-")
+    try:
+        prefix = os.path.join(tmp, "Superficies")
+        os.mkdir(prefix)
+        M.counter_filename = os.path.join(tmp, "macros.dat")
+        today = M.date.today()
+        dayfolder = "%04d%02d%02d" % (today.year, today.month, today.day)
+        with open(M.counter_filename, "w") as handle:
+            handle.write("W:\\Superficies,%s,%s,7" % (prefix, dayfolder))
+        os.mkdir(os.path.join(prefix, dayfolder))
+        logfile = os.path.join(prefix, dayfolder, dayfolder + "_commands.log")
+
+        # Stand in for a macro: leem_log_call reads its caller's arguments.
+        def leemIV(E0=1.0, Ef=2.5, dE=0.1, repeat=False, exp=None, avg=None):
+            M.leem_log_call("007")
+
+        leemIV()
+        line = open(logfile).read().strip()
+        check_true("a line was written", bool(line))
+        check_true("names the macro", "leemIV(" in line)
+        check_true("carries the experiment number", "  007  " in line)
+        check_true("records the arguments", "E0=1" in line and "dE=0.1" in line)
+        check_true("keeps non-numbers readable",
+                   "repeat=False" in line and "exp=None" in line)
+
+        print("\nsomething with no folder of its own logs without a number")
+        def leemRampTemperatureTo(temp=900.0, temp_step=1.0):
+            M.leem_log_call()
+
+        leemRampTemperatureTo()
+        last = open(logfile).read().strip().splitlines()[-1]
+        check_true("logged", "leemRampTemperatureTo(" in last)
+        check_true("--- instead of a number", "  ---  " in last)
+
+        print("\na big argument does not take the line with it")
+        def leemARRESrun(E0=0.0, b=None):
+            M.leem_log_call("009")
+
+        leemARRESrun(b=M.numpy.zeros((3, 4)))
+        last = open(logfile).read().strip().splitlines()[-1]
+        check_true("still one line", "\n" not in last)
+        check_true("and a short one", len(last) < 200)
+        check_true("the array is named but clipped", "b=" in last)
+
+        print("\nthe real leemSaveSingleImage logs itself, end to end")
+        # The checks above drive leem_log_call from stand-ins. This one runs
+        # the actual macro, which is what proves the call was inserted in the
+        # right place and gets the folder number the run was really given.
+        class FullUview(FakeUview):
+            Exposure = 400.0
+            Average = 0
+            ContinousAcquisition = 0
+
+            def SaveImageAsDAT(self, where):
+                return "0"
+
+            def __getattr__(self, name):
+                # ImageWidth, ImageHeight and the rest that leem_savesettings
+                # writes out; their values do not matter here.
+                return 0
+
+        M.uview = FullUview()
+        before = len(open(logfile).read().splitlines())
+        with redirect_stdout(io.StringIO()):
+            M.leemSaveSingleImage()
+        lines = open(logfile).read().splitlines()
+        check("exactly one new line", len(lines) - before, 1)
+        last = lines[-1]
+        check_true("it is the macro that ran",
+                   "leemSaveSingleImage(" in last)
+        # leem_makenextfolder_and_inc took _007 (the counter said 7), so the
+        # line and the folder it produced must agree.
+        check_true("numbered with the folder it made (007)", "  007  " in last)
+        check_true("folder 007 exists",
+                   os.path.isdir(os.path.join(prefix, dayfolder,
+                                              dayfolder + "_007")))
+
+        print("\nlogging never raises, whatever happens")
+        M.counter_filename = os.path.join(tmp, "gone", "macros.dat")
+        def leemIV2():
+            M.leem_log_call("010")
+        leemIV2()                         # must not raise
+        check("survived an unreadable counter file", True, True)
+    finally:
+        shutil.rmtree(tmp)
+
+
 def main(argv):
     args = argv[1:]
     repo = DEFAULT_ROOT
@@ -222,6 +312,7 @@ def main(argv):
 
     wait_tests(M)
     counter_tests(M)
+    log_tests(M)
 
     print("\n%s" % ("FAILURES: %d" % FAILS if FAILS else "all checks passed"))
     return 1 if FAILS else 0

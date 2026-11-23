@@ -430,7 +430,10 @@ class LEEMWindow(QtWidgets.QWidget):
         call="%s(%s)"%(variant["func"],
                        ", ".join("%s=%r"%kv for kv in kwargs.items()))
         self.append(">>> "+call)
-        M.leem_log(call)                 # day folder keeps a record of every run
+        # The macros log themselves since LEEMmacros v3.15, so that a run
+        # typed at the prompt is recorded too -- ARRES, being command line
+        # only, was never logged at all while this was the only caller.
+        # Logging here as well would put every GUI run in twice.
         self.worker=Worker(func,kwargs,self)
         self.worker.line.connect(self.append)
         self.worker.done.connect(self.finished)

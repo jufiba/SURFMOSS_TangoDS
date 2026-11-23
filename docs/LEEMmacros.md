@@ -276,6 +276,65 @@ without raising, and a stop interrupts the wait. It covers the v3.13
 counter file too, and needs no instrument, so unlike the device-server tests
 here it also runs on a laptop.
 
+### v3.15 — the macros log themselves
+
+`leem_log()` had **exactly one caller**: `LEEMgui.py`'s Run button. So the
+"log of every command" only ever saw GUI button presses, and nothing typed
+at the ipython prompt was recorded. ARRES is command line only —
+`leemARRESset()` asks for `input()` at the terminal — so an ARRES campaign
+produced no log at all. Counted on the share:
+
+```
+20261105  experiments=8   log=6 lines
+20261118  experiments=30  NO LOG
+20261119  experiments=32  NO LOG
+20261120  experiments=11  NO LOG
+20261121  experiments=27  NO LOG
+20261123  experiments=1   NO LOG
+```
+
+101 experiments, no line. Not a breakage: the day folders are `drwxrwxrwx`,
+`macros.dat` is well formed, and 5 November wrote fine — the function simply
+was not called. The macro mix is the tell: 5 November was all IMG and
+LEEMIV, while 19 and 21 November are the ARRES days.
+
+`leem_log_call()` now sits in each of the ten macros the GUI could run (the
+seven that take an experiment folder, plus the three PID ramps), and the
+call in `LEEMgui` is gone so a GUI run is not logged twice. Two details:
+
+- **The line is built from the caller's own arguments**, by reading the
+  calling frame, rather than a format string written out per macro. Twelve
+  copies of the image wait (v3.14) and four of the `macros.dat` write
+  (v3.13) are what this file keeps being bitten by; a format string per
+  macro would be ten more copies to drift from ten signatures. Long values
+  are put on one line and clipped, because `leemARRESrun`'s `b` is a 3×4
+  array whose `repr` spans several.
+- **`leem_log()` is told the folder number** instead of guessing it from the
+  counter file. That guess worked only because the GUI logged *before* the
+  acquisition took its folder; from inside the macro the counter has already
+  moved on, so it would now be one too high. A ramp, which takes no folder,
+  writes `---` in that column.
+
+### The instrument has been running a copy older than v3.11
+
+Found in the same look, and more serious than the missing log. No line in
+any log from 10 September to 5 November carries the experiment number, and
+**that number is what v3.11 added on 16 September**:
+
+```
+2026-09-10 18:28:36  leemSaveSingleImage(...)
+2026-11-05 11:56:45  leemIVandObj(...)
+```
+
+So the deployed copy predates v3.11, and with it v3.12 (the ARRES fixes and
+the error replies), v3.13 and v3.14 (the UView wait). Strictly this proves
+what was running on 5 November, not today — but there is no later log to
+say otherwise, and a run on 20 November wedged in exactly the way v3.14
+addresses.
+
+See "The instrument runs its own copy" above: committing a change does
+nothing to the running instrument.
+
 ## Invariants to preserve
 
 - **Wait for an image with `leem_acquire_and_wait()`, never by hand.** Since

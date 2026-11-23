@@ -2,6 +2,8 @@
 # LEEM Madrid Macros
 # Simple acquisition using tango device servers
 #
+# v3.15 23/11/2026 The macros log themselves. leem_log() had exactly one caller, LEEMgui's Run button, so nothing typed at the prompt was ever recorded -- and ARRES, being command line only (leemARRESset uses input()), was never recorded at all: 101 experiments between 18 and 23 November left no log line, while 5 November logged 6 of its 8. New leem_log_call() now goes in each of the ten macros the GUI could run (the seven that take an experiment folder, plus the three PID ramps), and the call in LEEMgui is gone so a GUI run is not logged twice. It builds the line from the caller's own arguments instead of a format string per macro, so it cannot drift from the signature. leem_log() is told the folder number rather than guessing it from the counter file: that guess only worked because the GUI logged before the acquisition took its folder, and would now be one too high. Something with no folder of its own, a ramp, logs --- in that column. Found because the log for the recent ARRES days was missing; the same look showed the deployed copy predates v3.11, since no line since 10 September carries the experiment number v3.11 added.
+#
 # v3.14 20/11/2026 New leem_acquire_and_wait(), replacing the bare "uview.AcquireSingleImage(); while (uview.ContinousAcquisition): pass" at twelve places. That loop asked as fast as CORBA and TCP allowed, on UView's single socket, which may well have been helping to wedge UView rather than merely failing to survive it (ElmitecUview's aip and AcquisitionInProgress interfered on that socket once before, see v2.8). It now asks every LEEM_POLL_IMAGE (50 ms): about eight questions per 400 ms exposure instead of one per round trip, for at most 50 ms of added latency per image. It also says so every LEEM_WARN_IMAGE (60 s) while an image does not arrive, where before a wedged UView stopped a run silently and for ever -- it does NOT give up, because pressing acquire in UView unblocks it and the run carries on, so losing the acquisition would be worse than the stall; tools/leem_acquisition_watchdog.py is what tells you from elsewhere. And it polls leem_checkstop() through leem_abort.wait(), so the GUI Stop button can now interrupt a wait: CTRL-C always could, but a GUI stop had nothing to poll. New tools/test_leemmacros.py covers the wait and the v3.13 counter file against a stub tango, no instrument needed.
 #
 # v3.13 20/11/2026 leemSetDailyFolder() wrote macros.dat with three fields (prefix,dayfolder,exp) where leem_getfolder() unpacks four, so calling it left a counter file the next call could not read: every macro then died on "not enough values to unpack". The same three-field write inside leem_makenextfolder_and_inc() was harmless only because a correct four-field write overwrote it before that function returned. There were four copies of this write in two spellings, which is how the two wrong ones survived, so the layout now lives in one place: new leem_setfolder(wprefix,prefix,dayfolder,exp), used by all four.
@@ -67,11 +69,12 @@
 #
 # Juan de la Figuera juan.delafiguera@gmail.com
 
-__version__ = "3.14"
+__version__ = "3.15"
 
 from datetime import date
 import tango
 import os
+import sys
 import numpy
 import time
 import threading
@@ -264,32 +267,77 @@ def leem_makenextfolder_and_inc():
     leem_setfolder(wprefix,prefix,dayfolder,exp)
     return(wfull,full,name)
 
-def leem_log(command):
+def leem_log(command,name=None):
     """ Append one timestamped line to <dayfolder>/<YYYYMMDD>_commands.log, so
-    the day folder next to the data keeps a record of every acquisition the GUI
-    launched. Each line is stamped with the same %03d experiment counter that
-    names the folder leem_makenextfolder_and_inc() is about to create for this
-    run, so a line can be matched to the folder it produced. Never raises: a
-    logging failure must not abort an acquisition. """
+    the day folder next to the data keeps a record of every acquisition run
+    that day, whoever launched it.
+
+    `name` is the %03d of the experiment folder the run was given, so a line
+    can be matched to the data it produced; None, for something that makes no
+    folder such as a PID ramp, writes --- in that column instead. Until v3.15
+    this function guessed the number from the counter file instead of being
+    told, which only worked because the GUI logged *before* the acquisition
+    took its folder.
+
+    Never raises: a logging failure must not abort an acquisition.
+    """
     try:
         (wprefix,prefix,dayfolder,exp)=leem_getfolder()
         today=date.today()
         dayfolder="%04d%02d%02d"%(today.year,today.month,today.day)
         dayname=prefix+"/"+dayfolder
         if not os.path.exists(dayname):
-            # First run of the day may be logged before the acquisition makes
-            # the folder; mirror leem_makenextfolder_and_inc so the day still
-            # starts at _000. exp itself came from *yesterday's* line of
-            # counter_filename above, so it must be reset here too, or the
-            # first log line of the day would carry yesterday's leftover
-            # count instead of the 000 the folder is about to get.
+            # Something that makes no folder can be the first thing of the
+            # day. Create it the way leem_makenextfolder_and_inc would, and
+            # reset the counter with it, so the first acquisition after this
+            # still gets _000 rather than yesterday's leftover number.
             os.mkdir(dayname)
             leem_setfolder(wprefix,prefix,dayfolder,0)
-            exp=0
         stamp=time.strftime("%Y-%m-%d %H:%M:%S")
         f=open(dayname+"/"+dayfolder+"_commands.log","a")
-        f.write(stamp+"  %03d  "%exp+command+"\n")
+        f.write(stamp+"  "+(name if name else "---")+"  "+command+"\n")
         f.close()
+    except Exception:
+        pass
+
+def _leem_log_value(value):
+    """ One argument of a logged call, on one line and short enough to read.
+    leemARRESrun's b is a 3x4 numpy array whose repr runs over several. """
+    try:
+        if isinstance(value,float):
+            return "%g"%value
+        text=repr(value)
+    except Exception:
+        return "<unprintable>"
+    text=" ".join(text.split())
+    if (len(text)>80):
+        text=text[:77]+"..."
+    return text
+
+def leem_log_call(name=None):
+    """ Log the acquisition the calling macro was asked to do.
+
+    Called from inside each macro rather than from the GUI, so a run is
+    recorded wherever it was launched from. Until v3.15 the only caller was
+    the GUI's Run button, which meant nothing typed at the prompt was ever
+    logged -- and ARRES, being command line only, was never logged at all.
+    101 experiments between 18 and 23 November produced no log line.
+
+    The line is built from the caller's own arguments rather than a
+    hand-written format string per macro, so it cannot drift from the
+    signature. This file has been bitten twice by copies of one thing
+    drifting apart: macros.dat written four ways (v3.13) and the image wait
+    written twelve (v3.14).
+    """
+    try:
+        frame=sys._getframe(1)
+        code=frame.f_code
+        parts=[]
+        for argname in code.co_varnames[:code.co_argcount]:
+            if argname in frame.f_locals:
+                parts.append("%s=%s"%(argname,
+                                      _leem_log_value(frame.f_locals[argname])))
+        leem_log("%s(%s)"%(code.co_name,", ".join(parts)),name)
     except Exception:
         pass
 
@@ -342,6 +390,7 @@ def leemSaveSingleImage(exp=None,avg=None):
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    leem_log_call(name)
     expname="IMG"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -388,6 +437,7 @@ def leemSequenceImages(exp=None,avg=None,n=-1,delay=1.0):
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    leem_log_call(name)
     expname="SEQ"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -447,6 +497,7 @@ def leemIV(E0,Ef,dE,exp=400.0,avg=0,repeat=False):
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    leem_log_call(name)
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -499,6 +550,7 @@ def leemIV_ROI(E0,Ef,dE,exp=400.0,avg=0,repeat=False,roi=1,saveImage=False):
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    leem_log_call(name)
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -575,6 +627,7 @@ def leemIVandObj(E0,Ef,dE,startObj,endObj, exp=400.0,avg=0):
     BEWARE: 1 average means sliding average
     """
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    leem_log_call(name)
     expname="LEEMIV"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
@@ -639,6 +692,7 @@ def pidRampTo(pid,final,step=1.0,time_step=1.0,pressure_limit=1):
 def leemRampTemperatureROI(temp, step=1.0, time_step=1.0, exp=100, avg=0, saveImage=False):
     """ leemRampTemperatureROI( temp, temp_step=1.0, time_step=1.0, exposure=100, average=0, saveimage=False)"""
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    leem_log_call(name)
     expname="TEMPRAMP"+name
     start=leem_pid.SetPoint
     oldExposure=uview.Exposure
@@ -694,6 +748,7 @@ def leemRampTemperatureTo(temp,temp_step=1.0,time_step=1.0,pressure_limit=1):
         temp_step: temperature change per step (default 1C)
         time_step: waiting time per step (default 1s)
         pressure_limit: if pressure above the limit, will wait (default 1, no limit) """ 
+    leem_log_call()
     pidRampTo(leem_pid,temp,temp_step,time_step,pressure_limit)
     
 def doser1RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
@@ -705,6 +760,7 @@ def doser1RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
         time_step: waiting time per step (default 1s)
         pressure_limit: if pressure above the limit, will wait (default 1, no limit) """ 
     #pid=tango.DeviceProxy("leem/power/doser1_pid")
+    leem_log_call()
     pidRampTo(doser1_pid,power,power_step,time_step,pressure_limit)
 
 def doser2RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
@@ -716,6 +772,7 @@ def doser2RampPowerTo(power,power_step=1.0,time_step=1.0,pressure_limit=1):
         time_step: waiting time per step (default 1s)
         pressure_limit: if pressure above the limit, will wait (default 1, no limit) """ 
     #pid=tango.DeviceProxy("leem/power/doser1_pid")
+    leem_log_call()
     pidRampTo(doser2_pid,power,power_step,time_step,pressure_limit)
 
 def leem_read(attr, fault_as_zero=False):
@@ -817,6 +874,7 @@ def leemARRESrun(E0,Ef,nE,nk,b,exp=400,avg=0,):
     """
     b=numpy.asarray(b,dtype=float)
     (wfull,full,name)=leem_makenextfolder_and_inc()
+    leem_log_call(name)
     expname="ARRES"+name
     oldExposure=uview.Exposure
     oldAverage=uview.Average
