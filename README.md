@@ -91,6 +91,7 @@ Retired and paused servers are **not** listed here — see
 | Directory | Description |
 |---|---|
 | `ArduinoMotor` | Stepper motor via Arduino and DRV8825 (sputtering target position) |
+| `MotorApertura` | Stepper driving the LEEM aperture, via Arduino Mega and DRV8825. Four presets, position kept in the board's EEPROM. Ships its firmware in `firmware/` |
 
 ### Sensors & instruments
 

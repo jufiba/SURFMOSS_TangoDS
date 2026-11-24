@@ -69,9 +69,14 @@ def norm_xmi(node):
         return "void"
     t = node.get("{http://www.w3.org/2001/XMLSchema-instance}type", "")
     t = t.split(":")[-1]
-    array = t.endswith("ArrayType")
-    if array:
+    # POGO spells an array two ways: ArrayType on a command argument, and
+    # VectorType on a device property (MotorApertura's PresetPositions is
+    # the first of those in this repository). Both mean the same thing here.
+    array = t.endswith("ArrayType") or t.endswith("VectorType")
+    if t.endswith("ArrayType"):
         t = t[: -len("ArrayType")] + "Type"
+    elif t.endswith("VectorType"):
+        t = t[: -len("VectorType")] + "Type"
     base = XMI_TYPES.get(t, t or "?")
     return base + "[]" if array else base
 
