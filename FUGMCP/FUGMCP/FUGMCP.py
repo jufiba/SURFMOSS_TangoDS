@@ -40,6 +40,10 @@ _MAX_REPLY_LINES = 4
 # answering, which the caller should hear about rather than wait through.
 _TXN_ATTEMPTS = 2
 
+# Minimo entre reaperturas del puerto. Sin esto, una fuente desenchufada de
+# verdad se llevaria un cierre y una apertura en CADA lectura de cliente.
+_REOPEN_MIN_INTERVAL = 30.0
+
 
 class _Deadman(threading.Thread):
     """Switch the HV output off if no Keepalive arrives within DeadmanTimeout.
@@ -139,6 +143,39 @@ class FUGMCP(Device):
                 return line
         return None
 
+    def _reopen(self):
+        """Cierra y reabre el puerto. Devuelve True si volvio a abrir.
+
+        Recupera el unico fallo que el reintento de _txn no puede: un atasco
+        del punto final de lectura del USB. El kernel lo registra como
+
+            ftdi_sio ttyUSB1: usb_serial_generic_read_bulk_callback - urb stopped: -32
+
+        y despues de eso la escritura sigue funcionando pero no vuelve nunca
+        nada, mientras el puerto siga abierto. El 25-nov-2026 hv2 y hv3 se
+        quedaron asi dos dias sin que nadie se enterase; un Init, que reabre el
+        puerto, devolvio las dos a la vida sin tocar nada fisico.
+
+        Se llama con _io_lock ya tomado, desde _txn.
+        """
+        now = time.monotonic()
+        if now - self._last_reopen < _REOPEN_MIN_INTERVAL:
+            return False
+        self._last_reopen = now
+        try:
+            if self.ser is not None:
+                self.ser.close()
+            self.ser = serial.Serial(
+                port=self.SerialPort, baudrate=self.Speed,
+                bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE,
+                stopbits=1, timeout=0.5)
+        except Exception as exc:
+            self.ser = None
+            self.error_stream("could not reopen %s: %s", self.SerialPort, exc)
+            return False
+        self.warn_stream("reopened %s after a silent read path", self.SerialPort)
+        return True
+
     def _txn(self, cmd, validate=True):
         """One locked serial exchange: write, return the line that answers
         *this* command. Raises a Tango error if the port is not open, or if
@@ -172,14 +209,30 @@ class FUGMCP(Device):
                     "no serial link to the FUG MCP on %s" % self.SerialPort,
                     "FUGMCP._txn")
             seen = []
-            for _attempt in range(_TXN_ATTEMPTS):
-                self.ser.reset_input_buffer()
-                self.ser.write(cmd)
-                resp = self._read_reply(expected, seen)
-                if resp is not None:
-                    return resp
+            t0 = time.monotonic()
+            for _round in range(2):
+                for _attempt in range(_TXN_ATTEMPTS):
+                    self.ser.reset_input_buffer()
+                    self.ser.write(cmd)
+                    resp = self._read_reply(expected, seen)
+                    if resp is not None:
+                        if _attempt or _round:
+                            self.warn_stream(
+                                "%r needed %d tries%s (%.2f s); read %r", cmd,
+                                _attempt + 1, " and a reopen" if _round else "",
+                                time.monotonic() - t0, b" | ".join(seen[-4:]))
+                        return resp
+                # No ha llegado NADA: esa es la firma del atasco del USB. Una
+                # respuesta desordenada significa que el enlace esta vivo, y
+                # para eso la cura es la purga y el reintento de arriba, no
+                # reabrir un puerto que funciona.
+                if any(seen) or not self._reopen():
+                    break
             # What was actually read goes in the message: without it, the
             # hv2 diagnosis on 15-sep-2026 would not have been possible.
+            self.error_stream(
+                "no valid answer to %r after %d tries (%.2f s); read %r", cmd,
+                _TXN_ATTEMPTS, time.monotonic() - t0, b" | ".join(seen[-4:]))
             tango.Except.throw_exception(
                 "FUGMCP_BadReply",
                 "no valid answer to %r on %s after %d tries; read %r"
@@ -297,6 +350,7 @@ class FUGMCP(Device):
         self._last_keepalive=time.monotonic()
         self._output_asserted=False
         self._deadman_tripped=False
+        self._last_reopen=0.0
         try:
             self.ser=serial.Serial(port=self.SerialPort,baudrate=self.Speed,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=1,timeout=0.5)
             # Through _txn, so this first exchange is drained and locked like
