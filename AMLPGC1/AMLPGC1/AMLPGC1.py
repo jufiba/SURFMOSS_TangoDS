@@ -163,7 +163,40 @@ class AMLPGC1(Device):
                     "unplugged, or still coming up",
                     "AMLPGC1._cmd")
             self.ser.write(data)
-            return self.ser.readline() if read else b""
+            if not read:
+                return b""
+            resp = self.ser.readline()
+            if not resp:
+                # No ha vuelto nada: la PGC1 se ha ido DESPUES del connect().
+                # Hay que soltar el enlace para que _Reconnect tome el relevo,
+                # porque solo actua mientras self.ser es None. Sin esto el
+                # servidor se queda en su ultimo estado -- ON -- con todas las
+                # lecturas fallando y un float(b'') poco informativo, que es
+                # como estaba pi-leem el 27-nov-2026 despues de que la
+                # electronica se apagara sola. Se apaga con frecuencia, de modo
+                # que la recuperacion tiene que ser automatica.
+                #
+                # Solo la respuesta VACIA cuenta como "se ha ido". Una respuesta
+                # corta pero no vacia significa que el aparato habla, y entonces
+                # el error del llamante al interpretarla es la senal correcta.
+                try:
+                    self.ser.close()
+                except Exception:
+                    pass
+                self.ser = None
+                msg = ("AMLPGC1 dejo de contestar en %s; reintento cada %.0f s"
+                       % (self.SerialPort, self.ReconnectPeriod))
+                self.set_state(tango.DevState.FAULT)
+                self.set_status(msg)
+                self.error_stream("AMLPGC1 stopped answering on %s",
+                                  self.SerialPort)
+                tango.Except.throw_exception(
+                    "AMLPGC1_NoReply",
+                    "the AMLPGC1 stopped answering on %s; the link has been "
+                    "dropped and will be rebuilt automatically every %.0f s"
+                    % (self.SerialPort, self.ReconnectPeriod),
+                    "AMLPGC1._cmd")
+            return resp
     # PROTECTED REGION END #    //  AMLPGC1.class_variable
 
     # -----------------
